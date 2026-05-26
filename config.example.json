@@ -1,0 +1,13 @@
+{
+  "opencode": {
+    "enabled": true,
+    "db_path": "~/.local/share/opencode/opencode.db",
+    "days": [1, 7],
+    "providers": []
+  },
+  "copilot_cli": {
+    "enabled": true,
+    "otel_jsonl_path": "~/.cache/ai-quota/copilot-otel.jsonl",
+    "days": [1, 7]
+  }
+}

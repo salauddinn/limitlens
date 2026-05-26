@@ -1,0 +1,67 @@
+# AI Quota
+
+A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, and **Antigravity**.
+
+If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `ai-quota` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
+
+## Features
+- **Unified Quota Tracking:** Instantly see the remaining headroom, reset times, and limits across all your installed accounts and profiles.
+- **Zero-Dependency CLI:** Written purely in standard Python—just clone and run. No `pip install` required.
+- **iTerm2 Widget Included:** Features a built-in background script that puts a live, real-time widget in your iTerm2 status bar.
+- **Smart Recommendations:** Automatically suggests the best tool to use based on your remaining quota to avoid wasting your fast premium limits.
+
+## Installation
+
+Clone this repository anywhere on your machine:
+```sh
+git clone https://github.com/salauddinn/common-tools.git
+# Note: You may just want the ai-quota folder
+```
+
+Then, add a permanent alias to your shell profile (e.g., `~/.zshrc`):
+```sh
+alias ai-quota="python3 /path/to/ai-quota/ai-quota.py"
+```
+
+## Usage
+
+```sh
+ai-quota            # full status across all tools
+ai-quota --tool opencode
+ai-quota --verbose  # show full usage rows and low-level warnings
+ai-quota --help     # flags (e.g. --no-color, tool filters)
+```
+
+## iTerm2 Status Bar Widget
+
+You can add a live-updating widget to your iTerm2 status bar that shows your available quotas!
+
+1. Open **iTerm2**.
+2. Go to **Scripts -> Manage -> New Python Script**.
+3. Choose **Basic** -> **Long-Running Daemon**.
+4. Name it `iterm_widget.py`.
+5. Open the newly created file and copy-paste the contents of `iterm_widget.py` from this repository.
+6. **Important:** Edit the `USER_AI_QUOTA_DIR` variable at the top of the script to point to the absolute path where you cloned this repository.
+7. Go to **iTerm2 Preferences -> Profiles -> Session -> Configure Status Bar** and drag the "AI Quota Widget" into your active components.
+
+*(Note: If you are an advanced user, you can simply symlink `iterm_widget.py` directly into your `~/Library/Application Support/iTerm2/Scripts/AutoLaunch` folder, and the script will automatically detect its directory without any configuration needed!)*
+
+## Configuration (Optional)
+
+Defaults work out of the box without a config file. To customize observed usage tracking:
+1. Copy `config.example.json` to `~/.config/ai-quota/config.json`, OR
+2. Set the environment variable `AI_QUOTA_CONFIG=/path/to/config.json`.
+
+OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model.
+
+For Copilot CLI usage, launch Copilot with:
+```sh
+COPILOT_OTEL_FILE_EXPORTER_PATH=~/.cache/ai-quota/copilot-otel.jsonl copilot
+```
+
+## Testing
+
+To run the unit tests:
+```sh
+python3 -m pytest tests/
+```
