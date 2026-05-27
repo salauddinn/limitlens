@@ -812,7 +812,7 @@ def display_antigravity_text(data, args):
         for m in prof.get("models", []):
             rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
             days_match = re.search(r'(\d+)\s+days?', rst)
-            if days_match and int(days_match.group(1)) > 2 and m["pct_left"] < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            if days_match and int(days_match.group(1)) > 1 and m["pct_left"] < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
                 continue
             visible_models.append(m)
             

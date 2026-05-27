@@ -351,7 +351,7 @@ def display_codex_text(data, args):
             rst = lim["reset_time_fmt"]
             left = lim["left_percent"]
             days_match = re.search(r'(\d+)\s+days?', rst)
-            if days_match and int(days_match.group(1)) > 2 and left < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            if days_match and int(days_match.group(1)) > 1 and left < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
                 continue
             visible_limits.append(lim)
             
