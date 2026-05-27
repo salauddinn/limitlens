@@ -88,20 +88,38 @@ def get_amp_data(args):
     return info
 
 def display_amp_text(data, args):
-    section("Amp", args)
-    
     if "error" in data:
+        section("Amp", args)
         print_error(data["error"], args)
         return
 
+    visible_tiers = []
+    for tier in data.get("tiers", []):
+        pct_left = tier["pct_left"]
+        if pct_left < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            rate = tier.get("replenish_rate", 0)
+            if rate <= 0:
+                continue
+            
+            # Time to reach 30% (usable threshold)
+            target_usable = tier["total"] * 0.3
+            hours_to_usable = (target_usable - tier["remaining"]) / rate
+            if hours_to_usable > 24:
+                continue
+        visible_tiers.append(tier)
+
+    if not visible_tiers and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+        return
+
+    section("Amp", args)
     display_email = data.get("email") or "unknown"
     identity_line("amp", display_email, args)
 
-    if not data.get("tiers"):
+    if not visible_tiers:
         print_c(f"    {data.get('raw_output', '')}", "\033[90m", args.no_color)
         return
 
-    for tier in data["tiers"]:
+    for tier in visible_tiers:
         pct_left = tier["pct_left"]
         pct_used = tier["pct_used"]
         replenish = f"  replenishes {tier['replenish']}" if tier.get("replenish") and is_verbose(args) else ""
