@@ -184,7 +184,33 @@ DEFAULT_CONFIG = {
         "otel_jsonl_path": "~/.cache/ai-quota/copilot-otel.jsonl",
         "days": [1, 7],
     },
+    "display": {
+        "auto_hide_enabled": True,
+        "auto_hide_days": 1,
+        "amp_usable_pct": 30.0,
+    },
 }
+
+def load_display_config():
+    config = load_ai_quota_config()
+    disp = config.get("display") or {}
+    try:
+        auto_hide_enabled = bool(disp.get("auto_hide_enabled", True))
+    except (TypeError, ValueError):
+        auto_hide_enabled = True
+    try:
+        auto_hide_days = int(disp.get("auto_hide_days", 1))
+    except (TypeError, ValueError):
+        auto_hide_days = 1
+    try:
+        amp_usable_pct = float(disp.get("amp_usable_pct", 30.0))
+    except (TypeError, ValueError):
+        amp_usable_pct = 30.0
+    return {
+        "auto_hide_enabled": auto_hide_enabled,
+        "auto_hide_days": auto_hide_days,
+        "amp_usable_pct": amp_usable_pct,
+    }
 
 def deep_merge(base, override):
     out = dict(base)

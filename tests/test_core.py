@@ -17,6 +17,7 @@ from ai_quota.core import (
     _fmt_tokens,
     deep_merge,
     configured_days,
+    load_display_config,
 )
 
 
@@ -160,6 +161,14 @@ class TestConfig(unittest.TestCase):
 
     def test_configured_days_invalid_entries(self):
         self.assertEqual(configured_days({"days": ["bad", 0, -1, 5]}), [5])
+
+
+class TestDisplayConfig(unittest.TestCase):
+    def test_load_display_config_default(self):
+        cfg = load_display_config()
+        self.assertTrue(cfg["auto_hide_enabled"])
+        self.assertEqual(cfg["auto_hide_days"], 1)
+        self.assertEqual(cfg["amp_usable_pct"], 30.0)
 
 
 if __name__ == "__main__":

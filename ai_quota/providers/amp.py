@@ -14,6 +14,7 @@ from ai_quota.core import (
     identity_line,
     print_error,
     is_verbose,
+    load_display_config,
 )
 
 
@@ -85,6 +86,22 @@ def get_amp_data(args):
                     "pct_used": 0.0
                 })
 
+    disp_cfg = load_display_config()
+    for tier in info.get("tiers", []):
+        pct_left = tier["pct_left"]
+        visible = True
+        if disp_cfg["auto_hide_enabled"]:
+            if pct_left < 10.0:
+                rate = tier.get("replenish_rate", 0)
+                if rate <= 0:
+                    visible = False
+                else:
+                    target_usable = tier["total"] * (disp_cfg["amp_usable_pct"] / 100.0)
+                    hours_to_usable = (target_usable - tier["remaining"]) / rate
+                    if hours_to_usable > 24:
+                        visible = False
+        tier["visible"] = visible
+
     return info
 
 def display_amp_text(data, args):
@@ -95,17 +112,8 @@ def display_amp_text(data, args):
 
     visible_tiers = []
     for tier in data.get("tiers", []):
-        pct_left = tier["pct_left"]
-        if pct_left < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
-            rate = tier.get("replenish_rate", 0)
-            if rate <= 0:
-                continue
-            
-            # Time to reach 30% (usable threshold)
-            target_usable = tier["total"] * 0.3
-            hours_to_usable = (target_usable - tier["remaining"]) / rate
-            if hours_to_usable > 24:
-                continue
+        if not tier.get("visible", True) and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            continue
         visible_tiers.append(tier)
 
     if not visible_tiers and not (getattr(args, "verbose", False) or getattr(args, "all", False)):

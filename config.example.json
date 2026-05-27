@@ -9,5 +9,10 @@
     "enabled": true,
     "otel_jsonl_path": "~/.cache/ai-quota/copilot-otel.jsonl",
     "days": [1, 7]
+  },
+  "display": {
+    "auto_hide_enabled": true,
+    "auto_hide_days": 1,
+    "amp_usable_pct": 30.0
   }
 }

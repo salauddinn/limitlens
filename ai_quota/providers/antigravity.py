@@ -27,6 +27,7 @@ from ai_quota.core import (
     is_verbose,
     should_show_warning,
     should_show_detail,
+    load_display_config,
 )
 
 # ── Antigravity helpers ─────────────────────────────────────────────────────
@@ -784,6 +785,18 @@ def get_antigravity_data(args):
     if not data:
         return {"error": "no profiles found"}
 
+    disp_cfg = load_display_config()
+    for prof in data:
+        is_stale = prof.get("status") == "stale"
+        for m in prof.get("models", []):
+            rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
+            days_match = re.search(r'(\d+)\s+days?', rst)
+            visible = True
+            if disp_cfg["auto_hide_enabled"]:
+                if days_match and int(days_match.group(1)) > disp_cfg["auto_hide_days"] and m.get("pct_left", 0.0) < 10.0:
+                    visible = False
+            m["visible"] = visible
+
     if cache_updated:
         cache_warning = try_save_antigravity_cache(cache)
 
@@ -807,12 +820,9 @@ def display_antigravity_text(data, args):
         print_warning(data["warning"], args)
 
     for prof in data.get("profiles", []):
-        is_stale = prof.get("status") == "stale"
         visible_models = []
         for m in prof.get("models", []):
-            rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
-            days_match = re.search(r'(\d+)\s+days?', rst)
-            if days_match and int(days_match.group(1)) > 1 and m["pct_left"] < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            if not m.get("visible", True) and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
                 continue
             visible_models.append(m)
             

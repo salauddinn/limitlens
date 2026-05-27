@@ -21,6 +21,7 @@ from ai_quota.core import (
     is_verbose,
     identity_line,
     _fmt_tokens,
+    load_display_config,
 )
 
 
@@ -319,6 +320,7 @@ def get_codex_data(args):
             data.append(acc_data)
             continue
 
+        disp_cfg = load_display_config()
         acc_data["limits"] = []
         for d in sorted(limits.values(), key=lambda item: item.get("window_minutes") or 10**9):
             used_pct = d.get("used_percent", 0)
@@ -328,12 +330,20 @@ def get_codex_data(args):
                 left_pct = 100.0
                 used_pct = 0.0
 
+            rst_fmt = fmt_reset(rst)
+            visible = True
+            if disp_cfg["auto_hide_enabled"]:
+                days_match = re.search(r'(\d+)\s+days?', rst_fmt)
+                if days_match and int(days_match.group(1)) > disp_cfg["auto_hide_days"] and left_pct < 10.0:
+                    visible = False
+
             acc_data["limits"].append({
                 "label": d["label"],
                 "used_percent": used_pct,
                 "left_percent": left_pct,
                 "reset_time": rst,
-                "reset_time_fmt": fmt_reset(rst)
+                "reset_time_fmt": rst_fmt,
+                "visible": visible
             })
         data.append(acc_data)
 
@@ -348,10 +358,7 @@ def display_codex_text(data, args):
     for acc in data.get("accounts", []):
         visible_limits = []
         for lim in acc.get("limits", []):
-            rst = lim["reset_time_fmt"]
-            left = lim["left_percent"]
-            days_match = re.search(r'(\d+)\s+days?', rst)
-            if days_match and int(days_match.group(1)) > 1 and left < 10.0 and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            if not lim.get("visible", True) and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
                 continue
             visible_limits.append(lim)
             
