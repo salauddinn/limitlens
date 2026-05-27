@@ -228,44 +228,44 @@ def get_copilot_cli_usage(config):
     }
 
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = list(f)
+        f = open(path, encoding="utf-8")
     except OSError as e:
         return {"error": f"Copilot OTel read error: {e}"}
 
-    for line in lines:
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        ts = (
-            parse_otel_timestamp(rec.get("timeUnixNano"))
-            or parse_otel_timestamp(rec.get("startTimeUnixNano"))
-            or parse_otel_timestamp(rec.get("timestamp"))
-            or parse_otel_timestamp(rec.get("time"))
-        )
-        if ts is None:
-            continue
-        input_tokens = first_number_for_keys(rec, ("gen_ai.usage.input_tokens", "input_tokens", "input"))
-        output_tokens = first_number_for_keys(rec, ("gen_ai.usage.output_tokens", "output_tokens", "output"))
-        total_tokens = first_number_for_keys(rec, ("gen_ai.usage.total_tokens", "total_tokens", "total"))
-        if total_tokens <= 0:
-            total_tokens = input_tokens + output_tokens
-        if total_tokens <= 0:
-            continue
-        provider = first_string_for_keys(rec, ("gen_ai.system", "provider", "providerID"), default="github-copilot")
-        model = first_string_for_keys(rec, ("gen_ai.request.model", "gen_ai.response.model", "model", "modelID"), default="unknown")
-        tokens = {
-            "total": total_tokens,
-            "input": input_tokens,
-            "output": output_tokens,
-        }
-        for win in windows.values():
-            if ts < win["since"]:
+    with f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
                 continue
-            key = (provider, model)
-            totals = win["by_key"].setdefault(key, empty_usage_totals())
-            add_usage(totals, cost=0, tokens=tokens)
+            ts = (
+                parse_otel_timestamp(rec.get("timeUnixNano"))
+                or parse_otel_timestamp(rec.get("startTimeUnixNano"))
+                or parse_otel_timestamp(rec.get("timestamp"))
+                or parse_otel_timestamp(rec.get("time"))
+            )
+            if ts is None:
+                continue
+            input_tokens = first_number_for_keys(rec, ("gen_ai.usage.input_tokens", "input_tokens", "input"))
+            output_tokens = first_number_for_keys(rec, ("gen_ai.usage.output_tokens", "output_tokens", "output"))
+            total_tokens = first_number_for_keys(rec, ("gen_ai.usage.total_tokens", "total_tokens", "total"))
+            if total_tokens <= 0:
+                total_tokens = input_tokens + output_tokens
+            if total_tokens <= 0:
+                continue
+            provider = first_string_for_keys(rec, ("gen_ai.system", "provider", "providerID"), default="github-copilot")
+            model = first_string_for_keys(rec, ("gen_ai.request.model", "gen_ai.response.model", "model", "modelID"), default="unknown")
+            tokens = {
+                "total": total_tokens,
+                "input": input_tokens,
+                "output": output_tokens,
+            }
+            for win in windows.values():
+                if ts < win["since"]:
+                    continue
+                key = (provider, model)
+                totals = win["by_key"].setdefault(key, empty_usage_totals())
+                add_usage(totals, cost=0, tokens=tokens)
 
     return {
         "otel_jsonl_path": redact_path(path),
