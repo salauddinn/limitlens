@@ -48,9 +48,33 @@ You can add a live-updating widget to your iTerm2 status bar that shows your ava
 
 ## Configuration (Optional)
 
-Defaults work out of the box without a config file. To customize observed usage tracking:
+Defaults work out of the box without a config file. To customize tracking and display behavior:
 1. Copy `config.example.json` to `~/.config/ai-quota/config.json`, OR
 2. Set the environment variable `AI_QUOTA_CONFIG=/path/to/config.json`.
+
+### Display & Privacy Settings
+
+Add a `"display"` section to your configuration to control output behavior:
+*   `auto_hide_enabled` (boolean, default: `true`): Automatically hide tools that have not been used recently to keep your terminal output clean.
+*   `auto_hide_days` (integer, default: `1`): Number of days of inactivity before a tool is hidden.
+*   `amp_usable_pct` (float, default: `30.0`): Percentage threshold below which Amp is flagged as low/unusable.
+
+**Privacy & Security:**
+*   `ai-quota` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
+*   Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
+
+### Platform Support
+
+The core engine and configuration are completely platform-agnostic, but individual providers have varying support depending on the underlying tool's native environment:
+
+| Provider | Supported OS | Notes / Details |
+|---|---|---|
+| **Codex** | macOS, Linux | Parses local configurations from `~/.codex-*` |
+| **Amp** | macOS, Linux | Executes the local `amp` binary to fetch quota |
+| **Antigravity** | macOS, Linux | Limited to Darwin/Linux systems |
+| **OpenCode** | macOS, Linux, Windows | Reads from the local OpenCode SQLite database |
+
+### Observed Usage Logging
 
 OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model.
 
