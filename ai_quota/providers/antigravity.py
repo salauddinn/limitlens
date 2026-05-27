@@ -831,6 +831,7 @@ def display_antigravity_text(data, args):
 
         name = prof["name"]
         status = prof["status"]
+        is_stale = status == "stale"
         identity_line(name, None, args, status=status if status in ("running", "stale") else "stopped")
 
         if "error" in prof:
