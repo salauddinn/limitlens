@@ -4,10 +4,10 @@ import iterm2
 import json
 
 async def main(connection):
-    print("Starting AI Quota registration v4...")
+    print("Starting LimitLens registration v4...")
     
     component = iterm2.StatusBarComponent(
-        short_description="AI Quota Widget",
+        short_description="LimitLens Widget",
         detailed_description="Shows the best AI tool to avoid quota waste",
         knobs=[],
         exemplar="💡 AI: 80%",
@@ -21,17 +21,17 @@ async def main(connection):
     # ==============================================================================
     # CONFIGURATION
     # If you copy this script to your iTerm2 Scripts folder, you MUST set this 
-    # to the absolute path of your ai-quota clone!
-    # E.g., USER_AI_QUOTA_DIR = "/Users/name/Projects/ai-quota"
+    # to the absolute path of your limitlens clone!
+    # E.g., USER_LIMITLENS_DIR = "/Users/name/Projects/limitlens"
     # ==============================================================================
-    USER_AI_QUOTA_DIR = ""
+    USER_LIMITLENS_DIR = ""
 
     # Auto-detect if running directly from the repository (or via symlink)
-    AI_QUOTA_DIR = os.path.dirname(os.path.realpath(__file__))
+    LIMITLENS_DIR = os.path.dirname(os.path.realpath(__file__))
     
     # Fallback for when the script is copied into iTerm2's application support directory
-    if "Scripts" in AI_QUOTA_DIR or "iterm2" in AI_QUOTA_DIR.lower():
-        AI_QUOTA_DIR = os.path.expanduser(USER_AI_QUOTA_DIR)
+    if "Scripts" in LIMITLENS_DIR or "iterm2" in LIMITLENS_DIR.lower():
+        LIMITLENS_DIR = os.path.expanduser(USER_LIMITLENS_DIR)
 
     # Detect python path
     PYTHON_BIN = "/opt/homebrew/bin/python3" if os.path.exists("/opt/homebrew/bin/python3") else "python3"
@@ -39,7 +39,7 @@ async def main(connection):
     state = {"status": "💡 AI: Loading..."}
 
     def fetch_status_sync():
-        script_path = os.path.join(AI_QUOTA_DIR, "ai-quota.py")
+        script_path = os.path.join(LIMITLENS_DIR, "limitlens.py")
         if not os.path.exists(script_path):
             return None
         cmd = [PYTHON_BIN, script_path, "--json"]
@@ -52,7 +52,7 @@ async def main(connection):
                 proc = await loop.run_in_executor(None, fetch_status_sync)
                 
                 if proc is None:
-                    state["status"] = "🤖 Err: Set USER_AI_QUOTA_DIR in widget script"
+                    state["status"] = "🤖 Err: Set USER_LIMITLENS_DIR in widget script"
                 elif proc.returncode == 0:
                     data = json.loads(proc.stdout)
                     
@@ -86,9 +86,9 @@ async def main(connection):
                     if display_items:
                         state["status"] = "💡 " + " | ".join(display_items)
                     else:
-                        state["status"] = "🤖 AI Quota: No quotas available"
+                        state["status"] = "🤖 LimitLens: No quotas available"
                 else:
-                    state["status"] = "🤖 AI Quota: Err"
+                    state["status"] = "🤖 LimitLens: Err"
             except Exception as e:
                 state["status"] = f"🤖 Err: {e}"
             

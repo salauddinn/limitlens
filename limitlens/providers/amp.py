@@ -4,7 +4,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta
 
-from ai_quota.core import (
+from limitlens.core import (
     redact_email,
     redact_text,
     format_date_pretty,

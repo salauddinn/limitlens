@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.providers.antigravity — profile fetch, model filtering, cache."""
+"""Tests for limitlens.providers.antigravity — profile fetch, model filtering, cache."""
 
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from ai_quota.providers import antigravity as ag_mod
-from ai_quota.providers.antigravity import (
+from limitlens.providers import antigravity as ag_mod
+from limitlens.providers.antigravity import (
     _fetch_single_profile,
     is_agy_cli_process_command,
 )
@@ -154,8 +154,8 @@ class TestAntigravityStatus(unittest.TestCase):
             self.assertEqual(config_dir, "/home/testuser/agy-work-profile/.gemini/antigravity-cli")
 
     @patch("subprocess.run")
-    @patch("ai_quota.providers.antigravity.get_config_dir_for_pid")
-    @patch("ai_quota.providers.antigravity.collect_listening_ports")
+    @patch("limitlens.providers.antigravity.get_config_dir_for_pid")
+    @patch("limitlens.providers.antigravity.collect_listening_ports")
     def test_discover_active_cli_profiles(self, mock_collect_ports, mock_get_config, mock_run):
         mock_proc = unittest.mock.Mock()
         mock_proc.returncode = 0
@@ -178,11 +178,11 @@ class TestAntigravityStatus(unittest.TestCase):
         self.assertEqual(active["agy-personal"]["ports"], [62125])
         self.assertEqual(active["agy-work"]["ports"], [62126])
 
-    @patch("ai_quota.providers.antigravity.discover_active_cli_profiles")
-    @patch("ai_quota.providers.antigravity.get_antigravity_named_profiles")
-    @patch("ai_quota.providers.antigravity.load_antigravity_cache")
-    @patch("ai_quota.providers.antigravity._fetch_single_profile")
-    @patch("ai_quota.providers.antigravity.try_save_antigravity_cache")
+    @patch("limitlens.providers.antigravity.discover_active_cli_profiles")
+    @patch("limitlens.providers.antigravity.get_antigravity_named_profiles")
+    @patch("limitlens.providers.antigravity.load_antigravity_cache")
+    @patch("limitlens.providers.antigravity._fetch_single_profile")
+    @patch("limitlens.providers.antigravity.try_save_antigravity_cache")
     def test_get_antigravity_data_multiple_profiles(self, mock_save_cache, mock_fetch, mock_load_cache, mock_named_profs, mock_discover_cli):
         # 1 active CLI, 1 cached stale CLI, 1 IDE profile
         mock_named_profs.return_value = (["work-ide"], None)

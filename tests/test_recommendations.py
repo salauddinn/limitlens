@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tests for ai-quota recommendations engine."""
+"""Tests for limitlens recommendations engine."""
 
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from ai_quota.core import parse_to_utc, fmt_reset
+from limitlens.core import parse_to_utc, fmt_reset
 import recommendations as rec
 
 

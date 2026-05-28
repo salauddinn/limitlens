@@ -1,8 +1,8 @@
-# AI Quota
+# LimitLens
 
 A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, and **Antigravity**.
 
-If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `ai-quota` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
+If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
 
 ## Features
 - **Unified Quota Tracking:** Instantly see the remaining headroom, reset times, and limits across all your installed accounts and profiles.
@@ -15,21 +15,21 @@ If you juggle multiple AI subscriptions and accounts and frequently run into rat
 Clone this repository anywhere on your machine:
 ```sh
 git clone https://github.com/salauddinn/common-tools.git
-# Note: You may just want the ai-quota folder
+# Note: You may just want the limitlens folder
 ```
 
 Then, add a permanent alias to your shell profile (e.g., `~/.zshrc`):
 ```sh
-alias ai-quota="python3 /path/to/ai-quota/ai-quota.py"
+alias limitlens="python3 /path/to/limitlens/limitlens.py"
 ```
 
 ## Usage
 
 ```sh
-ai-quota            # full status across all tools
-ai-quota --tool opencode
-ai-quota --verbose  # show full usage rows and low-level warnings
-ai-quota --help     # flags (e.g. --no-color, tool filters)
+limitlens            # full status across all tools
+limitlens --tool opencode
+limitlens --verbose  # show full usage rows and low-level warnings
+limitlens --help     # flags (e.g. --no-color, tool filters)
 ```
 
 ## iTerm2 Status Bar Widget
@@ -41,16 +41,16 @@ You can add a live-updating widget to your iTerm2 status bar that shows your ava
 3. Choose **Basic** -> **Long-Running Daemon**.
 4. Name it `iterm_widget.py`.
 5. Open the newly created file and copy-paste the contents of `iterm_widget.py` from this repository.
-6. **Important:** Edit the `USER_AI_QUOTA_DIR` variable at the top of the script to point to the absolute path where you cloned this repository.
-7. Go to **iTerm2 Preferences -> Profiles -> Session -> Configure Status Bar** and drag the "AI Quota Widget" into your active components.
+6. **Important:** Edit the `USER_LIMITLENS_DIR` variable at the top of the script to point to the absolute path where you cloned this repository.
+7. Go to **iTerm2 Preferences -> Profiles -> Session -> Configure Status Bar** and drag the "LimitLens Widget" into your active components.
 
 *(Note: If you are an advanced user, you can simply symlink `iterm_widget.py` directly into your `~/Library/Application Support/iTerm2/Scripts/AutoLaunch` folder, and the script will automatically detect its directory without any configuration needed!)*
 
 ## Configuration (Optional)
 
 Defaults work out of the box without a config file. To customize tracking and display behavior:
-1. Copy `config.example.json` to `~/.config/ai-quota/config.json`, OR
-2. Set the environment variable `AI_QUOTA_CONFIG=/path/to/config.json`.
+1. Copy `config.example.json` to `~/.config/limitlens/config.json`, OR
+2. Set the environment variable `LIMITLENS_CONFIG=/path/to/config.json`.
 
 ### Display & Privacy Settings
 
@@ -60,7 +60,7 @@ Add a `"display"` section to your configuration to control output behavior:
 *   `amp_usable_pct` (float, default: `30.0`): Percentage threshold below which Amp is flagged as low/unusable.
 
 **Privacy & Security:**
-*   `ai-quota` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
+*   `limitlens` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
 *   Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
 
 ### Platform Support
@@ -80,7 +80,7 @@ OpenCode usage is read automatically from its local SQLite DB and grouped by pro
 
 For Copilot CLI usage, launch Copilot with:
 ```sh
-COPILOT_OTEL_FILE_EXPORTER_PATH=~/.cache/ai-quota/copilot-otel.jsonl copilot
+COPILOT_OTEL_FILE_EXPORTER_PATH=~/.cache/limitlens/copilot-otel.jsonl copilot
 ```
 
 ## Testing

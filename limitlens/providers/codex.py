@@ -8,7 +8,7 @@ import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from ai_quota.core import (
+from limitlens.core import (
     redact_path,
     parse_to_utc,
     is_reset_passed,

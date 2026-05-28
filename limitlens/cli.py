@@ -2,7 +2,7 @@
 CLI entrypoint — argparse, concurrent dispatch, and main loop.
 
 This module wires together the provider registry, recommendations engine,
-and waste tracker into the unified ``ai-quota`` command.
+and waste tracker into the unified ``limitlens`` command.
 """
 
 import argparse
@@ -16,7 +16,7 @@ from datetime import datetime
 from .core import (
     print_c,
     format_timestamp,
-    load_ai_quota_config,
+    load_limitlens_config,
     parse_to_utc,
     fmt_reset,
 )
@@ -61,7 +61,7 @@ def main():
         "opencode": "observed usage",
         "all": "AI tool",
     }[args.tool]
-    config = load_ai_quota_config()
+    config = load_limitlens_config()
 
     def collect_results():
         result = {}
@@ -79,12 +79,12 @@ def main():
                 result[key] = fut.result()
         return result
 
-    # Sibling modules in the same directory as the ai-quota.py shim.
+    # Sibling modules in the same directory as the limitlens.py shim.
     # They're loaded lazily so we don't break when recommendations.py
     # or waste_tracker.py are missing (e.g. in isolated test runs).
-    ai_quota_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if ai_quota_dir not in sys.path:
-        sys.path.insert(0, ai_quota_dir)
+    limitlens_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if limitlens_dir not in sys.path:
+        sys.path.insert(0, limitlens_dir)
     import recommendations as rec_mod
     import waste_tracker
 

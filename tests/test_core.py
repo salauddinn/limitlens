@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.core — redaction, formatters, bar, config."""
+"""Tests for limitlens.core — redaction, formatters, bar, config."""
 
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from ai_quota.core import (
+from limitlens.core import (
     redact_email,
     redact_path,
     redact_text,

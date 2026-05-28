@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for ai-quota waste tracker."""
+"""Tests for limitlens waste tracker."""
 
 import json
 import os

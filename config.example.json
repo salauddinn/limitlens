@@ -7,7 +7,7 @@
   },
   "copilot_cli": {
     "enabled": true,
-    "otel_jsonl_path": "~/.cache/ai-quota/copilot-otel.jsonl",
+    "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
     "days": [1, 7]
   },
   "display": {

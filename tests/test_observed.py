@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.providers.observed — OpenCode SQLite + Copilot OTel usage."""
+"""Tests for limitlens.providers.observed — OpenCode SQLite + Copilot OTel usage."""
 
 import json
 import os
@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-from ai_quota.providers.observed import get_opencode_usage
+from limitlens.providers.observed import get_opencode_usage
 
 
 class TestOpenCodeUsage(unittest.TestCase):

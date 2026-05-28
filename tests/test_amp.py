@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.providers.amp — amp usage parsing."""
+"""Tests for limitlens.providers.amp — amp usage parsing."""
 
 import argparse
 import unittest
 from unittest.mock import patch, MagicMock
 
-from ai_quota.providers.amp import get_amp_data
+from limitlens.providers.amp import get_amp_data
 
 
 class TestAmpProvider(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestAmpProvider(unittest.TestCase):
         self.args = argparse.Namespace(redact=False)
         self.args_redacted = argparse.Namespace(redact=True)
 
-    @patch("ai_quota.providers.amp.subprocess.run")
+    @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_usage_parsing_success(self, mock_run):
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -48,7 +48,7 @@ class TestAmpProvider(unittest.TestCase):
         self.assertEqual(t2["label"], "Prepaid Credits")
         self.assertEqual(t2["remaining"], 25.00)
 
-    @patch("ai_quota.providers.amp.subprocess.run")
+    @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_usage_redaction(self, mock_run):
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -59,13 +59,13 @@ class TestAmpProvider(unittest.TestCase):
         data = get_amp_data(self.args_redacted)
         self.assertEqual(data["email"], "jo***@example.com")
 
-    @patch("ai_quota.providers.amp.subprocess.run")
+    @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_not_installed(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
         data = get_amp_data(self.args)
         self.assertEqual(data["error"], "amp not installed")
 
-    @patch("ai_quota.providers.amp.subprocess.run")
+    @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_error_exit_code(self, mock_run):
         mock_result = MagicMock()
         mock_result.returncode = 1

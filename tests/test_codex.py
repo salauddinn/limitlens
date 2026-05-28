@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.providers.codex — session parsing, limits, log issues."""
+"""Tests for limitlens.providers.codex — session parsing, limits, log issues."""
 
 import json
 import os
@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from ai_quota.providers.codex import get_session_mtime, parse_limits
+from limitlens.providers.codex import get_session_mtime, parse_limits
 
 
 class TestSessionMtime(unittest.TestCase):

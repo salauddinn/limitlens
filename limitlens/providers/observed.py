@@ -5,7 +5,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
-from ai_quota.core import (
+from limitlens.core import (
     redact_path,
     parse_to_utc,
     configured_days,
@@ -214,7 +214,7 @@ def get_copilot_cli_usage(config):
     cfg = config.get("copilot_cli", {})
     if not cfg.get("enabled", True):
         return {"disabled": True}
-    path = os.path.expanduser(cfg.get("otel_jsonl_path") or "~/.cache/ai-quota/copilot-otel.jsonl")
+    path = os.path.expanduser(cfg.get("otel_jsonl_path") or "~/.cache/limitlens/copilot-otel.jsonl")
     if not os.path.exists(path):
         return {
             "error": f"Copilot OTel file not found: {redact_path(path)}",

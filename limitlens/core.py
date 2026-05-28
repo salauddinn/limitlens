@@ -1,5 +1,5 @@
 """
-Shared utilities, display helpers, and configuration for ai-quota.
+Shared utilities, display helpers, and configuration for limitlens.
 
 Everything in this module is a leaf dependency — it imports only from
 the standard library and is imported by providers, cli, recommendations,
@@ -181,7 +181,7 @@ DEFAULT_CONFIG = {
     },
     "copilot_cli": {
         "enabled": True,
-        "otel_jsonl_path": "~/.cache/ai-quota/copilot-otel.jsonl",
+        "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
         "days": [1, 7],
     },
     "display": {
@@ -192,7 +192,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_display_config():
-    config = load_ai_quota_config()
+    config = load_limitlens_config()
     disp = config.get("display") or {}
     try:
         auto_hide_enabled = bool(disp.get("auto_hide_enabled", True))
@@ -221,11 +221,41 @@ def deep_merge(base, override):
             out[key] = value
     return out
 
-def ai_quota_config_path():
-    return os.environ.get("AI_QUOTA_CONFIG") or os.path.expanduser("~/.config/ai-quota/config.json")
+_MIGRATED = False
 
-def load_ai_quota_config():
-    path = ai_quota_config_path()
+def migrate_legacy_folders():
+    global _MIGRATED
+    if _MIGRATED:
+        return
+    _MIGRATED = True
+    
+    import shutil
+    home = os.path.expanduser("~")
+    
+    old_config = os.path.join(home, ".config", "ai-quota")
+    new_config = os.path.join(home, ".config", "limitlens")
+    if os.path.exists(old_config) and not os.path.exists(new_config):
+        try:
+            os.makedirs(os.path.dirname(new_config), exist_ok=True)
+            shutil.move(old_config, new_config)
+        except Exception:
+            pass
+
+    old_cache = os.path.join(home, ".cache", "ai-quota")
+    new_cache = os.path.join(home, ".cache", "limitlens")
+    if os.path.exists(old_cache) and not os.path.exists(new_cache):
+        try:
+            os.makedirs(os.path.dirname(new_cache), exist_ok=True)
+            shutil.move(old_cache, new_cache)
+        except Exception:
+            pass
+
+def limitlens_config_path():
+    return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
+
+def load_limitlens_config():
+    migrate_legacy_folders()
+    path = limitlens_config_path()
     config = DEFAULT_CONFIG
     if not os.path.exists(path):
         return config

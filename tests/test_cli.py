@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Tests for ai_quota.cli."""
+"""Tests for limitlens.cli."""
 
 import argparse
 import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
-from ai_quota.cli import main
+from limitlens.cli import main
 
 
 class TestCLI(unittest.TestCase):
-    @patch("ai_quota.cli.get_codex_data")
-    @patch("ai_quota.cli.get_amp_data")
-    @patch("ai_quota.cli.get_antigravity_data")
-    @patch("ai_quota.cli.get_opencode_data")
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.cli.get_amp_data")
+    @patch("limitlens.cli.get_antigravity_data")
+    @patch("limitlens.cli.get_opencode_data")
     @patch("waste_tracker.record_snapshot")
     @patch("recommendations.display_one_line")
     def test_one_line_quick_recommendation(
@@ -24,7 +24,7 @@ class TestCLI(unittest.TestCase):
         mock_ag.return_value = {}
         mock_opencode.return_value = {}
 
-        test_args = ["ai-quota", "--quick"]
+        test_args = ["limitlens", "--quick"]
         with patch.object(sys, "argv", test_args):
             # prevent SystemExit on argparse error by catching it, but shouldn't happen here
             main()
@@ -43,12 +43,12 @@ class TestCLI(unittest.TestCase):
 
     @patch("waste_tracker.compute_waste")
     @patch("waste_tracker.display_waste_report")
-    @patch("ai_quota.cli.get_codex_data")
+    @patch("limitlens.cli.get_codex_data")
     def test_waste_report(self, mock_codex, mock_display_waste, mock_compute_waste):
         mock_codex.return_value = {}
         mock_compute_waste.return_value = []
         
-        test_args = ["ai-quota", "--waste", "--days", "14"]
+        test_args = ["limitlens", "--waste", "--days", "14"]
         with patch.object(sys, "argv", test_args):
             main()
 
@@ -56,11 +56,11 @@ class TestCLI(unittest.TestCase):
         mock_display_waste.assert_called_once()
 
     @patch("waste_tracker.reset_snapshots")
-    @patch("ai_quota.cli.print_c")
+    @patch("limitlens.cli.print_c")
     def test_reset_waste(self, mock_print, mock_reset):
         mock_reset.return_value = True
         
-        test_args = ["ai-quota", "--reset-waste"]
+        test_args = ["limitlens", "--reset-waste"]
         with patch.object(sys, "argv", test_args):
             main()
 

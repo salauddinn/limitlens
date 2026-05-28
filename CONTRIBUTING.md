@@ -1,6 +1,6 @@
-# Contributing to AI Quota
+# Contributing to LimitLens
 
-Thank you for your interest in contributing to `ai-quota`! We welcome community contributions, including bug fixes, documentation improvements, and adding support for new AI quota providers.
+Thank you for your interest in contributing to `limitlens`! We welcome community contributions, including bug fixes, documentation improvements, and adding support for new AI quota providers.
 
 ---
 
@@ -8,7 +8,7 @@ Thank you for your interest in contributing to `ai-quota`! We welcome community 
 
 *   **Zero Dependencies:** The core CLI must run using only the Python standard library. No third-party package dependencies (like `requests`, `pandas`, or `click`) should be added to the runtime code.
 *   **Error Tolerance:** If a provider is not installed, fails to respond, or is offline, the tool must fail gracefully and continue showing the status of other providers rather than raising an unhandled exception.
-*   **Privacy First:** Sensitive identifiers like email addresses, API tokens, home directories, and full absolute paths must be redacted or normalized before display in CLI output or widgets. Use the helper functions in `ai_quota/core.py`.
+*   **Privacy First:** Sensitive identifiers like email addresses, API tokens, home directories, and full absolute paths must be redacted or normalized before display in CLI output or widgets. Use the helper functions in `limitlens/core.py`.
 
 ---
 
@@ -17,13 +17,13 @@ Thank you for your interest in contributing to `ai-quota`! We welcome community 
 To add a new AI provider (e.g. `supermaven` or `cursor`), follow these steps:
 
 ### 1. Create a Provider Module
-Create a new file in `ai_quota/providers/your_provider.py`. It should expose two primary functions:
+Create a new file in `limitlens/providers/your_provider.py`. It should expose two primary functions:
 *   `get_your_provider_data(args) -> dict`: Queries the local binary, cache file, or API, parses the data, and returns a dictionary.
 *   `display_your_provider_text(data, args)`: Receives the data and formats/prints it to the terminal.
 
-Example structure (`ai_quota/providers/your_provider.py`):
+Example structure (`limitlens/providers/your_provider.py`):
 ```python
-from ai_quota.core import section, identity_line, print_error, bar
+from limitlens.core import section, identity_line, print_error, bar
 
 def get_your_provider_data(args):
     # Fetch, parse, and handle exceptions cleanly
@@ -48,7 +48,7 @@ def display_your_provider_text(data, args):
 ```
 
 ### 2. Register the Provider
-Open `ai_quota/providers/__init__.py` and import your functions, then add them to the `PROVIDERS` dictionary:
+Open `limitlens/providers/__init__.py` and import your functions, then add them to the `PROVIDERS` dictionary:
 ```python
 from .your_provider import get_your_provider_data, display_your_provider_text
 

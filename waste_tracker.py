@@ -2,7 +2,7 @@
 Waste tracker: persist quota snapshots and report wasted-at-reset stats.
 
 Mechanism:
-  • Every ai-quota run appends a snapshot row per (tool, identity, window).
+  • Every limitlens run appends a snapshot row per (tool, identity, window).
   • A "reset event" is detected when pct_left jumps UP by >= RESET_DETECT_PCT
     between two consecutive snapshots — the previous snapshot's pct_left is
     the % that was wasted at that reset.
@@ -15,7 +15,7 @@ Tracked tools:
   • Amp        — SKIPPED (replenishing $ pool, no fixed reset cycle)
   • Copilot    — SKIPPED (flat-fee unmetered)
 
-Storage: JSONL at ~/.cache/ai-quota/snapshots.jsonl (append-only, durable).
+Storage: JSONL at ~/.cache/limitlens/snapshots.jsonl (append-only, durable).
 """
 
 import json
@@ -23,7 +23,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 
-SNAPSHOT_PATH = os.path.expanduser("~/.cache/ai-quota/snapshots.jsonl")
+SNAPSHOT_PATH = os.path.expanduser("~/.cache/limitlens/snapshots.jsonl")
 RESET_DETECT_PCT = 30   # pct_left jump that signals a reset event
 RESET_AT_MIN_DELTA_SEC = 60  # reset_at must shift forward by at least this much
 SNAPSHOT_PRUNE_DAYS = 90  # keep ~3 months of history
@@ -127,7 +127,7 @@ def _flatten_snapshot(result):
 
 
 def record_snapshot(result):
-    """Append snapshot to JSONL. Silent on any failure — never break ai-quota."""
+    """Append snapshot to JSONL. Silent on any failure — never break limitlens."""
     rows = _flatten_snapshot(result)
     if not rows:
         return
@@ -269,7 +269,7 @@ def display_waste_report(report, days, args, print_c):
 
     if not report:
         print_c(
-            "\n    (no reset events recorded yet — keep running `ai-quota` for a few days,",
+            "\n    (no reset events recorded yet — keep running `limitlens` for a few days,",
             "\033[33m", args.no_color,
         )
         print_c(
@@ -307,7 +307,7 @@ def display_waste_report(report, days, args, print_c):
 
 def _print_setup_hint(args, print_c):
     print_c(
-        "\n  Tip: snapshots are recorded on every `ai-quota` run. To capture",
+        "\n  Tip: snapshots are recorded on every `limitlens` run. To capture",
         "\033[90m", args.no_color,
     )
     print_c(
@@ -315,6 +315,6 @@ def _print_setup_hint(args, print_c):
         "\033[90m", args.no_color,
     )
     print_c(
-        "         */30 * * * *  ai-quota --record >/dev/null 2>&1",
+        "         */30 * * * *  limitlens --record >/dev/null 2>&1",
         "\033[90m", args.no_color,
     )

@@ -13,7 +13,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 
-from ai_quota.core import (
+from limitlens.core import (
     is_reset_passed,
     fmt_reset,
     parse_to_utc,
@@ -539,7 +539,7 @@ def is_key_model(label):
 
 def antigravity_cache_path():
     home = os.path.expanduser("~")
-    return os.path.join(home, ".cache", "ai-quota", "antigravity-last.json")
+    return os.path.join(home, ".cache", "limitlens", "antigravity-last.json")
 
 def load_antigravity_cache():
     path = antigravity_cache_path()
