@@ -7,7 +7,18 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from limitlens.providers.codex import get_session_mtime, parse_limits
+import argparse
+from unittest.mock import patch
+
+from limitlens.core import load_display_config
+from limitlens.providers.codex import (
+    get_session_mtime,
+    parse_limits,
+    parse_usage_limit_message,
+    parse_request_error_message,
+    window_key_and_label,
+    get_codex_data
+)
 
 
 class TestSessionMtime(unittest.TestCase):
@@ -79,14 +90,6 @@ class TestParseLimits(unittest.TestCase):
             os.unlink(path)
 
 
-from limitlens.providers.codex import (
-    parse_usage_limit_message,
-    parse_request_error_message,
-    window_key_and_label,
-    get_codex_data
-)
-from limitlens.core import load_display_config
-from unittest.mock import patch, MagicMock
 
 class TestCodexParsing(unittest.TestCase):
     def test_parse_usage_limit_message(self):
@@ -120,7 +123,7 @@ class TestGetCodexData(unittest.TestCase):
     @patch("limitlens.providers.codex.discover_accounts")
     def test_get_codex_data_no_accounts(self, mock_discover):
         mock_discover.return_value = {}
-        args = MagicMock()
+        args = argparse.Namespace()
         res = get_codex_data(args)
         self.assertEqual(res["error"], "no codex accounts found (~/.codex-*)")
 
@@ -154,8 +157,7 @@ class TestGetCodexData(unittest.TestCase):
         mock_find_log.return_value = None
         mock_load_disp.return_value = {"auto_hide_enabled": False}
 
-        args = MagicMock()
-        args.redact = False
+        args = argparse.Namespace(redact=False)
         res = get_codex_data(args)
         
         accounts = res.get("accounts", [])
