@@ -14,8 +14,7 @@ If you juggle multiple AI subscriptions and accounts and frequently run into rat
 
 Clone this repository anywhere on your machine:
 ```sh
-git clone https://github.com/salauddinn/common-tools.git
-# Note: You may just want the limitlens folder
+git clone https://github.com/salauddinn/limitlens.git
 ```
 
 Then, add a permanent alias to your shell profile (e.g., `~/.zshrc`):

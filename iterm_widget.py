@@ -12,7 +12,7 @@ async def main(connection):
         knobs=[],
         exemplar="💡 AI: 80%",
         update_cadence=900.0,
-        identifier="com.salauddin.statusv4"
+        identifier="com.limitlens.status"
     )
 
     import subprocess
@@ -104,7 +104,7 @@ async def main(connection):
 
     try:
         await component.async_register(connection, coro)
-        print("Registration successful for com.salauddin.statusv4")
+        print("Registration successful for com.limitlens.status")
     except Exception as e:
         print(f"Registration failed: {e}")
 

@@ -221,40 +221,10 @@ def deep_merge(base, override):
             out[key] = value
     return out
 
-_MIGRATED = False
-
-def migrate_legacy_folders():
-    global _MIGRATED
-    if _MIGRATED:
-        return
-    _MIGRATED = True
-    
-    import shutil
-    home = os.path.expanduser("~")
-    
-    old_config = os.path.join(home, ".config", "ai-quota")
-    new_config = os.path.join(home, ".config", "limitlens")
-    if os.path.exists(old_config) and not os.path.exists(new_config):
-        try:
-            os.makedirs(os.path.dirname(new_config), exist_ok=True)
-            shutil.move(old_config, new_config)
-        except Exception:
-            pass
-
-    old_cache = os.path.join(home, ".cache", "ai-quota")
-    new_cache = os.path.join(home, ".cache", "limitlens")
-    if os.path.exists(old_cache) and not os.path.exists(new_cache):
-        try:
-            os.makedirs(os.path.dirname(new_cache), exist_ok=True)
-            shutil.move(old_cache, new_cache)
-        except Exception:
-            pass
-
 def limitlens_config_path():
     return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
 
 def load_limitlens_config():
-    migrate_legacy_folders()
     path = limitlens_config_path()
     config = DEFAULT_CONFIG
     if not os.path.exists(path):
