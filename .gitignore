@@ -30,3 +30,8 @@ ENV/
 
 # Local config overrides (if users create them here instead of ~/.config)
 config.json
+
+# Packaging / Distribution
+*.egg-info/
+build/
+dist/

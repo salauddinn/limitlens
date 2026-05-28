@@ -14,8 +14,8 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
     @patch("limitlens.cli.get_opencode_data")
-    @patch("waste_tracker.record_snapshot")
-    @patch("recommendations.display_one_line")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    @patch("limitlens.recommendations.display_one_line")
     def test_one_line_quick_recommendation(
         self, mock_display_one_line, mock_record, mock_opencode, mock_ag, mock_amp, mock_codex
     ):
@@ -41,8 +41,8 @@ class TestCLI(unittest.TestCase):
         mock_display_one_line.assert_called_once()
         self.assertEqual(mock_display_one_line.call_args[0][0], "quick")
 
-    @patch("waste_tracker.compute_waste")
-    @patch("waste_tracker.display_waste_report")
+    @patch("limitlens.waste_tracker.compute_waste")
+    @patch("limitlens.waste_tracker.display_waste_report")
     @patch("limitlens.cli.get_codex_data")
     def test_waste_report(self, mock_codex, mock_display_waste, mock_compute_waste):
         mock_codex.return_value = {}
@@ -55,7 +55,7 @@ class TestCLI(unittest.TestCase):
         mock_compute_waste.assert_called_once_with(days=14)
         mock_display_waste.assert_called_once()
 
-    @patch("waste_tracker.reset_snapshots")
+    @patch("limitlens.waste_tracker.reset_snapshots")
     @patch("limitlens.cli.print_c")
     def test_reset_waste(self, mock_print, mock_reset):
         mock_reset.return_value = True

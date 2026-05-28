@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from limitlens.core import parse_to_utc, fmt_reset
-import recommendations as rec
+from limitlens import recommendations as rec
 
 
 class TestRecommendations(unittest.TestCase):

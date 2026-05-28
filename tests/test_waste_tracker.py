@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-import waste_tracker as wt
+from limitlens import waste_tracker as wt
 
 
 class TestWasteTracker(unittest.TestCase):

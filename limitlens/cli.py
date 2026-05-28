@@ -79,14 +79,10 @@ def main():
                 result[key] = fut.result()
         return result
 
-    # Sibling modules in the same directory as the limitlens.py shim.
     # They're loaded lazily so we don't break when recommendations.py
     # or waste_tracker.py are missing (e.g. in isolated test runs).
-    limitlens_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if limitlens_dir not in sys.path:
-        sys.path.insert(0, limitlens_dir)
-    import recommendations as rec_mod
-    import waste_tracker
+    from . import recommendations as rec_mod
+    from . import waste_tracker
 
     def _record(result):
         if not args.no_record:
