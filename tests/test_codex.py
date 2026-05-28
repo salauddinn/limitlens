@@ -79,5 +79,92 @@ class TestParseLimits(unittest.TestCase):
             os.unlink(path)
 
 
+from limitlens.providers.codex import (
+    parse_usage_limit_message,
+    parse_request_error_message,
+    window_key_and_label,
+    get_codex_data
+)
+from limitlens.core import load_display_config
+from unittest.mock import patch, MagicMock
+
+class TestCodexParsing(unittest.TestCase):
+    def test_parse_usage_limit_message(self):
+        self.assertEqual(
+            parse_usage_limit_message("usage_limit_exceeded"),
+            "usage limit reached"
+        )
+        msg = "usage_limit_exceeded: try again at 12:00 PM."
+        self.assertEqual(
+            parse_usage_limit_message(msg),
+            "usage limited until 12:00 PM"
+        )
+
+    def test_parse_request_error_message(self):
+        self.assertEqual(
+            parse_request_error_message('{"message":"invalid token"}'),
+            "invalid token"
+        )
+        self.assertIsNone(parse_request_error_message("random string"))
+
+    def test_window_key_and_label(self):
+        self.assertEqual(window_key_and_label(300), ("5h", "5h window"))
+        self.assertEqual(window_key_and_label(10080), ("weekly", "weekly"))
+        self.assertEqual(window_key_and_label(None), ("unknown", "unknown"))
+        self.assertEqual(window_key_and_label(1440), ("1440m", "1d window"))
+        self.assertEqual(window_key_and_label(120), ("120m", "2h window"))
+        self.assertEqual(window_key_and_label(45), ("45m", "45m window"))
+
+
+class TestGetCodexData(unittest.TestCase):
+    @patch("limitlens.providers.codex.discover_accounts")
+    def test_get_codex_data_no_accounts(self, mock_discover):
+        mock_discover.return_value = {}
+        args = MagicMock()
+        res = get_codex_data(args)
+        self.assertEqual(res["error"], "no codex accounts found (~/.codex-*)")
+
+    @patch("limitlens.providers.codex.discover_accounts")
+    @patch("limitlens.providers.codex.find_latest_session")
+    @patch("limitlens.providers.codex.get_session_mtime")
+    @patch("limitlens.providers.codex.parse_limits")
+    @patch("limitlens.providers.codex.find_log_issue")
+    @patch("limitlens.providers.codex.load_display_config")
+    @patch("limitlens.providers.codex.os.path.exists")
+    def test_get_codex_data_with_account(
+        self, mock_exists, mock_load_disp, mock_find_log, mock_parse, mock_mtime, mock_latest, mock_discover
+    ):
+        mock_exists.return_value = True
+        mock_discover.return_value = {"default": "/fake/home"}
+        mock_latest.return_value = "/fake/home/sessions/rollout-1.jsonl"
+        mock_mtime.return_value = 1600000000.0
+        mock_parse.return_value = (
+            {
+                "5h": {
+                    "key": "5h",
+                    "label": "5h window",
+                    "window_minutes": 300,
+                    "used_percent": 20.0,
+                    "reset_time": None
+                }
+            },
+            None,
+            None
+        )
+        mock_find_log.return_value = None
+        mock_load_disp.return_value = {"auto_hide_enabled": False}
+
+        args = MagicMock()
+        args.redact = False
+        res = get_codex_data(args)
+        
+        accounts = res.get("accounts", [])
+        self.assertEqual(len(accounts), 1)
+        acc = accounts[0]
+        self.assertEqual(acc["name"], "default")
+        self.assertIn("limits", acc)
+        self.assertEqual(acc["limits"][0]["label"], "5h window")
+        self.assertEqual(acc["limits"][0]["left_percent"], 80.0)
+
 if __name__ == "__main__":
     unittest.main()
