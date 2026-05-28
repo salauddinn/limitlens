@@ -10,6 +10,11 @@ A unified status and quota checker for popular AI coding tools: **Codex**, **Amp
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
 
+<p align="center">
+  <img src="assets/limitlens_status.png" alt="LimitLens Status Dashboard" width="480" style="max-width: 100%;">
+  <img src="assets/limitlens_reco.png" alt="LimitLens Smart Recommendation" width="480" style="max-width: 100%;">
+</p>
+
 ## Features
 - **Unified Quota Tracking:** Instantly see the remaining headroom, reset times, and limits across all your installed accounts and profiles.
 - **Zero-Dependency CLI:** Written purely in standard Python—just clone and run. No `pip install` required.
