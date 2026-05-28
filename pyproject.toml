@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Unified quota checker for AI coding tools (Codex, Amp, OpenCode, Antigravity)"
 readme = "README.md"
 authors = [
-    { name = "Salauddin", email = "salauddinn.work@gmail.com" }
+    { name = "Salauddin", email = "salauddinn@users.noreply.github.com" }
 ]
 license = { text = "MIT" }
 classifiers = [
