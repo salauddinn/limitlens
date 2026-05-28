@@ -35,3 +35,8 @@ config.json
 *.egg-info/
 build/
 dist/
+*.whl
+*.tar.gz
+
+# Kiro
+.kiro/

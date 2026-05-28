@@ -33,8 +33,15 @@ async def main(connection):
     if "Scripts" in LIMITLENS_DIR or "iterm2" in LIMITLENS_DIR.lower():
         LIMITLENS_DIR = os.path.expanduser(USER_LIMITLENS_DIR)
 
-    # Detect python path
-    PYTHON_BIN = "/opt/homebrew/bin/python3" if os.path.exists("/opt/homebrew/bin/python3") else "python3"
+    # Detect python path — prefer the venv python, then homebrew, then system
+    if os.path.exists(os.path.join(LIMITLENS_DIR, ".venv", "bin", "python3")):
+        PYTHON_BIN = os.path.join(LIMITLENS_DIR, ".venv", "bin", "python3")
+    elif os.path.exists("/opt/homebrew/bin/python3"):
+        PYTHON_BIN = "/opt/homebrew/bin/python3"
+    elif os.path.exists("/usr/local/bin/python3"):
+        PYTHON_BIN = "/usr/local/bin/python3"
+    else:
+        PYTHON_BIN = "python3"
 
     state = {"status": "💡 AI: Loading..."}
 

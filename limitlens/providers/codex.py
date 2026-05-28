@@ -137,7 +137,7 @@ def find_log_issue_in_sqlite(codex_home):
     if not os.path.exists(db_path):
         return None
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
         try:
             row = conn.execute(
                 """

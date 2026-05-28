@@ -1,5 +1,9 @@
 # LimitLens
 
+[![CI](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml/badge.svg)](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+
 A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, and **Antigravity**.
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
@@ -12,6 +16,17 @@ If you juggle multiple AI subscriptions and accounts and frequently run into rat
 
 ## Installation
 
+### Option 1: pip install (recommended)
+```sh
+pip install git+https://github.com/salauddinn/limitlens.git
+```
+
+This installs the `limitlens` command globally. You can also run it as a module:
+```sh
+python -m limitlens
+```
+
+### Option 2: Clone and alias
 Clone this repository anywhere on your machine:
 ```sh
 git clone https://github.com/salauddinn/limitlens.git
