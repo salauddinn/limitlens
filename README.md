@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
+
 A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, and **Antigravity**.
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
@@ -103,3 +105,9 @@ To run the unit tests:
 ```sh
 python3 -m pytest tests/
 ```
+
+## Support
+
+If `limitlens` helps you manage your AI quotas and avoid rate limits, consider buying me a coffee!
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)

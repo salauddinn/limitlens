@@ -123,7 +123,7 @@ class TestGetCodexData(unittest.TestCase):
     @patch("limitlens.providers.codex.discover_accounts")
     def test_get_codex_data_no_accounts(self, mock_discover):
         mock_discover.return_value = {}
-        args = argparse.Namespace()
+        args = argparse.Namespace(redact=False)
         res = get_codex_data(args)
         self.assertEqual(res["error"], "no codex accounts found (~/.codex-*)")
 

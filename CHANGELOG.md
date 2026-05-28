@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2025-05-28
+## [1.0.0] - 2026-05-28
 
 ### Added
 - Unified CLI to check quotas across Codex, Amp, Antigravity, and OpenCode
