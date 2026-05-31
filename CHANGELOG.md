@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-31
+
+### Added
+- Detect stale Codex limit data when the latest session is older than the limit window
+- Mark stale Codex limits as likely reset and show refresh hints in text output
+- Add `--refresh` to refresh stale Codex accounts before showing status
+- Add `--refresh-all` to refresh all discovered Codex accounts before showing status
+
+### Fixed
+- Keep JSON output valid when refresh status messages would otherwise be printed
+
 ## [1.0.0] - 2026-05-28
 
 ### Added
