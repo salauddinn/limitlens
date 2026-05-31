@@ -19,7 +19,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dev dependencies
-        run: pip install pytest
+      - name: Install package with dev dependencies
+        run: python -m pip install ".[dev]"
       - name: Run tests
         run: python -m pytest tests/ -v
+      - name: Smoke test installed CLI
+        run: |
+          limitlens --help
+          python -m limitlens --help
+      - name: Build wheel
+        run: python -m pip wheel . -w dist-check

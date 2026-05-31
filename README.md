@@ -17,7 +17,7 @@ If you juggle multiple AI subscriptions and accounts and frequently run into rat
 
 ## Features
 - **Unified Quota Tracking:** Instantly see the remaining headroom, reset times, and limits across all your installed accounts and profiles.
-- **Zero-Dependency CLI:** Written purely in standard Python—just clone and run. No `pip install` required.
+- **Zero-Dependency CLI:** Written purely in standard Python with no runtime package dependencies; install with pip or run from a clone.
 - **iTerm2 Widget Included:** Features a built-in background script that puts a live, real-time widget in your iTerm2 status bar.
 - **Smart Recommendations:** Automatically suggests the best tool to use based on your remaining quota to avoid wasting your fast premium limits.
 
@@ -25,15 +25,24 @@ If you juggle multiple AI subscriptions and accounts and frequently run into rat
 
 ### Option 1: pip install (recommended)
 ```sh
-pip install git+https://github.com/salauddinn/limitlens.git
+python -m pip install git+https://github.com/salauddinn/limitlens.git
 ```
 
-This installs the `limitlens` command globally. You can also run it as a module:
+This installs the `limitlens` command in your active Python environment. You can also run it as a module:
 ```sh
-python -m limitlens
+limitlens --help
+python -m limitlens --help
 ```
 
-### Option 2: Clone and alias
+### Option 2: Local development setup
+```sh
+git clone https://github.com/salauddinn/limitlens.git
+cd limitlens
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+### Option 3: Clone and alias
 Clone this repository anywhere on your machine:
 ```sh
 git clone https://github.com/salauddinn/limitlens.git
