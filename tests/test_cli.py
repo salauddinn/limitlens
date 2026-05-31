@@ -10,6 +10,28 @@ from limitlens.cli import main
 
 
 class TestCLI(unittest.TestCase):
+    @patch("limitlens.providers.codex.refresh_all_accounts")
+    @patch("limitlens.cli.print_c")
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.cli.get_amp_data")
+    @patch("limitlens.cli.get_antigravity_data")
+    @patch("limitlens.cli.get_opencode_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_json_refresh_all_does_not_print_status_line(
+        self, mock_record, mock_opencode, mock_ag, mock_amp, mock_codex, mock_print, mock_refresh_all
+    ):
+        mock_codex.return_value = {"accounts": []}
+        mock_amp.return_value = {}
+        mock_ag.return_value = {}
+        mock_opencode.return_value = {}
+
+        test_args = ["limitlens", "--json", "--tool", "codex", "--refresh-all", "--no-record"]
+        with patch.object(sys, "argv", test_args):
+            main()
+
+        mock_refresh_all.assert_called_once_with()
+        mock_print.assert_not_called()
+
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")

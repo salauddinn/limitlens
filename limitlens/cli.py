@@ -39,6 +39,8 @@ def main():
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
+    parser.add_argument("--refresh", action="store_true", help="Refresh stale Codex accounts before showing status")
+    parser.add_argument("--refresh-all", action="store_true", help="Refresh all Codex accounts before showing status")
     parser.add_argument("--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
     parser.add_argument("--no-recommend", action="store_true", help="Skip the recommendation block")
     parser.add_argument("--reco", action="store_true", help="Print only the recommendation block (skip full status)")
@@ -79,6 +81,28 @@ def main():
                 result[key] = fut.result()
         return result
 
+    def fetch_and_refresh():
+        if getattr(args, "refresh_all", False):
+            from .providers.codex import refresh_all_accounts
+            if not args.json:
+                print_c("  ⟲  refreshing all codex accounts...", "\033[90m", args.no_color)
+            refresh_all_accounts()
+            return collect_results()
+
+        result = collect_results()
+        if getattr(args, "refresh", False):
+            from .providers.codex import refresh_accounts
+            stale_names = []
+            for acc in result.get("codex", {}).get("accounts", []):
+                if any(l.get("is_stale") for l in acc.get("limits", [])):
+                    stale_names.append(acc["name"])
+            if stale_names:
+                if not args.json:
+                    print_c(f"  ⟲  refreshing stale codex accounts: {', '.join(stale_names)}...", "\033[90m", args.no_color)
+                refresh_accounts(stale_names)
+                result = collect_results()
+        return result
+
     # They're loaded lazily so we don't break when recommendations.py
     # or waste_tracker.py are missing (e.g. in isolated test runs).
     from . import recommendations as rec_mod
@@ -97,7 +121,7 @@ def main():
         return
 
     if args.record:
-        result = collect_results()
+        result = fetch_and_refresh()
         _record(result)
         return
 
@@ -105,7 +129,7 @@ def main():
         # Try to record this run's snapshot first so today's data is included,
         # but never let a fetch failure block the historical report.
         try:
-            result = collect_results()
+            result = fetch_and_refresh()
             _record(result)
         except Exception as e:
             if not args.json:
@@ -120,7 +144,7 @@ def main():
     one_line_tier = next((t for t in ("hard", "quick", "cli") if getattr(args, t)), None)
 
     if one_line_tier or args.reco:
-        result = collect_results()
+        result = fetch_and_refresh()
         _record(result)
         recs = rec_mod.compute_recommendations(result, parse_to_utc, fmt_reset)
         if args.json:
@@ -176,7 +200,7 @@ def main():
     if args.watch:
         try:
             while True:
-                result = collect_results()
+                result = fetch_and_refresh()
                 _record(result)
                 if not args.json:
                     print("\033[2J\033[H", end="")
@@ -187,6 +211,6 @@ def main():
                 print()
         return
 
-    result = collect_results()
+    result = fetch_and_refresh()
     _record(result)
     display_result(result)

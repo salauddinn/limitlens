@@ -140,7 +140,9 @@ class TestGetCodexData(unittest.TestCase):
         mock_exists.return_value = True
         mock_discover.return_value = {"default": "/fake/home"}
         mock_latest.return_value = "/fake/home/sessions/rollout-1.jsonl"
-        mock_mtime.return_value = 1600000000.0
+        # Use a recent mtime (1 minute ago) so staleness check doesn't trigger
+        now_ts = datetime.now(timezone.utc).timestamp()
+        mock_mtime.return_value = now_ts - 60
         mock_parse.return_value = (
             {
                 "5h": {
@@ -167,6 +169,121 @@ class TestGetCodexData(unittest.TestCase):
         self.assertIn("limits", acc)
         self.assertEqual(acc["limits"][0]["label"], "5h window")
         self.assertEqual(acc["limits"][0]["left_percent"], 80.0)
+        self.assertFalse(acc["limits"][0]["is_stale"])
+
+
+class TestStalenessDetection(unittest.TestCase):
+    """Tests for the session-age staleness detection in get_codex_data."""
+
+    def _make_args(self, redact=False):
+        return argparse.Namespace(redact=redact)
+
+    def _limits_with_high_usage(self, reset_time=None):
+        """Return limits dict mimicking 97% usage (the bug scenario)."""
+        return {
+            "5h": {
+                "key": "5h",
+                "label": "5h window",
+                "window_minutes": 300,
+                "used_percent": 97.0,
+                "reset_time": reset_time,
+            }
+        }
+
+    @patch("limitlens.providers.codex.discover_accounts")
+    @patch("limitlens.providers.codex.find_latest_session")
+    @patch("limitlens.providers.codex.get_session_mtime")
+    @patch("limitlens.providers.codex.parse_limits")
+    @patch("limitlens.providers.codex.find_log_issue")
+    @patch("limitlens.providers.codex.load_display_config")
+    @patch("limitlens.providers.codex.os.path.exists")
+    def test_stale_session_older_than_window(
+        self, mock_exists, mock_load_disp, mock_find_log, mock_parse,
+        mock_mtime, mock_latest, mock_discover,
+    ):
+        """Session is 8 hours old, 5h window → data is stale, should show 100% left."""
+        mock_exists.return_value = True
+        mock_discover.return_value = {"default": "/fake/home"}
+        mock_latest.return_value = "/fake/home/sessions/rollout-1.jsonl"
+        # Session file last modified 8 hours ago
+        now_ts = datetime.now(timezone.utc).timestamp()
+        mock_mtime.return_value = now_ts - (8 * 3600)
+        # reset_time is far in the future (e.g. weekly reset)
+        future_reset = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        mock_parse.return_value = (self._limits_with_high_usage(reset_time=future_reset), None, None)
+        mock_find_log.return_value = None
+        mock_load_disp.return_value = {"auto_hide_enabled": False}
+
+        res = get_codex_data(self._make_args())
+        lim = res["accounts"][0]["limits"][0]
+
+        self.assertEqual(lim["left_percent"], 100.0)
+        self.assertEqual(lim["used_percent"], 0.0)
+        self.assertTrue(lim["is_stale"])
+        self.assertIn("stale", lim["reset_time_fmt"])
+
+    @patch("limitlens.providers.codex.discover_accounts")
+    @patch("limitlens.providers.codex.find_latest_session")
+    @patch("limitlens.providers.codex.get_session_mtime")
+    @patch("limitlens.providers.codex.parse_limits")
+    @patch("limitlens.providers.codex.find_log_issue")
+    @patch("limitlens.providers.codex.load_display_config")
+    @patch("limitlens.providers.codex.os.path.exists")
+    def test_fresh_session_within_window(
+        self, mock_exists, mock_load_disp, mock_find_log, mock_parse,
+        mock_mtime, mock_latest, mock_discover,
+    ):
+        """Session is 1 hour old, 5h window → NOT stale, show actual usage."""
+        mock_exists.return_value = True
+        mock_discover.return_value = {"default": "/fake/home"}
+        mock_latest.return_value = "/fake/home/sessions/rollout-1.jsonl"
+        # Session file last modified 1 hour ago (within the 5h window)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        mock_mtime.return_value = now_ts - (1 * 3600)
+        future_reset = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+        mock_parse.return_value = (self._limits_with_high_usage(reset_time=future_reset), None, None)
+        mock_find_log.return_value = None
+        mock_load_disp.return_value = {"auto_hide_enabled": False}
+
+        res = get_codex_data(self._make_args())
+        lim = res["accounts"][0]["limits"][0]
+
+        # Data is fresh — should show the actual 97% usage
+        self.assertEqual(lim["left_percent"], 3.0)
+        self.assertEqual(lim["used_percent"], 97.0)
+        self.assertFalse(lim["is_stale"])
+
+    @patch("limitlens.providers.codex.discover_accounts")
+    @patch("limitlens.providers.codex.find_latest_session")
+    @patch("limitlens.providers.codex.get_session_mtime")
+    @patch("limitlens.providers.codex.parse_limits")
+    @patch("limitlens.providers.codex.find_log_issue")
+    @patch("limitlens.providers.codex.load_display_config")
+    @patch("limitlens.providers.codex.os.path.exists")
+    def test_stale_session_no_reset_time(
+        self, mock_exists, mock_load_disp, mock_find_log, mock_parse,
+        mock_mtime, mock_latest, mock_discover,
+    ):
+        """Session is 8 hours old, reset_time is None → staleness triggers via age check."""
+        mock_exists.return_value = True
+        mock_discover.return_value = {"default": "/fake/home"}
+        mock_latest.return_value = "/fake/home/sessions/rollout-1.jsonl"
+        now_ts = datetime.now(timezone.utc).timestamp()
+        mock_mtime.return_value = now_ts - (8 * 3600)
+        # No reset_time — is_reset_passed would return False,
+        # but session-age check should still catch it
+        mock_parse.return_value = (self._limits_with_high_usage(reset_time=None), None, None)
+        mock_find_log.return_value = None
+        mock_load_disp.return_value = {"auto_hide_enabled": False}
+
+        res = get_codex_data(self._make_args())
+        lim = res["accounts"][0]["limits"][0]
+
+        self.assertEqual(lim["left_percent"], 100.0)
+        self.assertEqual(lim["used_percent"], 0.0)
+        self.assertTrue(lim["is_stale"])
+        self.assertIn("stale", lim["reset_time_fmt"])
+
 
 if __name__ == "__main__":
     unittest.main()

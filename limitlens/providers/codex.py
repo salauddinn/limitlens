@@ -4,7 +4,10 @@ import glob
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -320,17 +323,43 @@ def get_codex_data(args):
             data.append(acc_data)
             continue
 
+        # Compute session age for staleness detection
+        session_age_minutes = None
+        if session_mtime is not None:
+            age_seconds = (datetime.now(timezone.utc) - datetime.fromtimestamp(session_mtime, timezone.utc)).total_seconds()
+            session_age_minutes = max(0, age_seconds / 60)
+
         disp_cfg = load_display_config()
         acc_data["limits"] = []
         for d in sorted(limits.values(), key=lambda item: item.get("window_minutes") or 10**9):
             used_pct = d.get("used_percent", 0)
             left_pct = 100.0 - used_pct
             rst = d.get("reset_time")
+            is_stale = False
+
+            # Case 1: reset_time has already passed → limits are reset
             if is_reset_passed(rst):
                 left_pct = 100.0
                 used_pct = 0.0
+                is_stale = True
 
-            rst_fmt = fmt_reset(rst)
+            # Case 2: session file is older than the rate-limit window →
+            # the data has definitely rolled over, regardless of reset_time
+            window_minutes = d.get("window_minutes")
+            if not is_stale and session_age_minutes and window_minutes:
+                if session_age_minutes > window_minutes:
+                    left_pct = 100.0
+                    used_pct = 0.0
+                    is_stale = True
+
+            # When stale, override the reset text directly — fmt_reset's
+            # is_stale param only works when reset_time is already past,
+            # not when we detected staleness via session age.
+            if is_stale:
+                rst_fmt = "likely reset (stale data)"
+            else:
+                rst_fmt = fmt_reset(rst)
+
             visible = True
             if disp_cfg["auto_hide_enabled"]:
                 days_match = re.search(r'(\d+)\s+days?', rst_fmt)
@@ -343,7 +372,8 @@ def get_codex_data(args):
                 "left_percent": left_pct,
                 "reset_time": rst,
                 "reset_time_fmt": rst_fmt,
-                "visible": visible
+                "is_stale": is_stale,
+                "visible": visible,
             })
         data.append(acc_data)
 
@@ -395,10 +425,12 @@ def display_codex_text(data, args):
             left = lim["left_percent"]
             rst = lim["reset_time_fmt"]
             b = bar(pct, no_color=args.no_color)
+            stale_hint = "  ⟲" if lim.get("is_stale") else ""
             if args.no_color:
-                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {rst}")
+                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {rst}{stale_hint}")
             else:
-                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  \033[90m{rst}\033[0m")
+                stale_color = "\033[33m" if lim.get("is_stale") else "\033[90m"
+                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {stale_color}{rst}{stale_hint}\033[0m")
 
         tokens = acc.get("tokens")
         if tokens:
@@ -412,3 +444,61 @@ def display_codex_text(data, args):
                 f"total {_fmt_tokens(tokens.get('total_tokens', 0))}"
             )
             print_c(line, "\033[90m", args.no_color)
+
+
+# ── Refresh helpers ─────────────────────────────────────────────────────────
+
+def refresh_account(codex_home, timeout=30):
+    """Run a minimal codex exec to trigger fresh rate-limit data in a new session."""
+    codex_bin = shutil.which("codex")
+    if not codex_bin:
+        return False, "codex not found on PATH"
+    env = os.environ.copy()
+    env["CODEX_HOME"] = codex_home
+    try:
+        subprocess.run(
+            [codex_bin, "exec", "respond with ok",
+             "--skip-git-repo-check", "-s", "read-only"],
+            env=env,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            cwd=os.path.expanduser("~"),
+        )
+        return True, None
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    except OSError as e:
+        return False, str(e)
+
+
+def _refresh_accounts_parallel(accounts, timeout=30):
+    """Refresh a dict of {name: home_dir} accounts in parallel. Returns results."""
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(accounts), 6)) as pool:
+        futures = {
+            pool.submit(refresh_account, home, timeout): name
+            for name, home in accounts.items()
+        }
+        for fut in as_completed(futures):
+            name = futures[fut]
+            ok, err = fut.result()
+            results[name] = {"ok": ok, "error": err}
+    return results
+
+
+def refresh_accounts(names, timeout=30):
+    """Refresh selected Codex accounts by name."""
+    all_accounts = discover_accounts()
+    accounts = {name: all_accounts[name] for name in names if name in all_accounts}
+    if not accounts:
+        return {}
+    return _refresh_accounts_parallel(accounts, timeout)
+
+
+def refresh_all_accounts(timeout=30):
+    """Refresh all discovered codex accounts."""
+    accounts = discover_accounts()
+    if not accounts:
+        return {}
+    return _refresh_accounts_parallel(accounts, timeout)
