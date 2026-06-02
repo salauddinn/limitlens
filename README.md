@@ -6,7 +6,7 @@
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
 
-A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Antigravity**, and **Pioneer**.
+A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Antigravity**, **Pioneer**, and **AgentRouter/Kilo Code**.
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
 
@@ -59,6 +59,7 @@ alias limitlens="python3 /path/to/limitlens/limitlens.py"
 limitlens            # full status across all tools
 limitlens --tool opencode
 limitlens --tool pioneer
+limitlens --tool agentrouter
 limitlens --verbose  # show full usage rows and low-level warnings
 limitlens --help     # flags (e.g. --no-color, tool filters)
 ```
@@ -105,6 +106,7 @@ The core engine and configuration are completely platform-agnostic, but individu
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux systems |
 | **OpenCode** | macOS, Linux, Windows | Reads from the local OpenCode SQLite database |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
+| **AgentRouter/Kilo Code** | Any OS | Reads AgentRouter quota from env-authenticated API or sanitized manual config |
 
 ### Observed Usage Logging
 
@@ -155,6 +157,30 @@ For Pioneer, set `PIONEER_API_TOKEN` in your environment. If your account uses a
 ```
 
 The Pioneer `full-status` response reports usage in cents-like units, so LimitLens displays `credit_limit: 3000.0` as `$30.00`.
+
+For AgentRouter/Kilo Code, use environment variables for sensitive auth. Do not put copied curl cookies, session IDs, or bearer tokens in `config.json`:
+
+```sh
+export AGENTROUTER_COOKIE='<cookie value from your shell secret store>'
+export AGENTROUTER_NEW_API_USER='145176'
+limitlens --tool agentrouter
+```
+
+If you only want local tracking, store sanitized quota fields instead:
+
+```json
+{
+  "agentrouter": {
+    "enabled": true,
+    "manual": {
+      "quota": 84917038,
+      "used_quota": 2582962,
+      "request_count": 42,
+      "group": "default"
+    }
+  }
+}
+```
 
 ## Testing
 

@@ -68,6 +68,27 @@ class TestRecommendations(unittest.TestCase):
         self.assertEqual(top["headroom_pct"], 12.0)
         self.assertEqual(top["note"], "bottleneck: 5h window")
 
+    def test_agentrouter_recommendation_for_kilo_code(self):
+        result = {
+            "agentrouter": {
+                "display_name": "Kilo Code",
+                "request_count": 42,
+                "tiers": [
+                    {
+                        "remaining": 82334076,
+                        "total": 84917038,
+                    }
+                ],
+            }
+        }
+
+        recs = rec.compute_recommendations(result, parse_to_utc, fmt_reset)
+        top = recs["hard"][0]
+
+        self.assertEqual(top["tool"], "agentrouter")
+        self.assertEqual(top["command"], "use Kilo Code")
+        self.assertIn("42 requests", top["note"])
+
     def test_hard_recommendation_ignores_under_five_percent(self):
         now = datetime.now(timezone.utc)
         result = {

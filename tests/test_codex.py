@@ -17,7 +17,8 @@ from limitlens.providers.codex import (
     parse_usage_limit_message,
     parse_request_error_message,
     window_key_and_label,
-    get_codex_data
+    get_codex_data,
+    filter_accounts,
 )
 
 
@@ -146,6 +147,17 @@ class TestCodexParsing(unittest.TestCase):
 
 
 class TestGetCodexData(unittest.TestCase):
+    def test_filter_accounts_ignores_default_codex(self):
+        accounts = {
+            "default": os.path.expanduser("~/.codex"),
+            "p1": os.path.expanduser("~/.codex-p1"),
+        }
+
+        filtered = filter_accounts(accounts, {"codex": {"ignored_accounts": ["default"]}})
+
+        self.assertNotIn("default", filtered)
+        self.assertIn("p1", filtered)
+
     @patch("limitlens.providers.codex.discover_accounts")
     def test_get_codex_data_no_accounts(self, mock_discover):
         mock_discover.return_value = {}

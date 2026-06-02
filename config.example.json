@@ -1,6 +1,7 @@
 {
   "codex": {
-    "enabled": false
+    "enabled": false,
+    "ignored_accounts": []
   },
   "opencode": {
     "enabled": true,
@@ -36,6 +37,19 @@
     "free_tier_remaining": 2394.2873,
     "used_today": 6.06,
     "inferences_today": 78
+  },
+  "agentrouter": {
+    "enabled": false,
+    "quota_url": "https://agentrouter.org/api/user/self",
+    "unit_label": "units",
+    "manual": {
+      "username": "github_145176",
+      "display_name": "Kilo user",
+      "quota": 84917038,
+      "used_quota": 2582962,
+      "request_count": 42,
+      "group": "default"
+    }
   },
   "display": {
     "auto_hide_enabled": true,

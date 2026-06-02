@@ -580,8 +580,9 @@ def display_at_glance(result, recs, args):
         toks = (row.get("tokens") or {}).get("total", 0)
         cost = row.get("cost", 0.0)
         cost_text = f" · ${cost:.2f}" if cost else ""
+        parent_text = f" · parent: {row['parent']}" if row.get("parent") else ""
         print_c(
-            f"    top usage  {row['provider']}/{row['model']} · {_fmt_tokens(toks)} tokens today{cost_text}",
+            f"    top usage  {row['provider']}/{row['model']} · {_fmt_tokens(toks)} tokens today{cost_text}{parent_text}",
             "\033[90m",
             args.no_color,
         )

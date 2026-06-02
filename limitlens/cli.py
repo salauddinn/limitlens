@@ -26,6 +26,7 @@ from .providers import (
     get_antigravity_data, display_antigravity_text,
     get_opencode_data, display_opencode_text,
     get_pioneer_data, display_pioneer_text,
+    get_agentrouter_data, display_agentrouter_text,
 )
 from .providers.observed import display_at_glance
 
@@ -36,7 +37,7 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -63,6 +64,7 @@ def main():
         "antigravity": "Antigravity",
         "opencode": "observed usage",
         "pioneer": "Pioneer",
+        "agentrouter": "AgentRouter",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -79,9 +81,9 @@ def main():
     def collect_results():
         result = {}
         fetchers = {}
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             if args.tool in ("codex", "all") and config.get("codex", {}).get("enabled", True):
-                fetchers["codex"] = executor.submit(get_codex_data, args)
+                fetchers["codex"] = executor.submit(get_codex_data, args, config)
             if args.tool in ("amp", "all"):
                 fetchers["amp"] = executor.submit(get_amp_data, args)
             if args.tool in ("antigravity", "all"):
@@ -90,6 +92,8 @@ def main():
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
             if args.tool in ("pioneer", "all"):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
+            if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
+                fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -102,7 +106,7 @@ def main():
             from .providers.codex import refresh_all_accounts
             if not args.json:
                 print_c("  ⟲  refreshing all codex accounts...", "\033[90m", args.no_color)
-            refresh_all_accounts()
+            refresh_all_accounts(config)
             return collect_results()
 
         result = collect_results()
@@ -115,7 +119,7 @@ def main():
             if stale_names:
                 if not args.json:
                     print_c(f"  ⟲  refreshing stale codex accounts: {', '.join(stale_names)}...", "\033[90m", args.no_color)
-                refresh_accounts(stale_names)
+                refresh_accounts(stale_names, config)
                 result = collect_results()
         return result
 
@@ -194,7 +198,7 @@ def main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -205,6 +209,8 @@ def main():
             display_antigravity_text(result["antigravity"], args)
         if "pioneer" in result:
             display_pioneer_text(result["pioneer"], args)
+        if "agentrouter" in result:
+            display_agentrouter_text(result["agentrouter"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
 

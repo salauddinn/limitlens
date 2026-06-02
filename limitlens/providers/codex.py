@@ -42,6 +42,34 @@ def discover_accounts():
             accounts[name] = str(entry)
     return accounts
 
+def account_is_ignored(name, home, ignored_accounts):
+    if isinstance(ignored_accounts, str):
+        ignored_accounts = [ignored_accounts]
+    elif not isinstance(ignored_accounts, list):
+        return False
+
+    label = "codex" if name == "default" else f"codex-{name}"
+    candidates = {
+        str(name).lower(),
+        label.lower(),
+        os.path.basename(home).lower(),
+        os.path.expanduser(home).lower(),
+    }
+    for ignored in ignored_accounts:
+        value = os.path.expanduser(str(ignored).strip()).lower()
+        if value in candidates:
+            return True
+    return False
+
+def filter_accounts(accounts, config=None):
+    cfg = (config or {}).get("codex", {}) if isinstance(config, dict) else {}
+    ignored_accounts = cfg.get("ignored_accounts") or []
+    return {
+        name: home
+        for name, home in accounts.items()
+        if not account_is_ignored(name, home, ignored_accounts)
+    }
+
 def find_latest_session(codex_home):
     files = list(Path(codex_home).joinpath("sessions").rglob("rollout-*.jsonl"))
     return str(max(files, key=lambda f: f.stat().st_mtime)) if files else None
@@ -250,11 +278,14 @@ def get_session_mtime(session_file):
     except OSError:
         return None
 
-def get_codex_data(args):
+def get_codex_data(args, config=None):
     data = []
-    accounts = discover_accounts()
-    if not accounts:
+    discovered_accounts = discover_accounts()
+    if not discovered_accounts:
         return {"error": "no codex accounts found (~/.codex-*)"}
+    accounts = filter_accounts(discovered_accounts, config)
+    if not accounts:
+        return {"error": "all codex accounts are ignored by config"}
 
     for name, home in accounts.items():
         acc_data = {
@@ -493,18 +524,18 @@ def _refresh_accounts_parallel(accounts, timeout=30):
     return results
 
 
-def refresh_accounts(names, timeout=30):
+def refresh_accounts(names, config=None, timeout=30):
     """Refresh selected Codex accounts by name."""
-    all_accounts = discover_accounts()
+    all_accounts = filter_accounts(discover_accounts(), config)
     accounts = {name: all_accounts[name] for name in names if name in all_accounts}
     if not accounts:
         return {}
     return _refresh_accounts_parallel(accounts, timeout)
 
 
-def refresh_all_accounts(timeout=30):
+def refresh_all_accounts(config=None, timeout=30):
     """Refresh all discovered codex accounts."""
-    accounts = discover_accounts()
+    accounts = filter_accounts(discover_accounts(), config)
     if not accounts:
         return {}
     return _refresh_accounts_parallel(accounts, timeout)

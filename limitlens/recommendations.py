@@ -254,11 +254,43 @@ def _pioneer_candidates(pioneer_data):
     }]
 
 
+def _agentrouter_candidates(agentrouter_data):
+    """One pooled AgentRouter/Kilo Code candidate."""
+    if not agentrouter_data or "error" in agentrouter_data:
+        return []
+    tiers = agentrouter_data.get("tiers") or []
+    if not tiers:
+        return []
+    total = sum(t.get("total", 0) for t in tiers)
+    left = sum(t.get("remaining", 0) for t in tiers)
+    if total <= 0 or left <= 0.5:
+        return []
+    headroom = (left / total) * 100.0
+    requests = agentrouter_data.get("request_count") or 0
+    note = f"{left:.0f}/{total:.0f} units left"
+    if requests:
+        note += f", {requests} requests"
+    return [{
+        "tool": "agentrouter",
+        "name": f"kilo ({agentrouter_data.get('display_name') or agentrouter_data.get('username') or 'agentrouter'})",
+        "command": "use Kilo Code",
+        "headroom_pct": headroom,
+        "reset_at": None,
+        "reset_label": None,
+        "quality": "premium",
+        "cost_class": "prepaid",
+        "surface": "ide",
+        "stale": False,
+        "note": note,
+    }]
+
+
 def _all_candidates(result, parse_to_utc, fmt_reset):
     cands = []
     cands += _codex_candidates(result.get("codex"))
     cands += _amp_candidates(result.get("amp"))
     cands += _pioneer_candidates(result.get("pioneer"))
+    cands += _agentrouter_candidates(result.get("agentrouter"))
     cands += _antigravity_candidates(result.get("antigravity"), fmt_reset)
     for c in cands:
         hrs = _hours_until_reset(c["reset_at"], parse_to_utc)

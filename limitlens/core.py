@@ -175,6 +175,7 @@ def should_show_detail(args):
 DEFAULT_CONFIG = {
     "codex": {
         "enabled": True,
+        "ignored_accounts": [],
     },
     "opencode": {
         "enabled": True,
@@ -188,6 +189,14 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
         "days": [1, 7],
+    },
+    "pioneer": {
+        "enabled": True,
+    },
+    "agentrouter": {
+        "enabled": False,
+        "quota_url": "https://agentrouter.org/api/user/self",
+        "unit_label": "units",
     },
     "display": {
         "auto_hide_enabled": True,
