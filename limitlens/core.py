@@ -198,6 +198,10 @@ DEFAULT_CONFIG = {
         "quota_url": "https://agentrouter.org/api/user/self",
         "unit_label": "units",
     },
+    "custom_tools": {
+        "enabled": False,
+        "tools": {},
+    },
     "display": {
         "auto_hide_enabled": True,
         "auto_hide_days": 1,

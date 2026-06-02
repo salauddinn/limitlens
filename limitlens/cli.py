@@ -27,6 +27,7 @@ from .providers import (
     get_opencode_data, display_opencode_text,
     get_pioneer_data, display_pioneer_text,
     get_agentrouter_data, display_agentrouter_text,
+    get_custom_data, display_custom_text,
 )
 from .providers.observed import display_at_glance
 
@@ -37,7 +38,7 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "custom", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -65,6 +66,7 @@ def main():
         "opencode": "observed usage",
         "pioneer": "Pioneer",
         "agentrouter": "AgentRouter",
+        "custom": "custom tool",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -94,6 +96,8 @@ def main():
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
             if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args)
+            if args.tool == "custom" or (args.tool == "all" and config.get("custom_tools", {}).get("enabled", False)):
+                fetchers["custom"] = executor.submit(get_custom_data, args, config)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -198,7 +202,7 @@ def main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "custom")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -211,6 +215,8 @@ def main():
             display_pioneer_text(result["pioneer"], args)
         if "agentrouter" in result:
             display_agentrouter_text(result["agentrouter"], args)
+        if "custom" in result:
+            display_custom_text(result["custom"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
 

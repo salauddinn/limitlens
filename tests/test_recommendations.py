@@ -89,6 +89,37 @@ class TestRecommendations(unittest.TestCase):
         self.assertEqual(top["command"], "use Kilo Code")
         self.assertIn("42 requests", top["note"])
 
+    def test_custom_tool_recommendation(self):
+        result = {
+            "custom": {
+                "tools": [
+                    {
+                        "id": "kilo",
+                        "name": "Kilo Code",
+                        "command": "use Kilo Code",
+                        "surface": "ide",
+                        "quality": "premium",
+                        "cost_class": "prepaid",
+                        "tiers": [
+                            {
+                                "label": "quota",
+                                "remaining": 75,
+                                "total": 100,
+                                "pct_left": 75.0,
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+
+        recs = rec.compute_recommendations(result, parse_to_utc, fmt_reset)
+        top = recs["hard"][0]
+
+        self.assertEqual(top["tool"], "custom")
+        self.assertEqual(top["name"], "Kilo Code")
+        self.assertEqual(top["command"], "use Kilo Code")
+
     def test_hard_recommendation_ignores_under_five_percent(self):
         now = datetime.now(timezone.utc)
         result = {

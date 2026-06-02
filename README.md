@@ -167,17 +167,49 @@ export AGENTROUTER_NEW_API_USER='145176'
 limitlens --tool agentrouter
 ```
 
-If you only want local tracking, store sanitized quota fields instead:
+If you only want local tracking for AgentRouter/Kilo Code, treat it as a custom tool instead of storing copied API/session material:
 
 ```json
 {
-  "agentrouter": {
+  "custom_tools": {
     "enabled": true,
-    "manual": {
-      "quota": 84917038,
-      "used_quota": 2582962,
-      "request_count": 42,
-      "group": "default"
+    "tools": {
+      "kilo": {
+        "name": "Kilo Code",
+        "command": "use Kilo Code",
+        "surface": "ide",
+        "quality": "premium",
+        "cost_class": "prepaid",
+        "unit": "units",
+        "total": 84917038,
+        "used": 2582962,
+        "request_count": 42
+      }
+    }
+  }
+}
+```
+
+For any other tool that does not need a dedicated API parser, use `custom_tools`. This is config-only and safe for manually tracked quotas. Pioneer can also be represented this way if you are manually tracking the balance:
+
+```json
+{
+  "custom_tools": {
+    "enabled": true,
+    "tools": {
+      "pioneer": {
+        "name": "Pioneer",
+        "command": "pioneer",
+        "surface": "cli",
+        "quality": "premium",
+        "cost_class": "metered",
+        "unit": "$",
+        "total": 30.0,
+        "remaining": 23.94,
+        "used": 6.06,
+        "request_count": 78,
+        "note": "$6.06 used today on 78 inferences"
+      }
     }
   }
 }

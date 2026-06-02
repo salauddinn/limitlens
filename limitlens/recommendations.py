@@ -285,12 +285,43 @@ def _agentrouter_candidates(agentrouter_data):
     }]
 
 
+def _custom_candidates(custom_data):
+    """One candidate per configured custom tool using its bottleneck tier."""
+    if not custom_data or "error" in custom_data:
+        return []
+    out = []
+    for tool in custom_data.get("tools") or []:
+        tiers = tool.get("tiers") or []
+        if not tiers:
+            continue
+        bottleneck = min(tiers, key=lambda tier: float(tier.get("pct_left", 0)))
+        left = float(bottleneck.get("pct_left", 0))
+        if left <= 0.5:
+            continue
+        note = tool.get("note") or f"bottleneck: {bottleneck.get('label', 'quota')}"
+        out.append({
+            "tool": "custom",
+            "name": tool.get("name") or tool.get("id") or "custom tool",
+            "command": tool.get("command") or tool.get("id") or "custom tool",
+            "headroom_pct": left,
+            "reset_at": None,
+            "reset_label": None,
+            "quality": tool.get("quality") or "premium",
+            "cost_class": tool.get("cost_class") or "prepaid",
+            "surface": tool.get("surface") or "cli",
+            "stale": False,
+            "note": note,
+        })
+    return out
+
+
 def _all_candidates(result, parse_to_utc, fmt_reset):
     cands = []
     cands += _codex_candidates(result.get("codex"))
     cands += _amp_candidates(result.get("amp"))
     cands += _pioneer_candidates(result.get("pioneer"))
     cands += _agentrouter_candidates(result.get("agentrouter"))
+    cands += _custom_candidates(result.get("custom"))
     cands += _antigravity_candidates(result.get("antigravity"), fmt_reset)
     for c in cands:
         hrs = _hours_until_reset(c["reset_at"], parse_to_utc)

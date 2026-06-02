@@ -29,14 +29,38 @@
   "agentrouter": {
     "enabled": false,
     "quota_url": "https://agentrouter.org/api/user/self",
-    "unit_label": "units",
-    "manual": {
-      "username": "github_145176",
-      "display_name": "Kilo user",
-      "quota": 84917038,
-      "used_quota": 2582962,
-      "request_count": 42,
-      "group": "default"
+    "unit_label": "units"
+  },
+  "custom_tools": {
+    "enabled": false,
+    "tools": {
+      "pioneer": {
+        "enabled": false,
+        "name": "Pioneer",
+        "command": "pioneer",
+        "surface": "cli",
+        "quality": "premium",
+        "cost_class": "metered",
+        "unit": "$",
+        "total": 30.0,
+        "remaining": 23.94,
+        "used": 6.06,
+        "request_count": 78,
+        "note": "manual Pioneer quota"
+      },
+      "kilo": {
+        "enabled": false,
+        "name": "Kilo Code",
+        "command": "use Kilo Code",
+        "surface": "ide",
+        "quality": "premium",
+        "cost_class": "prepaid",
+        "unit": "units",
+        "total": 84917038,
+        "used": 2582962,
+        "request_count": 42,
+        "note": "manual AgentRouter quota"
+      }
     }
   },
   "display": {

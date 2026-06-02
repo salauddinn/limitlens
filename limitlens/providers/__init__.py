@@ -12,6 +12,7 @@ from .antigravity import get_antigravity_data, display_antigravity_text
 from .observed import get_opencode_data, display_opencode_text
 from .pioneer import get_pioneer_data, display_pioneer_text
 from .agentrouter import get_agentrouter_data, display_agentrouter_text
+from .custom import get_custom_data, display_custom_text
 
 PROVIDERS = {
     "codex":       (get_codex_data, display_codex_text),
@@ -20,6 +21,7 @@ PROVIDERS = {
     "opencode":    (get_opencode_data, display_opencode_text),
     "pioneer":     (get_pioneer_data, display_pioneer_text),
     "agentrouter": (get_agentrouter_data, display_agentrouter_text),
+    "custom":      (get_custom_data, display_custom_text),
 }
 
 __all__ = [
@@ -30,4 +32,5 @@ __all__ = [
     "get_opencode_data", "display_opencode_text",
     "get_pioneer_data", "display_pioneer_text",
     "get_agentrouter_data", "display_agentrouter_text",
+    "get_custom_data", "display_custom_text",
 ]
