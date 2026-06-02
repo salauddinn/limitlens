@@ -159,7 +159,7 @@ class TestAntigravityStatus(unittest.TestCase):
     def test_discover_active_cli_profiles(self, mock_collect_ports, mock_get_config, mock_run):
         mock_proc = unittest.mock.Mock()
         mock_proc.returncode = 0
-        mock_proc.stdout = "12345 agy\n23456 /usr/local/bin/agy --conversation=123\n"
+        mock_proc.stdout = "12345 1 agy\n23456 1 /usr/local/bin/agy --conversation=123\n"
         mock_run.return_value = mock_proc
 
         # Mock config dirs

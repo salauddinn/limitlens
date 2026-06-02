@@ -336,28 +336,70 @@ def discover_active_cli_profiles(sys_name):
     active_profiles = {}
     try:
         ps_result = subprocess.run(
-            ["ps", "-e", "-ww", "-o", "pid=,command="],
+            ["ps", "-e", "-ww", "-o", "pid=,ppid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
         )
     except (subprocess.SubprocessError, OSError):
         return active_profiles
 
+    agy_roots = {}
     for line in ps_result.stdout.splitlines():
-        parts = line.strip().split(None, 1)
-        if len(parts) != 2:
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
             continue
-        pid, cmd = parts[0], parts[1]
+        pid, ppid, cmd = parts[0], parts[1], parts[2]
         if is_agy_cli_process_command(cmd):
             config_dir = get_config_dir_for_pid(pid, sys_name)
             if not config_dir:
                 config_dir = os.path.expanduser("~/.gemini/antigravity-cli")
-            name = get_profile_name_from_config_dir(config_dir)
-            ports, _ = collect_listening_ports([pid], sys_name)
+            agy_roots[pid] = config_dir
+
+    if not agy_roots:
+        return active_profiles
+
+    tree_pids = {pid: set([pid]) for pid in agy_roots}
+    changed = True
+    while changed:
+        changed = False
+        for line in ps_result.stdout.splitlines():
+            parts = line.strip().split(None, 2)
+            if len(parts) < 3:
+                continue
+            pid, ppid, cmd = parts[0], parts[1], parts[2]
+            for root_pid, descendants in tree_pids.items():
+                if ppid in descendants and pid not in descendants:
+                    descendants.add(pid)
+                    changed = True
+
+    for root_pid, config_dir in agy_roots.items():
+        name = get_profile_name_from_config_dir(config_dir)
+        descendants = tree_pids[root_pid]
+        
+        ports = set()
+        for line in ps_result.stdout.splitlines():
+            parts = line.strip().split(None, 2)
+            if len(parts) < 3:
+                continue
+            pid, ppid, cmd = parts[0], parts[1], parts[2]
+            if pid in descendants:
+                ports.update(extract_server_ports_from_command(cmd))
+
+        ports = sorted(list(ports))
+        
+        if not ports:
+            ports, _ = collect_listening_ports(list(descendants), sys_name)
+            
+        if name not in active_profiles:
             active_profiles[name] = {
-                "pid": pid,
+                "pid": root_pid,
                 "ports": ports,
                 "config_dir": config_dir
             }
+        else:
+            existing_ports = set(active_profiles[name]["ports"])
+            existing_ports.update(ports)
+            active_profiles[name]["ports"] = sorted(list(existing_ports))
+
     return active_profiles
 
 def find_language_server_for_cli(sys_name):
