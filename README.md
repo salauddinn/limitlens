@@ -57,12 +57,15 @@ alias limitlens="python3 /path/to/limitlens/limitlens.py"
 
 ```sh
 limitlens            # full status across all tools
+limitlens --sync-codex  # sync all Codex accounts before showing status
 limitlens --tool opencode
 limitlens --tool pioneer
 limitlens --tool agentrouter
 limitlens --verbose  # show full usage rows and low-level warnings
 limitlens --help     # flags (e.g. --no-color, tool filters)
 ```
+
+Codex stale session data is refreshed automatically before output. Use `--sync-codex` when you want to refresh every discovered Codex account, even if current data looks fresh.
 
 ## iTerm2 Status Bar Widget
 
@@ -186,6 +189,24 @@ If you only want local tracking for AgentRouter/Kilo Code, treat it as a custom 
         "request_count": 42
       }
     }
+  }
+}
+```
+
+For Command Code credits, LimitLens can query the web billing endpoint, but the session cookie must come from your shell environment. Do not put the cookie in `config.json`:
+
+```sh
+export COMMANDCODE_COOKIE='<commandcode.ai cookie from your shell secret store>'
+limitlens --tool commandcode
+```
+
+Enable it for the main dashboard with:
+
+```json
+{
+  "commandcode": {
+    "enabled": true,
+    "credits_url": "https://api.commandcode.ai/internal/billing/credits?"
   }
 }
 ```

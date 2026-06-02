@@ -85,7 +85,8 @@ def _normalize_tool(tool_id, raw):
         if normalized:
             tiers.append(normalized)
 
-    if not tiers:
+    status = raw.get("status") or raw.get("state")
+    if not tiers and not status and not raw.get("note"):
         return None
 
     return {
@@ -95,6 +96,7 @@ def _normalize_tool(tool_id, raw):
         "surface": raw.get("surface") or "cli",
         "quality": raw.get("quality") or "premium",
         "cost_class": raw.get("cost_class") or "prepaid",
+        "status": status,
         "note": raw.get("note"),
         "request_count": int(_float(raw.get("request_count"), 0.0)),
         "tiers": tiers,
@@ -130,12 +132,13 @@ def get_custom_data(args, config):
 def display_custom_text(data, args):
     tools = data.get("tools") or []
     visible_tools = []
+    show_status_only = getattr(args, "tool", None) == "custom" or getattr(args, "verbose", False) or getattr(args, "all", False)
     for tool in tools:
         visible_tiers = [
             tier for tier in tool.get("tiers", [])
             if tier.get("visible", True) or getattr(args, "verbose", False) or getattr(args, "all", False)
         ]
-        if visible_tiers:
+        if visible_tiers or (show_status_only and (tool.get("status") or tool.get("note"))):
             copy = dict(tool)
             copy["tiers"] = visible_tiers
             visible_tools.append(copy)
@@ -146,6 +149,8 @@ def display_custom_text(data, args):
     section("Custom Tools", args)
     for tool in visible_tools:
         identity_line(tool["id"], tool["name"], args)
+        if tool.get("status"):
+            print_c(f"    status           {tool['status']}", "\033[90m", args.no_color)
         for tier in tool.get("tiers", []):
             b = bar(tier["pct_used"], no_color=args.no_color)
             remaining = _format_amount(tier["remaining"], tier["unit"])

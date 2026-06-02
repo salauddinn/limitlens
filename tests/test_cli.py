@@ -20,7 +20,7 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_antigravity_data")
     @patch("limitlens.cli.get_opencode_data")
     @patch("limitlens.waste_tracker.record_snapshot")
-    def test_json_refresh_all_does_not_print_status_line(
+    def test_json_sync_codex_does_not_print_status_line(
         self, mock_record, mock_opencode, mock_ag, mock_amp, mock_codex, mock_print, mock_refresh_all
     ):
         mock_codex.return_value = {"accounts": []}
@@ -28,12 +28,60 @@ class TestCLI(unittest.TestCase):
         mock_ag.return_value = {}
         mock_opencode.return_value = {}
 
-        test_args = ["limitlens", "--json", "--tool", "codex", "--refresh-all", "--no-record"]
+        test_args = ["limitlens", "--json", "--tool", "codex", "--sync-codex", "--no-record"]
         with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
             main()
 
         mock_refresh_all.assert_called_once()
         mock_print.assert_not_called()
+
+    @patch("limitlens.providers.codex.refresh_accounts")
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_stale_codex_refreshes_by_default(self, mock_record, mock_codex, mock_refresh_accounts):
+        stale = {
+            "accounts": [
+                {
+                    "name": "default",
+                    "limits": [
+                        {
+                            "label": "5h window",
+                            "left_percent": 100.0,
+                            "reset_time": None,
+                            "reset_time_fmt": "likely reset (stale data)",
+                            "is_stale": True,
+                        }
+                    ],
+                }
+            ]
+        }
+        fresh = {
+            "accounts": [
+                {
+                    "name": "default",
+                    "limits": [
+                        {
+                            "label": "5h window",
+                            "left_percent": 80.0,
+                            "reset_time": None,
+                            "reset_time_fmt": "—",
+                            "is_stale": False,
+                        }
+                    ],
+                }
+            ]
+        }
+        mock_codex.side_effect = [stale, fresh]
+
+        test_args = ["limitlens", "--json", "--tool", "codex", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+            main()
+
+        mock_refresh_accounts.assert_called_once()
+        self.assertEqual(mock_refresh_accounts.call_args[0][0], ["default"])
+        payload = json.loads(buf.getvalue())
+        self.assertFalse(payload["codex"]["accounts"][0]["limits"][0]["is_stale"])
 
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")

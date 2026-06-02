@@ -31,6 +31,10 @@
     "quota_url": "https://agentrouter.org/api/user/self",
     "unit_label": "units"
   },
+  "commandcode": {
+    "enabled": false,
+    "credits_url": "https://api.commandcode.ai/internal/billing/credits?"
+  },
   "custom_tools": {
     "enabled": false,
     "tools": {
@@ -60,6 +64,16 @@
         "used": 2582962,
         "request_count": 42,
         "note": "manual AgentRouter quota"
+      },
+      "cmd": {
+        "enabled": false,
+        "name": "Command Code",
+        "command": "cmd",
+        "surface": "cli",
+        "quality": "premium",
+        "cost_class": "prepaid",
+        "status": "authenticated",
+        "note": "status-only placeholder; add total/remaining/used when quota is known"
       }
     }
   },

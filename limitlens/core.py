@@ -198,6 +198,10 @@ DEFAULT_CONFIG = {
         "quota_url": "https://agentrouter.org/api/user/self",
         "unit_label": "units",
     },
+    "commandcode": {
+        "enabled": False,
+        "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
+    },
     "custom_tools": {
         "enabled": False,
         "tools": {},

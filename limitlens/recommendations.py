@@ -135,9 +135,13 @@ def _codex_candidates(codex_data):
         left = float(bottleneck.get("left_percent", 0))
         if left <= 0.5:
             continue
+        stale = bool(bottleneck.get("is_stale"))
+        name = f"codex ({bottleneck['label']})" if acc['name'] == 'default' else f"codex-{acc['name']} ({bottleneck['label']})"
+        if stale:
+            name += " (stale)"
         out.append({
             "tool": "codex",
-            "name": f"codex ({bottleneck['label']})" if acc['name'] == 'default' else f"codex-{acc['name']} ({bottleneck['label']})",
+            "name": name,
             "command": "codex" if acc['name'] == 'default' else f"CODEX_HOME=~/.codex-{acc['name']} codex",
             "headroom_pct": left,
             "reset_at": bottleneck.get("reset_time"),
@@ -145,7 +149,7 @@ def _codex_candidates(codex_data):
             "quality": "premium",
             "cost_class": "prepaid",
             "surface": "cli",
-            "stale": False,
+            "stale": stale,
             "note": f"bottleneck: {bottleneck['label']}",
         })
     return out
@@ -285,6 +289,30 @@ def _agentrouter_candidates(agentrouter_data):
     }]
 
 
+def _commandcode_candidates(commandcode_data):
+    """One pooled Command Code candidate from available credits."""
+    if not commandcode_data or "error" in commandcode_data:
+        return []
+    available = float(commandcode_data.get("available") or 0.0)
+    if available <= 0.01:
+        return []
+    tiers = commandcode_data.get("tiers") or []
+    headroom = float(tiers[0].get("pct_left", 100.0)) if tiers else 100.0
+    return [{
+        "tool": "commandcode",
+        "name": "command code",
+        "command": commandcode_data.get("command") or "cmd",
+        "headroom_pct": headroom,
+        "reset_at": None,
+        "reset_label": None,
+        "quality": "premium",
+        "cost_class": "prepaid",
+        "surface": "cli",
+        "stale": False,
+        "note": f"{available:.4f} credits available",
+    }]
+
+
 def _custom_candidates(custom_data):
     """One candidate per configured custom tool using its bottleneck tier."""
     if not custom_data or "error" in custom_data:
@@ -321,6 +349,7 @@ def _all_candidates(result, parse_to_utc, fmt_reset):
     cands += _amp_candidates(result.get("amp"))
     cands += _pioneer_candidates(result.get("pioneer"))
     cands += _agentrouter_candidates(result.get("agentrouter"))
+    cands += _commandcode_candidates(result.get("commandcode"))
     cands += _custom_candidates(result.get("custom"))
     cands += _antigravity_candidates(result.get("antigravity"), fmt_reset)
     for c in cands:

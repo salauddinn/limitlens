@@ -27,6 +27,7 @@ from .providers import (
     get_opencode_data, display_opencode_text,
     get_pioneer_data, display_pioneer_text,
     get_agentrouter_data, display_agentrouter_text,
+    get_commandcode_data, display_commandcode_text,
     get_custom_data, display_custom_text,
 )
 from .providers.observed import display_at_glance
@@ -38,12 +39,11 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "custom", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "commandcode", "custom", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
-    parser.add_argument("--refresh", action="store_true", help="Refresh stale Codex accounts before showing status")
-    parser.add_argument("--refresh-all", action="store_true", help="Refresh all Codex accounts before showing status")
+    parser.add_argument("--sync-codex", action="store_true", help="Refresh all Codex accounts before showing status")
     parser.add_argument("--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
     parser.add_argument("--no-recommend", action="store_true", help="Skip the recommendation block")
     parser.add_argument("--reco", action="store_true", help="Print only the recommendation block (skip full status)")
@@ -66,10 +66,14 @@ def main():
         "opencode": "observed usage",
         "pioneer": "Pioneer",
         "agentrouter": "AgentRouter",
+        "commandcode": "Command Code",
         "custom": "custom tool",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
+    codex_refresh_attempts = {}
+    codex_refresh_cooldown = 300.0
+    sync_codex_pending = bool(args.sync_codex)
 
     def _provider_error_payload(key, err):
         message = f"{key} provider failed: {type(err).__name__}: {err}"
@@ -96,6 +100,8 @@ def main():
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
             if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args)
+            if args.tool == "commandcode" or (args.tool == "all" and config.get("commandcode", {}).get("enabled", False)):
+                fetchers["commandcode"] = executor.submit(get_commandcode_data, args)
             if args.tool == "custom" or (args.tool == "all" and config.get("custom_tools", {}).get("enabled", False)):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
             for key, fut in fetchers.items():
@@ -106,25 +112,34 @@ def main():
         return result
 
     def fetch_and_refresh():
-        if getattr(args, "refresh_all", False):
+        nonlocal sync_codex_pending
+        if sync_codex_pending:
             from .providers.codex import refresh_all_accounts
             if not args.json:
-                print_c("  ⟲  refreshing all codex accounts...", "\033[90m", args.no_color)
+                print_c("  ⟲  syncing codex accounts...", "\033[90m", args.no_color)
             refresh_all_accounts(config)
+            sync_codex_pending = False
             return collect_results()
 
         result = collect_results()
-        if getattr(args, "refresh", False):
-            from .providers.codex import refresh_accounts
-            stale_names = []
-            for acc in result.get("codex", {}).get("accounts", []):
-                if any(l.get("is_stale") for l in acc.get("limits", [])):
-                    stale_names.append(acc["name"])
-            if stale_names:
-                if not args.json:
-                    print_c(f"  ⟲  refreshing stale codex accounts: {', '.join(stale_names)}...", "\033[90m", args.no_color)
-                refresh_accounts(stale_names, config)
-                result = collect_results()
+        from .providers.codex import refresh_accounts
+        stale_names = []
+        now = time.monotonic()
+        for acc in result.get("codex", {}).get("accounts", []):
+            name = acc.get("name")
+            if not name or not any(l.get("is_stale") for l in acc.get("limits", [])):
+                continue
+            last_attempt = codex_refresh_attempts.get(name)
+            if args.watch and last_attempt is not None and now - last_attempt < codex_refresh_cooldown:
+                continue
+            stale_names.append(name)
+        if stale_names:
+            for name in stale_names:
+                codex_refresh_attempts[name] = now
+            if not args.json:
+                print_c(f"  ⟲  refreshing stale codex accounts: {', '.join(stale_names)}...", "\033[90m", args.no_color)
+            refresh_accounts(stale_names, config)
+            result = collect_results()
         return result
 
     # They're loaded lazily so we don't break when recommendations.py
@@ -202,7 +217,7 @@ def main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "custom")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "commandcode", "custom")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -215,6 +230,8 @@ def main():
             display_pioneer_text(result["pioneer"], args)
         if "agentrouter" in result:
             display_agentrouter_text(result["agentrouter"], args)
+        if "commandcode" in result:
+            display_commandcode_text(result["commandcode"], args)
         if "custom" in result:
             display_custom_text(result["custom"], args)
         if "opencode" in result:

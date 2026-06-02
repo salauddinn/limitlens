@@ -76,6 +76,50 @@ class TestCustomProvider(unittest.TestCase):
         self.assertIn("75.0% left", output)
         self.assertIn("manual source", output)
 
+    @patch("limitlens.providers.custom.load_display_config", return_value={"auto_hide_enabled": False})
+    def test_status_only_tool_hidden_by_default(self, mock_display):
+        data = get_custom_data(self.args, {
+            "custom_tools": {
+                "tools": {
+                    "cmd": {
+                        "name": "Command Code",
+                        "status": "authenticated",
+                        "note": "quota not exposed",
+                    }
+                }
+            }
+        })
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            display_custom_text(data, self.args)
+
+        self.assertEqual(buf.getvalue(), "")
+
+    @patch("limitlens.providers.custom.load_display_config", return_value={"auto_hide_enabled": False})
+    def test_status_only_tool_shown_when_custom_requested(self, mock_display):
+        args = argparse.Namespace(no_color=True, verbose=False, all=False, tool="custom")
+        data = get_custom_data(args, {
+            "custom_tools": {
+                "tools": {
+                    "cmd": {
+                        "name": "Command Code",
+                        "status": "authenticated",
+                        "note": "quota not exposed",
+                    }
+                }
+            }
+        })
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            display_custom_text(data, args)
+
+        output = buf.getvalue()
+        self.assertIn("Command Code", output)
+        self.assertIn("authenticated", output)
+        self.assertIn("quota not exposed", output)
+
 
 if __name__ == "__main__":
     unittest.main()

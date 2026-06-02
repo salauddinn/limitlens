@@ -471,6 +471,45 @@ class TestRecommendations(unittest.TestCase):
         self.assertEqual(recs["quick"][0]["name"], "codex-fresh (weekly)")
         self.assertEqual(recs["cli"][0]["name"], "codex-fresh (weekly)")
 
+    def test_fresh_codex_outranks_stale_codex(self):
+        now = datetime.now(timezone.utc)
+        result = {
+            "codex": {
+                "accounts": [
+                    {
+                        "name": "stale",
+                        "limits": [
+                            {
+                                "label": "weekly",
+                                "left_percent": 100.0,
+                                "reset_time": (now - timedelta(hours=1)).isoformat(),
+                                "reset_time_fmt": "likely reset (stale data)",
+                                "is_stale": True,
+                            },
+                        ],
+                    },
+                    {
+                        "name": "fresh",
+                        "limits": [
+                            {
+                                "label": "weekly",
+                                "left_percent": 40.0,
+                                "reset_time": (now + timedelta(hours=3)).isoformat(),
+                                "reset_time_fmt": "3 hours left to reset",
+                                "is_stale": False,
+                            },
+                        ],
+                    },
+                ]
+            }
+        }
+
+        recs = rec.compute_recommendations(result, parse_to_utc, fmt_reset)
+
+        self.assertEqual(recs["hard"][0]["name"], "codex-fresh (weekly)")
+        self.assertEqual(recs["hard"][1]["name"], "codex-stale (weekly) (stale)")
+        self.assertTrue(recs["hard"][1]["stale"])
+
 
 if __name__ == "__main__":
     unittest.main()
