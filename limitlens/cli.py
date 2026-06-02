@@ -97,11 +97,11 @@ def main():
             if args.tool in ("opencode", "all"):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and config.get("pioneer", {}).get("enabled", False)):
-                fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
+                fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
             if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
-                fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args)
+                fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
             if args.tool == "commandcode" or (args.tool == "all" and config.get("commandcode", {}).get("enabled", False)):
-                fetchers["commandcode"] = executor.submit(get_commandcode_data, args)
+                fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
             if args.tool == "custom" or (args.tool == "all" and config.get("custom_tools", {}).get("enabled", False)):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
             for key, fut in fetchers.items():

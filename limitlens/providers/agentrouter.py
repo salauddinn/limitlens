@@ -137,8 +137,10 @@ def _auth_headers_from_env():
     return headers
 
 
-def get_agentrouter_data(args):
-    cfg = (load_limitlens_config().get("agentrouter") or {})
+def get_agentrouter_data(args, config=None):
+    if config is None:
+        config = load_limitlens_config()
+    cfg = config.get("agentrouter") or {}
     manual = _manual_payload(cfg)
     headers = _auth_headers_from_env()
 

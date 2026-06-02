@@ -136,8 +136,10 @@ def parse_pioneer_billing(data, args):
     return info
 
 
-def get_pioneer_data(args):
-    cfg = (load_limitlens_config().get("pioneer") or {})
+def get_pioneer_data(args, config=None):
+    if config is None:
+        config = load_limitlens_config()
+    cfg = config.get("pioneer") or {}
     token = os.environ.get("PIONEER_API_TOKEN")
     if not token:
         if _has_config_balance(cfg):
