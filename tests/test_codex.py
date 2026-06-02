@@ -89,6 +89,32 @@ class TestParseLimits(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_parse_limits_tolerates_null_used_percent(self):
+        lines = [
+            json.dumps({
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "rate_limits": {
+                        "primary": {
+                            "window_minutes": 300,
+                            "used_percent": None,
+                            "resets_at": None,
+                        }
+                    }
+                }
+            }),
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            for line in lines:
+                f.write(line + "\n")
+            path = f.name
+        try:
+            limits, status, tokens = parse_limits(path)
+            self.assertEqual(limits["5h"]["used_percent"], 0.0)
+        finally:
+            os.unlink(path)
+
 
 
 class TestCodexParsing(unittest.TestCase):

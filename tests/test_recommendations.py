@@ -355,6 +355,70 @@ class TestRecommendations(unittest.TestCase):
         top = recs["waste_reduction"][0]
         self.assertEqual(top["name"], "codex-ok (weekly)")
 
+    def test_stale_antigravity_cache_is_not_waste_signal(self):
+        now = datetime.now(timezone.utc)
+        result = {
+            "antigravity": {
+                "profiles": [
+                    {
+                        "name": "main",
+                        "status": "stale",
+                        "models": [
+                            {
+                                "label": "Claude Sonnet",
+                                "pct_left": 100.0,
+                                "reset_time": (now - timedelta(hours=1)).isoformat(),
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+
+        recs = rec.compute_recommendations(result, parse_to_utc, fmt_reset)
+        self.assertEqual(recs["waste_watch"], [])
+        self.assertEqual(recs["waste_reduction"], [])
+
+    def test_fresh_candidate_outranks_stale_antigravity_cache(self):
+        now = datetime.now(timezone.utc)
+        result = {
+            "codex": {
+                "accounts": [
+                    {
+                        "name": "fresh",
+                        "limits": [
+                            {
+                                "label": "weekly",
+                                "left_percent": 40.0,
+                                "reset_time": (now + timedelta(days=2)).isoformat(),
+                                "reset_time_fmt": "2 days left to reset",
+                            },
+                        ],
+                    },
+                ]
+            },
+            "antigravity": {
+                "profiles": [
+                    {
+                        "name": "agy-cli",
+                        "source": "cli",
+                        "status": "stale",
+                        "models": [
+                            {
+                                "label": "Gemini Pro",
+                                "pct_left": 100.0,
+                                "reset_time": (now + timedelta(hours=1)).isoformat(),
+                            },
+                        ],
+                    }
+                ]
+            },
+        }
+
+        recs = rec.compute_recommendations(result, parse_to_utc, fmt_reset)
+        self.assertEqual(recs["quick"][0]["name"], "codex-fresh (weekly)")
+        self.assertEqual(recs["cli"][0]["name"], "codex-fresh (weekly)")
+
 
 if __name__ == "__main__":
     unittest.main()

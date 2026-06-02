@@ -364,7 +364,7 @@ def display_usage_source(name, data, args):
             display_usage_rows(models, args)
 
 def display_opencode_text(data, args):
-    if args.tool != "opencode":
+    if args.tool not in ("opencode", "all"):
         return
         
     op = data.get("opencode") or {}

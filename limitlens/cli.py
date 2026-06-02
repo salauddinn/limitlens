@@ -65,6 +65,15 @@ def main():
     }[args.tool]
     config = load_limitlens_config()
 
+    def _provider_error_payload(key, err):
+        message = f"{key} provider failed: {type(err).__name__}: {err}"
+        if key == "opencode":
+            return {
+                "opencode": {"error": message},
+                "copilot_cli": {"disabled": True},
+            }
+        return {"error": message}
+
     def collect_results():
         result = {}
         fetchers = {}
@@ -78,7 +87,10 @@ def main():
             if args.tool in ("opencode", "all"):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
             for key, fut in fetchers.items():
-                result[key] = fut.result()
+                try:
+                    result[key] = fut.result()
+                except Exception as e:
+                    result[key] = _provider_error_payload(key, e)
         return result
 
     def fetch_and_refresh():

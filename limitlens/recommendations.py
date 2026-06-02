@@ -234,7 +234,7 @@ def _all_candidates(result, parse_to_utc, fmt_reset):
     for c in cands:
         hrs = _hours_until_reset(c["reset_at"], parse_to_utc)
         c["hours_to_reset"] = hrs
-        if c.get("quality") != "cheap":
+        if not c.get("stale") and c.get("quality") != "cheap":
             c["waste_severity"] = _waste_severity(c["headroom_pct"], hrs)
         else:
             c["waste_severity"] = None
@@ -261,8 +261,8 @@ def _pick_hard(cands):
             and not _antigravity_below_threshold(c)
         ]
     eligible.sort(key=lambda c: (
-        0 if c["cost_class"] == "prepaid" else 1,
         0 if not c["stale"] else 1,
+        0 if c["cost_class"] == "prepaid" else 1,
         -c["headroom_pct"],
     ))
     return eligible
@@ -285,6 +285,7 @@ def _pick_quick(cands):
             and not _antigravity_below_threshold(c)
         ]
     eligible.sort(key=lambda c: (
+        0 if not c["stale"] else 1,
         0 if c["waste_severity"] == "urgent" else 1,
         0 if c["quality"] == "cheap" else 1,
         c.get("hours_to_reset") if c.get("hours_to_reset") is not None else 1e9,
@@ -305,6 +306,7 @@ def _pick_cli(cands):
         return [_copilot_fallback_candidate()]
     eligible.sort(key=lambda c: (
         0 if c["tool"] == "amp" and c["headroom_pct"] >= AMP_CLI_HEALTHY_PCT else 1,
+        0 if not c["stale"] else 1,
         -c["headroom_pct"],
     ))
     return eligible
@@ -316,6 +318,7 @@ def _waste_watch(cands):
     items = [
         c for c in cands
         if c.get("waste_severity")
+        and not c.get("stale")
         and not _is_excluded_from_hard_and_waste(c)
         and not _antigravity_below_threshold(c)
     ]
@@ -333,6 +336,7 @@ def _pick_waste_reduction(cands):
         if (
             c["cost_class"] == "prepaid"
             and c["quality"] != "cheap"
+            and not c["stale"]
             and c["headroom_pct"] >= WASTE_REDUCTION_MIN_HEADROOM_PCT
             and not _is_excluded_from_hard_and_waste(c)
             and not _antigravity_below_threshold(c)

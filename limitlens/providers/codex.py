@@ -88,6 +88,12 @@ def window_key_and_label(window_minutes):
         return f"{window_minutes}m", f"{hours}h window"
     return f"{window_minutes}m", f"{window_minutes}m window"
 
+def safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 def normalize_legacy_limit(key, payload):
     window_minutes = 300 if key == "5h" else 10080 if key == "weekly" else None
     _, label = window_key_and_label(window_minutes)
@@ -95,7 +101,7 @@ def normalize_legacy_limit(key, payload):
         "key": key,
         "label": label,
         "window_minutes": window_minutes,
-        "used_percent": float(payload.get("used_percent", 0)),
+        "used_percent": safe_float(payload.get("used_percent"), 0.0),
         "reset_time": payload.get("reset_time"),
     }
 
@@ -108,7 +114,7 @@ def normalize_rate_limit(payload):
         "key": key,
         "label": label,
         "window_minutes": window_minutes,
-        "used_percent": float(payload.get("used_percent", 0)),
+        "used_percent": safe_float(payload.get("used_percent"), 0.0),
         "reset_time": payload.get("resets_at"),
     }
 

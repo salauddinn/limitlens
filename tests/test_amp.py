@@ -76,6 +76,18 @@ class TestAmpProvider(unittest.TestCase):
         data = get_amp_data(self.args)
         self.assertEqual(data["error"], "Authentication failed")
 
+    @patch("limitlens.providers.amp.subprocess.run")
+    def test_amp_error_output_is_cleaned_and_redacted(self, mock_run):
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "Signed in as john.doe@example.com\nError\x1b[=0u\x1b[<u\x1b[?25h"
+        mock_run.return_value = mock_result
+
+        data = get_amp_data(self.args_redacted)
+        self.assertIn("jo***@example.com", data["error"])
+        self.assertNotIn("\x1b", data["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

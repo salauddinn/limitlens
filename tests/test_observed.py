@@ -6,9 +6,12 @@ import os
 import sqlite3
 import tempfile
 import unittest
+import argparse
+import io
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
 
-from limitlens.providers.observed import get_opencode_usage
+from limitlens.providers.observed import get_opencode_usage, display_opencode_text
 
 
 class TestOpenCodeUsage(unittest.TestCase):
@@ -70,6 +73,35 @@ class TestOpenCodeUsage(unittest.TestCase):
             }
         })
         self.assertIn("error", result)
+
+    def test_display_opencode_in_all_view_when_data_exists(self):
+        data = {
+            "opencode": {
+                "windows": [
+                    {
+                        "days": 1,
+                        "models": [
+                            {
+                                "provider": "openai",
+                                "model": "gpt-test",
+                                "requests": 1,
+                                "cost": 0,
+                                "tokens": {"total": 123},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "copilot_cli": {"disabled": True},
+        }
+        args = argparse.Namespace(tool="all", verbose=False, all=False, no_color=True)
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            display_opencode_text(data, args)
+
+        self.assertIn("Spend / Usage", buf.getvalue())
+        self.assertIn("gpt-test", buf.getvalue())
 
 
 if __name__ == "__main__":

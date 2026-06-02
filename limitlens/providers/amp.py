@@ -33,9 +33,12 @@ def get_amp_data(args):
 
     output = (result.stdout or "") + (result.stderr or "")
     if result.returncode != 0:
-        return {"error": output.strip() or f"exit code {result.returncode}"}
+        error = clean_amp_output(output)
+        if getattr(args, "redact", True):
+            error = redact_text(error)
+        return {"error": error or f"exit code {result.returncode}"}
 
-    raw_output = output.strip()
+    raw_output = clean_amp_output(output)
     if args.redact:
         raw_output = redact_text(raw_output)
     info = {"email": None, "tiers": [], "raw_output": raw_output}
@@ -103,6 +106,11 @@ def get_amp_data(args):
         tier["visible"] = visible
 
     return info
+
+def clean_amp_output(text):
+    text = text or ""
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    return text.strip()
 
 def display_amp_text(data, args):
     if "error" in data:
