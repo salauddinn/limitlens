@@ -125,14 +125,18 @@ def main():
         from .providers.codex import refresh_accounts
         stale_names = []
         now = time.monotonic()
-        for acc in result.get("codex", {}).get("accounts", []):
-            name = acc.get("name")
-            if not name or not any(l.get("is_stale") for l in acc.get("limits", [])):
-                continue
-            last_attempt = codex_refresh_attempts.get(name)
-            if args.watch and last_attempt is not None and now - last_attempt < codex_refresh_cooldown:
-                continue
-            stale_names.append(name)
+        auto_refresh = config.get("codex", {}).get("auto_refresh", True)
+        
+        if auto_refresh:
+            for acc in result.get("codex", {}).get("accounts", []):
+                name = acc.get("name")
+                if not name or not any(l.get("is_stale") for l in acc.get("limits", [])):
+                    continue
+                last_attempt = codex_refresh_attempts.get(name)
+                if args.watch and last_attempt is not None and now - last_attempt < codex_refresh_cooldown:
+                    continue
+                stale_names.append(name)
+                
         if stale_names:
             for name in stale_names:
                 codex_refresh_attempts[name] = now
