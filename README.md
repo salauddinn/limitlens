@@ -94,6 +94,9 @@ Add a `"display"` section to your configuration to control output behavior:
 *   `auto_hide_days` (integer, default: `1`): Number of days of inactivity before a tool is hidden.
 *   `amp_usable_pct` (float, default: `30.0`): Percentage threshold below which Amp is flagged as low/unusable.
 
+**Provider Settings:**
+*   `codex.auto_refresh` (boolean, default: `true`): Automatically trigger a background background refresh to fetch fresh quota limits if the cached data is deemed stale.
+
 **Privacy & Security:**
 *   `limitlens` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
 *   Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
