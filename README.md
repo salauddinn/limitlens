@@ -151,6 +151,7 @@ For Pioneer, set `PIONEER_API_TOKEN` in your environment. If your account uses a
 ```json
 {
   "pioneer": {
+    "enabled": true,
     "team_id": "your-team-id"
   }
 }

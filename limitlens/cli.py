@@ -90,7 +90,7 @@ def main():
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
             if args.tool in ("opencode", "all"):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-            if args.tool in ("pioneer", "all"):
+            if args.tool == "pioneer" or (args.tool == "all" and config.get("pioneer", {}).get("enabled", False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
             if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args)

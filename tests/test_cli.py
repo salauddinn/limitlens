@@ -118,6 +118,43 @@ class TestCLI(unittest.TestCase):
         self.assertIn("codex", payload)
         self.assertIn("antigravity", payload)
 
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "codex": {"enabled": True},
+        "pioneer": {"enabled": False},
+        "agentrouter": {"enabled": False},
+    })
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.cli.get_amp_data")
+    @patch("limitlens.cli.get_antigravity_data")
+    @patch("limitlens.cli.get_opencode_data")
+    @patch("limitlens.cli.get_pioneer_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_all_skips_disabled_pioneer(
+        self, mock_record, mock_pioneer, mock_opencode, mock_ag, mock_amp, mock_codex, mock_config
+    ):
+        mock_codex.return_value = {"accounts": []}
+        mock_amp.return_value = {}
+        mock_ag.return_value = {"profiles": []}
+        mock_opencode.return_value = {"opencode": {"windows": []}, "copilot_cli": {"disabled": True}}
+
+        test_args = ["limitlens", "--json", "--tool", "all", "--no-record"]
+        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+            main()
+
+        mock_pioneer.assert_not_called()
+
+    @patch("limitlens.cli.load_limitlens_config", return_value={"pioneer": {"enabled": False}})
+    @patch("limitlens.cli.get_pioneer_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_direct_pioneer_runs_when_disabled_in_all(self, mock_record, mock_pioneer, mock_config):
+        mock_pioneer.return_value = {"tiers": []}
+
+        test_args = ["limitlens", "--json", "--tool", "pioneer", "--no-record"]
+        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+            main()
+
+        mock_pioneer.assert_called_once()
+
     @patch("limitlens.waste_tracker.reset_snapshots")
     @patch("limitlens.cli.print_c")
     def test_reset_waste(self, mock_print, mock_reset):

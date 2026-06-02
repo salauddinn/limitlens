@@ -191,7 +191,7 @@ DEFAULT_CONFIG = {
         "days": [1, 7],
     },
     "pioneer": {
-        "enabled": True,
+        "enabled": False,
     },
     "agentrouter": {
         "enabled": False,
