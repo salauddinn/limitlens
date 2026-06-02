@@ -1,14 +1,41 @@
 {
+  "codex": {
+    "enabled": false
+  },
   "opencode": {
     "enabled": true,
     "db_path": "~/.local/share/opencode/opencode.db",
     "days": [1, 7],
-    "providers": []
+    "providers": [],
+    "ignored_models": [],
+    "model_parents": {
+      "openai/gpt-5.5": "Codex / codex-p1",
+      "anthropic/claude-opus-4-8": "Pioneer",
+      "google-vertex/*": "Vertex Free Trial"
+    },
+    "credit_limits": [
+      {
+        "name": "Vertex Free Trial",
+        "total": 28442.99,
+        "remaining": 27793.82,
+        "unit": "₹"
+      }
+    ]
   },
   "copilot_cli": {
     "enabled": true,
     "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
     "days": [1, 7]
+  },
+  "pioneer": {
+    "team_id": "your-team-id",
+    "team_name": "Your Team",
+    "payment_plan": "hobby",
+    "total_usage": 605.7127,
+    "credit_limit": 3000.0,
+    "free_tier_remaining": 2394.2873,
+    "used_today": 6.06,
+    "inferences_today": 78
   },
   "display": {
     "auto_hide_enabled": true,

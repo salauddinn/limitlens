@@ -25,6 +25,7 @@ from .providers import (
     get_amp_data, display_amp_text,
     get_antigravity_data, display_antigravity_text,
     get_opencode_data, display_opencode_text,
+    get_pioneer_data, display_pioneer_text,
 )
 from .providers.observed import display_at_glance
 
@@ -35,7 +36,7 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -61,6 +62,7 @@ def main():
         "amp": "Amp",
         "antigravity": "Antigravity",
         "opencode": "observed usage",
+        "pioneer": "Pioneer",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -77,8 +79,8 @@ def main():
     def collect_results():
         result = {}
         fetchers = {}
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            if args.tool in ("codex", "all"):
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            if args.tool in ("codex", "all") and config.get("codex", {}).get("enabled", True):
                 fetchers["codex"] = executor.submit(get_codex_data, args)
             if args.tool in ("amp", "all"):
                 fetchers["amp"] = executor.submit(get_amp_data, args)
@@ -86,6 +88,8 @@ def main():
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
             if args.tool in ("opencode", "all"):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
+            if args.tool in ("pioneer", "all"):
+                fetchers["pioneer"] = executor.submit(get_pioneer_data, args)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -190,7 +194,7 @@ def main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -199,6 +203,8 @@ def main():
             display_amp_text(result["amp"], args)
         if "antigravity" in result:
             display_antigravity_text(result["antigravity"], args)
+        if "pioneer" in result:
+            display_pioneer_text(result["pioneer"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
 

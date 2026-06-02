@@ -173,11 +173,16 @@ def should_show_detail(args):
 # ── Config ──────────────────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
+    "codex": {
+        "enabled": True,
+    },
     "opencode": {
         "enabled": True,
         "db_path": "~/.local/share/opencode/opencode.db",
         "days": [1, 7],
         "providers": [],
+        "ignored_models": [],
+        "model_parents": {},
     },
     "copilot_cli": {
         "enabled": True,

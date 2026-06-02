@@ -226,10 +226,39 @@ def _antigravity_candidates(ag_data, fmt_reset):
     return out
 
 
+def _pioneer_candidates(pioneer_data):
+    """One pooled candidate. metered/prepaid, CLI surface."""
+    if not pioneer_data or "error" in pioneer_data:
+        return []
+    tiers = pioneer_data.get("tiers") or []
+    if not tiers:
+        return []
+    total = sum(t.get("total", 0) for t in tiers)
+    left  = sum(t.get("remaining", 0) for t in tiers)
+    if total <= 0 or left <= 0.01:
+        return []
+    headroom = (left / total) * 100.0
+    note = f"{left:.2f} credits"
+    return [{
+        "tool": "pioneer",
+        "name": f"pioneer ({pioneer_data.get('email') or 'signed in'})",
+        "command": "pioneer",
+        "headroom_pct": headroom,
+        "reset_at": None,
+        "reset_label": None,
+        "quality": "premium",
+        "cost_class": "metered",
+        "surface": "cli",
+        "stale": False,
+        "note": note,
+    }]
+
+
 def _all_candidates(result, parse_to_utc, fmt_reset):
     cands = []
     cands += _codex_candidates(result.get("codex"))
     cands += _amp_candidates(result.get("amp"))
+    cands += _pioneer_candidates(result.get("pioneer"))
     cands += _antigravity_candidates(result.get("antigravity"), fmt_reset)
     for c in cands:
         hrs = _hours_until_reset(c["reset_at"], parse_to_utc)

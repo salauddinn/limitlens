@@ -82,15 +82,136 @@ def token_total_value(tokens):
 def usage_summary_rows(by_key):
     rows = []
     for (provider, model), totals in by_key.items():
-        rows.append({
+        row = {
             "provider": provider,
             "model": model,
             "requests": totals["requests"],
             "cost": totals["cost"],
             "tokens": totals["tokens"],
-        })
+        }
+        if totals.get("parent"):
+            row["parent"] = totals["parent"]
+        rows.append(row)
     rows.sort(key=lambda r: (-r["tokens"].get("total", 0), r["provider"], r["model"]))
     return rows
+
+def float_value(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def first_present(mapping, keys):
+    for key in keys:
+        if key in mapping and mapping.get(key) is not None:
+            return mapping.get(key)
+    return None
+
+def normalize_credit_limit(raw, fallback_name="credits", default_unit="credits"):
+    if not isinstance(raw, dict):
+        return None
+
+    name = str(raw.get("name") or raw.get("label") or raw.get("tier") or fallback_name)
+    unit = str(raw.get("unit") or raw.get("currency") or default_unit or "credits")
+    raw_total = first_present(raw, ("credits_total", "total", "limit"))
+    raw_remaining = first_present(raw, ("credits_remaining", "remaining", "left"))
+    raw_used = first_present(raw, ("credits_used", "used", "spent"))
+    total = float_value(raw_total, 0.0)
+    remaining = float_value(raw_remaining, 0.0)
+    used = float_value(raw_used, 0.0)
+
+    if total <= 0 and remaining > 0 and used > 0:
+        total = remaining + used
+    elif total <= 0 and remaining > 0:
+        total = remaining
+    elif total > 0 and raw_remaining is None and raw_used is None:
+        remaining = total
+    elif total > 0 and raw_remaining is None and used > 0:
+        remaining = max(0.0, total - used)
+    elif total > 0 and raw_used is None and raw_remaining is not None:
+        used = max(0.0, total - remaining)
+
+    if total <= 0 and remaining <= 0 and used <= 0:
+        return None
+
+    pct_left = (remaining / total * 100) if total > 0 else 0.0
+    return {
+        "name": name,
+        "unit": unit,
+        "total": total,
+        "remaining": remaining,
+        "used": used,
+        "pct_left": pct_left,
+    }
+
+def get_opencode_credit_limits(cfg):
+    default_unit = cfg.get("credit_unit") or cfg.get("unit") or "credits"
+    raw_limits = first_present(cfg, ("credit_limits", "credits", "limits", "tiers"))
+    limits = []
+
+    if isinstance(raw_limits, list):
+        for idx, raw in enumerate(raw_limits, start=1):
+            item = normalize_credit_limit(raw, fallback_name=f"credits {idx}", default_unit=default_unit)
+            if item:
+                limits.append(item)
+    elif isinstance(raw_limits, dict):
+        value_keys = {"credits_total", "total", "limit", "credits_remaining", "remaining", "left", "credits_used", "used", "spent"}
+        if any(key in raw_limits for key in value_keys):
+            item = normalize_credit_limit(raw_limits, default_unit=default_unit)
+            if item:
+                limits.append(item)
+        else:
+            for name, raw in raw_limits.items():
+                if isinstance(raw, dict):
+                    payload = dict(raw)
+                    payload.setdefault("name", name)
+                else:
+                    payload = {"name": name, "remaining": raw}
+                item = normalize_credit_limit(payload, fallback_name=name, default_unit=default_unit)
+                if item:
+                    limits.append(item)
+
+    if not limits and any(key in cfg for key in ("credits_total", "credits_remaining", "credits_used")):
+        item = normalize_credit_limit(cfg, default_unit=default_unit)
+        if item:
+            limits.append(item)
+
+    limits.sort(key=lambda item: (item["pct_left"], item["name"]))
+    return limits
+
+def model_is_ignored(provider, model, ignored_models):
+    if isinstance(ignored_models, str):
+        ignored_models = [ignored_models]
+    elif not isinstance(ignored_models, list):
+        return False
+
+    provider_model = f"{provider}/{model}".lower()
+    model = str(model).lower()
+    for ignored in ignored_models:
+        value = str(ignored).strip().lower()
+        if not value:
+            continue
+        if value == provider_model or value == model:
+            return True
+    return False
+
+def model_parent_label(provider, model, parents):
+    if not isinstance(parents, dict):
+        return None
+
+    provider = str(provider)
+    model = str(model)
+    candidates = (
+        f"{provider}/{model}".lower(),
+        f"{provider}/*".lower(),
+        model.lower(),
+    )
+    normalized = {str(key).strip().lower(): value for key, value in parents.items()}
+    for key in candidates:
+        value = normalized.get(key)
+        if value:
+            return str(value)
+    return None
 
 def get_opencode_usage(config):
     cfg = config.get("opencode", {})
@@ -101,6 +222,8 @@ def get_opencode_usage(config):
         return {"error": f"OpenCode DB not found: {redact_path(db_path)}"}
 
     providers = set(cfg.get("providers") or [])
+    ignored_models = cfg.get("ignored_models") or []
+    model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
     days_list = configured_days(cfg)
     windows = {
         str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
@@ -136,6 +259,8 @@ def get_opencode_usage(config):
         if providers and provider not in providers:
             continue
         model = data.get("modelID") or "unknown"
+        if model_is_ignored(provider, model, ignored_models):
+            continue
         tokens = data.get("tokens") or {}
         if token_total_value(tokens) <= 0 and not data.get("cost"):
             continue
@@ -151,10 +276,14 @@ def get_opencode_usage(config):
                 continue
             key = (provider, model)
             totals = win["by_key"].setdefault(key, empty_usage_totals())
+            parent = model_parent_label(provider, model, model_parents)
+            if parent:
+                totals["parent"] = parent
             add_usage(totals, cost=data.get("cost"), tokens=tokens)
 
     return {
         "db_path": redact_path(db_path),
+        "credit_limits": get_opencode_credit_limits(cfg),
         "windows": [
             {
                 "days": win["days"],
@@ -307,11 +436,13 @@ def display_usage_rows(rows, args):
             toks = row.get("tokens") or {}
             cost = row.get("cost", 0.0)
             cost_text = f"  ${cost:.2f}" if cost else ""
+            parent_text = f"  parent: {row['parent']}" if row.get("parent") else ""
             print(
                 f"        {row['model']:<30} "
                 f"{_fmt_tokens(toks.get('total', 0)):>7} tokens  "
                 f"{row['requests']:>4} req"
                 f"{cost_text}"
+                f"{parent_text}"
             )
 
     hidden = len(rows) - shown
@@ -326,6 +457,7 @@ def display_usage_rows_detailed(rows, args):
         toks = row.get("tokens") or {}
         cost = row.get("cost", 0.0)
         cost_text = f"  ${cost:.4f}" if cost else ""
+        parent_text = f"  parent: {row['parent']}" if row.get("parent") else ""
         print(
             f"      {row['provider']}/{row['model']:<28} "
             f"{row['requests']:>4} req  "
@@ -333,7 +465,40 @@ def display_usage_rows_detailed(rows, args):
             f"in {_fmt_tokens(toks.get('input', 0))}  "
             f"out {_fmt_tokens(toks.get('output', 0))}"
             f"{cost_text}"
+            f"{parent_text}"
         )
+
+def format_credit_amount(value, unit):
+    normalized = (unit or "credits").lower()
+    if normalized in ("$", "usd", "dollars"):
+        return f"${value:.2f}"
+    if normalized in ("₹", "inr", "rupees"):
+        return f"₹{value:.2f}"
+    suffix = "" if normalized in ("", "none") else f" {unit}"
+    return f"{value:.2f}{suffix}"
+
+def format_credit_pair(remaining, total, unit):
+    normalized = (unit or "credits").lower()
+    if normalized in ("$", "usd", "dollars"):
+        return f"${remaining:.2f}/${total:.2f}"
+    if normalized in ("₹", "inr", "rupees"):
+        return f"₹{remaining:.2f}/₹{total:.2f}"
+    suffix = "" if normalized in ("", "none") else f" {unit}"
+    return f"{remaining:.2f}/{total:.2f}{suffix}"
+
+def display_credit_limits(limits, args):
+    if not limits:
+        return
+    print_c("    credits", "\033[90m", args.no_color)
+    for limit in limits:
+        unit = limit.get("unit") or "credits"
+        remaining = float_value(limit.get("remaining"), 0.0)
+        total = float_value(limit.get("total"), 0.0)
+        used = float_value(limit.get("used"), 0.0)
+        pct_left = float_value(limit.get("pct_left"), 0.0)
+        pair = format_credit_pair(remaining, total, unit)
+        used_text = format_credit_amount(used, unit)
+        print(f"      {limit['name']:<18} {pct_left:5.1f}% left  {pair}  used {used_text}")
 
 def display_usage_source(name, data, args):
     if data.get("disabled"):
@@ -347,11 +512,13 @@ def display_usage_source(name, data, args):
             print_c(f"    {data['hint']}", "\033[90m", args.no_color)
         return
     windows = data.get("windows", [])
+    credit_limits = data.get("credit_limits") or []
     has_any_data = any(win.get("models") for win in windows)
-    if not has_any_data and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+    if not has_any_data and not credit_limits and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
         return
-        
+
     print(f"\n  {name}")
+    display_credit_limits(credit_limits, args)
     for win in windows:
         models = win.get("models") or []
         if not models and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
@@ -371,7 +538,7 @@ def display_opencode_text(data, args):
     co = data.get("copilot_cli") or {}
     
     if not (getattr(args, "verbose", False) or getattr(args, "all", False)):
-        op_has_data = any(w.get("models") for w in op.get("windows", [])) or "error" in op
+        op_has_data = any(w.get("models") for w in op.get("windows", [])) or op.get("credit_limits") or "error" in op
         co_has_data = any(w.get("models") for w in co.get("windows", [])) or ("error" in co and not getattr(args, "verbose", False)) # copilot-cli error is hidden if not verbose
         
         if not op_has_data and not co_has_data:

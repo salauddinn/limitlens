@@ -6,7 +6,7 @@
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
 
-A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, and **Antigravity**.
+A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Antigravity**, and **Pioneer**.
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
 
@@ -58,6 +58,7 @@ alias limitlens="python3 /path/to/limitlens/limitlens.py"
 ```sh
 limitlens            # full status across all tools
 limitlens --tool opencode
+limitlens --tool pioneer
 limitlens --verbose  # show full usage rows and low-level warnings
 limitlens --help     # flags (e.g. --no-color, tool filters)
 ```
@@ -103,15 +104,57 @@ The core engine and configuration are completely platform-agnostic, but individu
 | **Amp** | macOS, Linux | Executes the local `amp` binary to fetch quota |
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux systems |
 | **OpenCode** | macOS, Linux, Windows | Reads from the local OpenCode SQLite database |
+| **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
 
 ### Observed Usage Logging
 
 OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model.
 
+If an OpenCode model is the same underlying quota as another tool, either exclude it from the OpenCode usage rollup with `ignored_models`, or keep it visible and label its parent quota with `model_parents`:
+
+```json
+{
+  "opencode": {
+    "ignored_models": [],
+    "model_parents": {
+      "openai/gpt-5.5": "Codex / codex-p1",
+      "anthropic/claude-opus-4-8": "Pioneer",
+      "google-vertex/*": "Vertex Free Trial"
+    }
+  }
+}
+```
+
+To show manually tracked OpenCode credit balances alongside observed usage, add `credit_limits` under the `opencode` config:
+
+```json
+{
+  "opencode": {
+    "credit_limits": [
+      { "name": "Vertex Free Trial", "total": 28442.99, "remaining": 27793.82, "unit": "₹" }
+    ]
+  }
+}
+```
+
+You can provide `remaining`, `used`, or both. If `total` and `remaining` are set, LimitLens computes the used amount automatically.
+
 For Copilot CLI usage, launch Copilot with:
 ```sh
 COPILOT_OTEL_FILE_EXPORTER_PATH=~/.cache/limitlens/copilot-otel.jsonl copilot
 ```
+
+For Pioneer, set `PIONEER_API_TOKEN` in your environment. If your account uses a team billing endpoint, add the team id to your config and LimitLens will call `/billing/team/{team_id}/full-status`:
+
+```json
+{
+  "pioneer": {
+    "team_id": "your-team-id"
+  }
+}
+```
+
+The Pioneer `full-status` response reports usage in cents-like units, so LimitLens displays `credit_limit: 3000.0` as `$30.00`.
 
 ## Testing
 
