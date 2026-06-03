@@ -92,15 +92,15 @@ def main():
         result = {}
         fetchers = {}
         with ThreadPoolExecutor(max_workers=6) as executor:
-            if args.tool in ("codex", "all") and config.get("codex", {}).get("enabled", True):
+            if args.tool == "codex" or (args.tool == "all" and config.get("codex", {}).get("enabled", True)):
                 fetchers["codex"] = executor.submit(get_codex_data, args, config)
-            if args.tool in ("amp", "all"):
+            if args.tool == "amp" or (args.tool == "all" and config.get("amp", {}).get("enabled", True)):
                 fetchers["amp"] = executor.submit(get_amp_data, args)
-            if args.tool in ("antigravity", "all"):
+            if args.tool == "antigravity" or (args.tool == "all" and config.get("antigravity", {}).get("enabled", True)):
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
-            if args.tool in ("opencode", "all"):
+            if args.tool == "opencode" or (args.tool == "all" and config.get("opencode", {}).get("enabled", True)):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-            if args.tool == "pi":
+            if args.tool == "pi" or (args.tool == "all" and config.get("pi", {}).get("enabled", False)):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and config.get("pioneer", {}).get("enabled", False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)

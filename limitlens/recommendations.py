@@ -162,7 +162,7 @@ def _amp_candidates(amp_data):
     tiers = amp_data.get("tiers") or []
     if not tiers:
         return []
-    total = sum(t.get("total", 0) for t in tiers)
+    total = sum((t.get("total") or 0) for t in tiers)
     left  = sum(t.get("remaining", 0) for t in tiers)
     if total <= 0 or left <= 0.01:
         return []
@@ -265,8 +265,8 @@ def _agentrouter_candidates(agentrouter_data):
     tiers = agentrouter_data.get("tiers") or []
     if not tiers:
         return []
-    total = sum(t.get("total", 0) for t in tiers)
-    left = sum(t.get("remaining", 0) for t in tiers)
+    total = sum((t.get("total") or 0) for t in tiers)
+    left = sum((t.get("remaining") or 0) for t in tiers)
     if total <= 0 or left <= 0.5:
         return []
     headroom = (left / total) * 100.0
