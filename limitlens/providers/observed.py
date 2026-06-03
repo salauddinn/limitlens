@@ -326,11 +326,14 @@ def parse_otel_timestamp(value):
         return None
     if isinstance(value, (int, float)):
         number = float(value)
-        if number > 1e18:
-            return datetime.fromtimestamp(number / 1e9, timezone.utc)
-        if number > 1e12:
-            return datetime.fromtimestamp(number / 1000, timezone.utc)
-        return datetime.fromtimestamp(number, timezone.utc)
+        try:
+            if number > 1e18:
+                return datetime.fromtimestamp(number / 1e9, timezone.utc)
+            if number > 1e12:
+                return datetime.fromtimestamp(number / 1000, timezone.utc)
+            return datetime.fromtimestamp(number, timezone.utc)
+        except (OSError, ValueError, OverflowError):
+            return None
     if isinstance(value, str):
         try:
             if value.isdigit():
@@ -422,6 +425,7 @@ def pi_usage_tokens(usage):
         "total": usage.get("totalTokens") or usage.get("total") or 0,
         "input": usage.get("input") or 0,
         "output": usage.get("output") or 0,
+        "reasoning": usage.get("reasoningTokens") or usage.get("reasoning") or 0,
         "cache_read": usage.get("cacheRead") or usage.get("cache_read") or 0,
         "cache_write": usage.get("cacheWrite") or usage.get("cache_write") or 0,
     }

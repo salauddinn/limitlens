@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import asyncio
+import glob
 import iterm2
 import json
+import os
+import subprocess
 
 async def main(connection):
     print("Starting LimitLens registration v4...")
@@ -14,9 +17,6 @@ async def main(connection):
         update_cadence=900.0,
         identifier="com.limitlens.status"
     )
-
-    import subprocess
-    import os
 
     # ==============================================================================
     # CONFIGURATION
@@ -33,9 +33,23 @@ async def main(connection):
     if "Scripts" in LIMITLENS_DIR or "iterm2" in LIMITLENS_DIR.lower():
         LIMITLENS_DIR = os.path.expanduser(USER_LIMITLENS_DIR)
 
+    def _find_venv_python(venv_dir):
+        """Find any python3.x binary in the venv, regardless of patch version."""
+        bin_dir = os.path.join(venv_dir, "bin")
+        # Try exact 'python3' symlink first (most venvs create this)
+        candidate = os.path.join(bin_dir, "python3")
+        if os.path.exists(candidate):
+            return candidate
+        # Fall back to any versioned python3.x binary
+        matches = sorted(glob.glob(os.path.join(bin_dir, "python3.*")))
+        if matches:
+            return matches[-1]  # pick the highest version
+        return None
+
     # Detect python path — prefer the venv python, then homebrew, then system
-    if os.path.exists(os.path.join(LIMITLENS_DIR, ".venv", "bin", "python3")):
-        PYTHON_BIN = os.path.join(LIMITLENS_DIR, ".venv", "bin", "python3")
+    venv_python = _find_venv_python(os.path.join(LIMITLENS_DIR, ".venv"))
+    if venv_python:
+        PYTHON_BIN = venv_python
     elif os.path.exists("/opt/homebrew/bin/python3"):
         PYTHON_BIN = "/opt/homebrew/bin/python3"
     elif os.path.exists("/usr/local/bin/python3"):
