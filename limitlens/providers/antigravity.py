@@ -78,7 +78,7 @@ def collect_listening_ports(pids, sys_name):
                     process_errors.append(f"ss failed for pid {pid}: {ss_result.stderr.strip()}")
                     continue
                 for line in ss_result.stdout.splitlines():
-                    if f"pid={pid}," in line or f",{pid}," in line:
+                    if re.search(rf"\bpid={pid}\b", line):
                         match = re.search(r":(\d+)\s+", line)
                         if match:
                             ports.add(int(match.group(1)))
@@ -91,11 +91,11 @@ def collect_listening_ports(pids, sys_name):
                     ["lsof", "-a", "-iTCP", "-sTCP:LISTEN", "-P", "-n", "-p", str(pid)],
                     capture_output=True, text=True, timeout=10, errors="replace",
                 )
-                if lsof_result.returncode != 0 and lsof_result.stderr.strip():
+                if lsof_result.returncode != 0:
                     process_errors.append(f"lsof failed for pid {pid}: {lsof_result.stderr.strip()}")
                     continue
                 for line in lsof_result.stdout.splitlines():
-                    port_match = re.search(r":(\d+)\s", line)
+                    port_match = re.search(r":(\d+)\s+\(LISTEN\)", line)
                     if port_match:
                         ports.add(int(port_match.group(1)))
             except (subprocess.SubprocessError, OSError) as e:
@@ -326,7 +326,7 @@ def get_config_dir_for_pid(pid, sys_name):
 
 def get_profile_name_from_config_dir(config_dir):
     default_dir = os.path.expanduser("~/.gemini/antigravity-cli")
-    if os.path.abspath(config_dir) == os.path.abspath(default_dir):
+    if os.path.realpath(config_dir) == os.path.realpath(default_dir):
         return "agy-cli"
     parent = os.path.dirname(os.path.dirname(config_dir))
     name = os.path.basename(parent)
@@ -602,15 +602,20 @@ def save_antigravity_cache(cache):
     path = antigravity_cache_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(cache, f, indent=2)
-    os.replace(tmp_path, path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
 def try_save_antigravity_cache(cache):
     try:
         save_antigravity_cache(cache)
         return None
-    except OSError as e:
+    except Exception as e:
         return f"failed to save antigravity cache: {e}"
 
 def cache_antigravity_profile(cache, profile_name, models, config_dir=None):
@@ -664,10 +669,7 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         else:
             cached_config_dir = cache.get("profiles", {}).get(profile, {}).get("config_dir")
             if not cached_config_dir:
-                if profile == "agy-cli":
-                    cached_config_dir = os.path.expanduser("~/.gemini/antigravity-cli")
-                else:
-                    cached_config_dir = os.path.expanduser(f"~/{profile}/.gemini/antigravity-cli")
+                cached_config_dir = os.path.expanduser("~/.gemini/antigravity-cli")
             csrf_token = None
             ports = []
             if os.path.exists(os.path.join(cached_config_dir, "settings.json")):
@@ -709,7 +711,8 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
     if model_err == "not_signed_in":
         prof_data["status"] = "running"
         prof_data["error"] = "not signed in"
-        return prof_data, False
+        prof_data["models"] = []
+        return prof_data, True
     if model_err:
         prof_data["status"] = "running"
         prof_data["error"] = model_err
@@ -872,6 +875,10 @@ def display_antigravity_text(data, args):
             visible_profiles.append((prof, visible_models))
 
     if not visible_profiles and not show_detail:
+        has_stale = any(p.get("status") == "stale" for p in data.get("profiles", []))
+        if has_stale:
+            section("Antigravity", args)
+            print_c("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", args.no_color)
         return
 
     section("Antigravity", args)
