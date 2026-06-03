@@ -34,19 +34,21 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 
 ## 🚀 Installation
 
-### Option 1: pip install (Recommended)
-Install globally into your environment to access the `limitlens` command instantly:
-```sh
-python -m pip install git+https://github.com/salauddinn/limitlens.git
-```
+### Option 1: pipx install (Recommended)
+Modern systems (like macOS with Homebrew or recent Linux distributions) block global `pip` installs to protect system stability (PEP-668). The best way to install LimitLens globally is using `pipx`.
 
-### Option 2: Clone and Alias
-```sh
-git clone https://github.com/salauddinn/limitlens.git
-cd limitlens
-# Add this to your ~/.zshrc or ~/.bashrc:
-alias limitlens="python3 $(pwd)/limitlens.py"
-```
+1. Install `pipx` if you haven't already (e.g., `brew install pipx` or `apt install pipx`).
+2. Install LimitLens globally:
+   * **For macOS (includes menubar app):**
+     ```sh
+     pipx install "git+https://github.com/salauddinn/limitlens.git[mac]"
+     ```
+   * **For Linux / Windows:**
+     ```sh
+     pipx install "git+https://github.com/salauddinn/limitlens.git"
+     ```
+
+
 
 ---
 
@@ -87,11 +89,11 @@ limitlens --waste    # Show waste report (% of quota wasted over 7 days)
 ## 🍎 macOS Menubar App
 
 LimitLens includes a native menubar app so you don't even have to open a terminal to check your limits.
-1. Install dependencies: `pip install rumps`
-2. Run the menubar app:
-   ```sh
-   python3 limitlens/menubar.py
-   ```
+
+If you installed via `pipx install ...[mac]` (recommended), the `rumps` dependency is already included. Simply run:
+```sh
+limitlens-menubar
+```
 It will add a bulb icon to your tray and notify you if your preferred AI quotas run critically low.
 
 ---
@@ -102,10 +104,10 @@ Bring real-time quota visibility to your terminal window.
 
 1. Open **iTerm2**.
 2. Go to **Scripts > Manage > New Python Script**.
-3. Choose **Basic** -> **Long-Running Daemon** and name it `iterm_widget.py`.
+3. Choose **Basic** → **Long-Running Daemon** and name it `iterm_widget.py`.
 4. Copy the contents of `iterm_widget.py` from this repository into the new file.
-5. Edit the `USER_LIMITLENS_DIR` variable inside to point to your clone.
-6. Enable it via **iTerm2 Preferences > Profiles > Session > Configure Status Bar**.
+5. If `limitlens` is on your PATH (installed via `pipx`), the `USER_LIMITLENS_DIR` variable can be left empty — the widget auto-detects it. Otherwise set it to your clone path.
+6. Enable it via **iTerm2 Preferences → Profiles → Session → Configure Status Bar**.
 
 ---
 
@@ -143,9 +145,13 @@ Create a config file at `~/.config/limitlens/config.json`:
 
 ## 🤝 Contributing & Support
 
-We welcome contributions! To test locally:
+We welcome contributions! To test locally, use the project's virtual environment:
 ```sh
-python -m pip install -e ".[dev]"
+git clone https://github.com/salauddinn/limitlens.git
+cd limitlens
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev,mac]"
 python -m pytest tests/
 ```
 

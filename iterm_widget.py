@@ -88,6 +88,11 @@ async def main(connection):
     def fetch_status_sync():
         import shutil
         limitlens_bin = shutil.which("limitlens")
+        
+        # Fallback for pipx installs when iTerm GUI doesn't inherit shell PATH
+        if not limitlens_bin and os.path.exists(os.path.expanduser("~/.local/bin/limitlens")):
+            limitlens_bin = os.path.expanduser("~/.local/bin/limitlens")
+            
         if limitlens_bin:
             cmd = [limitlens_bin, "--json"]
             return subprocess.run(cmd, capture_output=True, text=True)
