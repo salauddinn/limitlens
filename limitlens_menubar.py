@@ -178,6 +178,18 @@ class LimitLensApp(rumps.App):
                             menu_items.append(f"{label}: {pct:.1f}% left")
                             check_low_quota(f"pioneer-{label}", label, pct)
 
+                    # Cursor
+                    cursor = data.get("cursor") or {}
+                    for tier in cursor.get("tiers", []):
+                        label = tier.get("label", "Cursor")
+                        pct = tier.get("pct_left")
+                        used = tier.get("used", 0)
+                        if pct is not None:
+                            menu_items.append(f"Cursor ({label}): {pct:.1f}% left")
+                            check_low_quota(f"cursor-{label}", f"Cursor {label}", pct)
+                        else:
+                            menu_items.append(f"Cursor ({label}): {int(used)} used (Unlimited)")
+
                     # Clean up tracked tools that have disappeared
                     self._notified_set.intersection_update(active_keys)
 

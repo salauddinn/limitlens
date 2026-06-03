@@ -14,6 +14,7 @@ from .pioneer import get_pioneer_data, display_pioneer_text
 from .agentrouter import get_agentrouter_data, display_agentrouter_text
 from .commandcode import get_commandcode_data, display_commandcode_text
 from .custom import get_custom_data, display_custom_text
+from .cursor import get_cursor_data, display_cursor_text
 
 PROVIDERS = {
     "codex":       (get_codex_data, display_codex_text),
@@ -25,6 +26,7 @@ PROVIDERS = {
     "agentrouter": (get_agentrouter_data, display_agentrouter_text),
     "commandcode": (get_commandcode_data, display_commandcode_text),
     "custom":      (get_custom_data, display_custom_text),
+    "cursor":      (get_cursor_data, display_cursor_text),
 }
 
 __all__ = [
@@ -37,4 +39,5 @@ __all__ = [
     "get_agentrouter_data", "display_agentrouter_text",
     "get_commandcode_data", "display_commandcode_text",
     "get_custom_data", "display_custom_text",
+    "get_cursor_data", "display_cursor_text",
 ]

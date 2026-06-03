@@ -30,6 +30,7 @@ from .providers import (
     get_agentrouter_data, display_agentrouter_text,
     get_commandcode_data, display_commandcode_text,
     get_custom_data, display_custom_text,
+    get_cursor_data, display_cursor_text,
 )
 from .providers.observed import display_at_glance
 
@@ -40,7 +41,7 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "pioneer", "agentrouter", "commandcode", "custom", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -70,6 +71,7 @@ def main():
         "agentrouter": "AgentRouter",
         "commandcode": "Command Code",
         "custom": "custom tool",
+        "cursor": "Cursor",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -108,6 +110,8 @@ def main():
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
             if args.tool == "custom" or (args.tool == "all" and config.get("custom_tools", {}).get("enabled", False)):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
+            if args.tool == "cursor" or (args.tool == "all" and config.get("cursor", {}).get("enabled", True)):
+                fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -231,7 +235,7 @@ def main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "commandcode", "custom")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -248,6 +252,8 @@ def main():
             display_commandcode_text(result["commandcode"], args)
         if "custom" in result:
             display_custom_text(result["custom"], args)
+        if "cursor" in result:
+            display_cursor_text(result["cursor"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
         if "pi" in result:
