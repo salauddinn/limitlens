@@ -11,7 +11,7 @@ import io
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 
-from limitlens.providers.observed import get_opencode_usage, display_opencode_text
+from limitlens.providers.observed import get_opencode_usage, get_pi_usage, display_opencode_text
 
 
 class TestOpenCodeUsage(unittest.TestCase):
@@ -169,6 +169,82 @@ class TestOpenCodeUsage(unittest.TestCase):
         finally:
             os.unlink(db_path)
 
+    def test_get_pi_usage_from_local_sessions(self):
+        with tempfile.TemporaryDirectory() as sessions_dir:
+            session_path = os.path.join(sessions_dir, "project", "session.jsonl")
+            os.makedirs(os.path.dirname(session_path))
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            records = [
+                {"type": "session", "version": 3, "id": "s1", "timestamp": datetime.now(timezone.utc).isoformat()},
+                {
+                    "type": "message",
+                    "id": "a1",
+                    "parentId": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "message": {
+                        "role": "assistant",
+                        "provider": "openai-codex",
+                        "model": "gpt-5.5",
+                        "timestamp": now_ms,
+                        "usage": {
+                            "input": 100,
+                            "output": 50,
+                            "cacheRead": 25,
+                            "cacheWrite": 5,
+                            "totalTokens": 180,
+                            "cost": {"total": 0.12},
+                        },
+                    },
+                },
+            ]
+            with open(session_path, "w", encoding="utf-8") as f:
+                for rec in records:
+                    f.write(json.dumps(rec) + "\n")
+
+            result = get_pi_usage({"pi": {"enabled": True, "sessions_dir": sessions_dir, "days": [1]}})
+
+            models = result["windows"][0]["models"]
+            self.assertEqual(len(models), 1)
+            self.assertEqual(models[0]["provider"], "openai-codex")
+            self.assertEqual(models[0]["model"], "gpt-5.5")
+            self.assertEqual(models[0]["requests"], 1)
+            self.assertEqual(models[0]["tokens"]["total"], 180)
+            self.assertEqual(models[0]["tokens"]["cache_read"], 25)
+            self.assertAlmostEqual(models[0]["cost"], 0.12)
+
+    def test_pi_ignored_models_exclude_duplicate_usage(self):
+        with tempfile.TemporaryDirectory() as sessions_dir:
+            session_path = os.path.join(sessions_dir, "session.jsonl")
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            with open(session_path, "w", encoding="utf-8") as f:
+                for provider, model in (("openai-codex", "gpt-5.5"), ("google-vertex", "gemini-test")):
+                    f.write(json.dumps({
+                        "type": "message",
+                        "id": model,
+                        "parentId": None,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "message": {
+                            "role": "assistant",
+                            "provider": provider,
+                            "model": model,
+                            "timestamp": now_ms,
+                            "usage": {"totalTokens": 100},
+                        },
+                    }) + "\n")
+
+            result = get_pi_usage({
+                "pi": {
+                    "enabled": True,
+                    "sessions_dir": sessions_dir,
+                    "days": [1],
+                    "ignored_models": ["openai-codex/gpt-5.5"],
+                }
+            })
+
+            models = result["windows"][0]["models"]
+            self.assertEqual(len(models), 1)
+            self.assertEqual(models[0]["provider"], "google-vertex")
+
     def test_display_opencode_in_all_view_when_data_exists(self):
         data = {
             "opencode": {
@@ -225,6 +301,54 @@ class TestOpenCodeUsage(unittest.TestCase):
         self.assertIn("monthly", output)
         self.assertIn("60.0% left", output)
         self.assertIn("used 40.00 credits", output)
+
+    def test_display_pi_error_for_direct_tool(self):
+        data = {
+            "opencode": {"windows": []},
+            "pi": {"error": "Pi sessions dir not found: ~/.pi/agent/sessions"},
+            "copilot_cli": {"disabled": True},
+        }
+        args = argparse.Namespace(tool="pi", verbose=False, all=False, no_color=True)
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            display_opencode_text(data, args)
+
+        output = buf.getvalue()
+        self.assertIn("pi", output)
+        self.assertIn("Pi sessions dir not found", output)
+
+    def test_display_pi_usage(self):
+        data = {
+            "opencode": {"windows": []},
+            "pi": {
+                "windows": [
+                    {
+                        "days": 1,
+                        "models": [
+                            {
+                                "provider": "openai-codex",
+                                "model": "gpt-5.5",
+                                "requests": 2,
+                                "cost": 0.5,
+                                "tokens": {"total": 1234},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "copilot_cli": {"disabled": True},
+        }
+        args = argparse.Namespace(tool="opencode", verbose=False, all=False, no_color=True)
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            display_opencode_text(data, args)
+
+        output = buf.getvalue()
+        self.assertIn("pi", output)
+        self.assertIn("gpt-5.5", output)
+        self.assertIn("1.2K tokens", output)
 
     def test_display_parent_and_inr_credit_limits(self):
         data = {

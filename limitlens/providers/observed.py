@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from limitlens.core import (
     redact_path,
@@ -408,11 +409,116 @@ def get_copilot_cli_usage(config):
         ],
     }
 
+def pi_usage_cost(usage):
+    cost = usage.get("cost") if isinstance(usage, dict) else None
+    if isinstance(cost, dict):
+        return cost.get("total") or 0
+    return cost or 0
+
+def pi_usage_tokens(usage):
+    if not isinstance(usage, dict):
+        return {}
+    return {
+        "total": usage.get("totalTokens") or usage.get("total") or 0,
+        "input": usage.get("input") or 0,
+        "output": usage.get("output") or 0,
+        "cache_read": usage.get("cacheRead") or usage.get("cache_read") or 0,
+        "cache_write": usage.get("cacheWrite") or usage.get("cache_write") or 0,
+    }
+
+def get_pi_usage(config):
+    cfg = config.get("pi", {})
+    if not cfg.get("enabled", True):
+        return {"disabled": True}
+    sessions_dir = os.path.expanduser(cfg.get("sessions_dir") or "~/.pi/agent/sessions")
+    root = Path(sessions_dir)
+    if not root.exists():
+        return {"error": f"Pi sessions dir not found: {redact_path(sessions_dir)}"}
+
+    providers = set(cfg.get("providers") or [])
+    ignored_models = cfg.get("ignored_models") or []
+    model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
+    days_list = configured_days(cfg)
+    windows = {
+        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        for days in days_list
+    }
+    min_since_ts = min(win["since"].timestamp() for win in windows.values())
+
+    files = []
+    try:
+        for path in root.rglob("*.jsonl"):
+            try:
+                if path.stat().st_mtime >= min_since_ts:
+                    files.append(path)
+            except OSError:
+                continue
+    except OSError as e:
+        return {"error": f"Pi sessions read error: {e}"}
+
+    for path in files:
+        try:
+            f = path.open(encoding="utf-8")
+        except OSError:
+            continue
+        with f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("type") != "message":
+                    continue
+                msg = rec.get("message") or {}
+                if msg.get("role") != "assistant":
+                    continue
+                usage = msg.get("usage") or {}
+                tokens = pi_usage_tokens(usage)
+                if token_total_value(tokens) <= 0 and not pi_usage_cost(usage):
+                    continue
+                ts = parse_otel_timestamp(msg.get("timestamp")) or parse_otel_timestamp(rec.get("timestamp"))
+                if ts is None:
+                    continue
+                provider = msg.get("provider") or msg.get("api") or "unknown"
+                if providers and provider not in providers:
+                    continue
+                model = msg.get("model") or "unknown"
+                if model_is_ignored(provider, model, ignored_models):
+                    continue
+                for win in windows.values():
+                    if ts < win["since"]:
+                        continue
+                    key = (provider, model)
+                    totals = win["by_key"].setdefault(key, empty_usage_totals())
+                    parent = model_parent_label(provider, model, model_parents)
+                    if parent:
+                        totals["parent"] = parent
+                    add_usage(totals, cost=pi_usage_cost(usage), tokens=tokens)
+
+    return {
+        "sessions_dir": redact_path(sessions_dir),
+        "windows": [
+            {
+                "days": win["days"],
+                "since": win["since"].isoformat(),
+                "models": usage_summary_rows(win["by_key"]),
+            }
+            for win in windows.values()
+        ],
+    }
+
 def get_opencode_data(args, config):
     return {
         "opencode": get_opencode_usage(config),
+        "pi": get_pi_usage(config),
         "copilot_cli": get_copilot_cli_usage(config),
     }
+
+def get_pi_data(args, config):
+    return get_pi_usage(config)
+
+def display_pi_text(data, args):
+    display_opencode_text({"pi": data}, args)
 
 def display_usage_rows(rows, args):
     if not rows:
@@ -504,7 +610,8 @@ def display_usage_source(name, data, args):
     if data.get("disabled"):
         return
     if "error" in data:
-        if name == "copilot-cli" and not getattr(args, "verbose", False):
+        hide_optional_error = name == "copilot-cli" or (name == "pi" and getattr(args, "tool", None) != "pi")
+        if hide_optional_error and not getattr(args, "verbose", False):
             return
         print(f"\n  {name}")
         print_c(f"    not configured: {data['error']}", "\033[90m", args.no_color)
@@ -519,7 +626,8 @@ def display_usage_source(name, data, args):
 
     print(f"\n  {name}")
     display_credit_limits(credit_limits, args)
-    for win in windows:
+    shown_windows = windows if (getattr(args, "verbose", False) or getattr(args, "all", False)) else windows[:1]
+    for win in shown_windows:
         models = win.get("models") or []
         if not models and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
             continue
@@ -531,22 +639,28 @@ def display_usage_source(name, data, args):
             display_usage_rows(models, args)
 
 def display_opencode_text(data, args):
-    if args.tool not in ("opencode", "all"):
+    if args.tool not in ("opencode", "pi", "all"):
         return
         
     op = data.get("opencode") or {}
+    pi = data.get("pi") or {}
     co = data.get("copilot_cli") or {}
+    sources = [("opencode", op), ("pi", pi), ("copilot-cli", co)]
+    if args.tool == "pi":
+        sources = [("pi", pi)]
     
     if not (getattr(args, "verbose", False) or getattr(args, "all", False)):
-        op_has_data = any(w.get("models") for w in op.get("windows", [])) or op.get("credit_limits") or "error" in op
-        co_has_data = any(w.get("models") for w in co.get("windows", [])) or ("error" in co and not getattr(args, "verbose", False)) # copilot-cli error is hidden if not verbose
-        
-        if not op_has_data and not co_has_data:
+        has_data = False
+        for name, source in sources:
+            has_data = has_data or any(w.get("models") for w in source.get("windows", []))
+            has_data = has_data or bool(source.get("credit_limits"))
+            has_data = has_data or ("error" in source and (name == "opencode" or args.tool == name))
+        if not has_data:
             return
 
     print_c(f"\n  Spend / Usage", "\033[1;36m", args.no_color)
-    display_usage_source("opencode", op, args)
-    display_usage_source("copilot-cli", co, args)
+    for name, source in sources:
+        display_usage_source(name, source, args)
 
 def compact_reco_name(name):
     name = name.replace("antigravity:", "ag:")
@@ -572,9 +686,17 @@ def display_at_glance(result, recs, args):
         line = f"    {label:<10} {compact_reco_name(top['name'])} · {top['headroom_pct']:.0f}% left{reset}"
         print_c(line, "\033[32m", args.no_color)
 
-    usage = ((result.get("opencode") or {}).get("opencode") or {})
-    today = next((w for w in usage.get("windows", []) if w.get("days") == 1), None)
-    top_usage = (today or {}).get("models", [])
+    usage_sources = result.get("opencode") or {}
+    top_usage = []
+    for source_name, usage in usage_sources.items():
+        if not isinstance(usage, dict):
+            continue
+        today = next((w for w in usage.get("windows", []) if w.get("days") == 1), None)
+        for row in (today or {}).get("models", []):
+            item = dict(row)
+            item["source"] = source_name
+            top_usage.append(item)
+    top_usage.sort(key=lambda r: -((r.get("tokens") or {}).get("total", 0)))
     if top_usage:
         row = top_usage[0]
         toks = (row.get("tokens") or {}).get("total", 0)
@@ -582,7 +704,7 @@ def display_at_glance(result, recs, args):
         cost_text = f" · ${cost:.2f}" if cost else ""
         parent_text = f" · parent: {row['parent']}" if row.get("parent") else ""
         print_c(
-            f"    top usage  {row['provider']}/{row['model']} · {_fmt_tokens(toks)} tokens today{cost_text}{parent_text}",
+            f"    top usage  {row['source']}:{row['provider']}/{row['model']} · {_fmt_tokens(toks)} tokens today{cost_text}{parent_text}",
             "\033[90m",
             args.no_color,
         )

@@ -374,7 +374,7 @@ def discover_active_cli_profiles(sys_name):
     for root_pid, config_dir in agy_roots.items():
         name = get_profile_name_from_config_dir(config_dir)
         descendants = tree_pids[root_pid]
-        
+
         ports = set()
         for line in ps_result.stdout.splitlines():
             parts = line.strip().split(None, 2)
@@ -385,10 +385,10 @@ def discover_active_cli_profiles(sys_name):
                 ports.update(extract_server_ports_from_command(cmd))
 
         ports = sorted(list(ports))
-        
+
         if not ports:
             ports, _ = collect_listening_ports(list(descendants), sys_name)
-            
+
         if name not in active_profiles:
             active_profiles[name] = {
                 "pid": root_pid,
@@ -850,27 +850,35 @@ def get_antigravity_data(args):
     return result
 
 def display_antigravity_text(data, args):
-    section("Antigravity", args)
-
     if "error" in data:
+        section("Antigravity", args)
         if "⚠" in data["error"] or "not found" in data["error"]:
             print_warning(data["error"], args)
         else:
             print_error(data["error"], args)
         return
+
+    show_detail = getattr(args, "verbose", False) or getattr(args, "all", False) or args.tool == "antigravity"
+    visible_profiles = []
+    for prof in data.get("profiles", []):
+        if prof.get("status") == "stale" and not show_detail:
+            continue
+        visible_models = []
+        for m in prof.get("models", []):
+            if not m.get("visible", True) and not show_detail:
+                continue
+            visible_models.append(m)
+        if visible_models or show_detail:
+            visible_profiles.append((prof, visible_models))
+
+    if not visible_profiles and not show_detail:
+        return
+
+    section("Antigravity", args)
     if "warning" in data and is_verbose(args):
         print_warning(data["warning"], args)
 
-    for prof in data.get("profiles", []):
-        visible_models = []
-        for m in prof.get("models", []):
-            if not m.get("visible", True) and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
-                continue
-            visible_models.append(m)
-            
-        if not visible_models and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
-            continue
-
+    for prof, visible_models in visible_profiles:
         name = prof["name"]
         status = prof["status"]
         is_stale = status == "stale"

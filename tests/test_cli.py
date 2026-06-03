@@ -12,6 +12,17 @@ from unittest.mock import patch, MagicMock
 from limitlens.cli import main
 
 
+TEST_CONFIG = {
+    "codex": {"enabled": True, "auto_refresh": True},
+    "opencode": {"enabled": True},
+    "pi": {"enabled": True},
+    "pioneer": {"enabled": False},
+    "agentrouter": {"enabled": False},
+    "commandcode": {"enabled": False},
+    "custom_tools": {"enabled": False},
+}
+
+
 class TestCLI(unittest.TestCase):
     @patch("limitlens.providers.codex.refresh_all_accounts")
     @patch("limitlens.cli.print_c")
@@ -29,7 +40,9 @@ class TestCLI(unittest.TestCase):
         mock_opencode.return_value = {}
 
         test_args = ["limitlens", "--json", "--tool", "codex", "--sync-codex", "--no-record"]
-        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(io.StringIO()):
             main()
 
         mock_refresh_all.assert_called_once()
@@ -75,7 +88,9 @@ class TestCLI(unittest.TestCase):
 
         test_args = ["limitlens", "--json", "--tool", "codex", "--no-record"]
         buf = io.StringIO()
-        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(buf):
             main()
 
         mock_refresh_accounts.assert_called_once()
@@ -102,7 +117,8 @@ class TestCLI(unittest.TestCase):
         mock_custom.return_value = {}
 
         test_args = ["limitlens", "--quick"]
-        with patch.object(sys, "argv", test_args):
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG):
             # prevent SystemExit on argparse error by catching it, but shouldn't happen here
             main()
 
@@ -110,7 +126,7 @@ class TestCLI(unittest.TestCase):
         mock_codex.assert_called_once()
         mock_amp.assert_called_once()
         mock_ag.assert_called_once()
-        
+
         # Should record snapshot
         mock_record.assert_called_once()
 
@@ -137,9 +153,10 @@ class TestCLI(unittest.TestCase):
         mock_agentrouter.return_value = {}
         mock_custom.return_value = {}
         mock_compute_waste.return_value = []
-        
+
         test_args = ["limitlens", "--waste", "--days", "14"]
-        with patch.object(sys, "argv", test_args):
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG):
             main()
 
         mock_compute_waste.assert_called_once_with(days=14)
@@ -164,7 +181,9 @@ class TestCLI(unittest.TestCase):
 
         test_args = ["limitlens", "--json", "--tool", "all", "--no-record"]
         buf = io.StringIO()
-        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(buf):
             main()
 
         payload = json.loads(buf.getvalue())
@@ -210,6 +229,22 @@ class TestCLI(unittest.TestCase):
 
         mock_pioneer.assert_called_once()
 
+    @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
+    @patch("limitlens.cli.get_pi_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_direct_pi_uses_top_level_provider(self, mock_record, mock_pi, mock_config):
+        mock_pi.return_value = {"windows": [{"days": 1, "models": []}]}
+
+        test_args = ["limitlens", "--json", "--tool", "pi", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+            main()
+
+        mock_pi.assert_called_once()
+        payload = json.loads(buf.getvalue())
+        self.assertIn("pi", payload)
+        self.assertNotIn("opencode", payload)
+
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "codex": {"enabled": False},
         "pioneer": {"enabled": False},
@@ -239,7 +274,7 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.print_c")
     def test_reset_waste(self, mock_print, mock_reset):
         mock_reset.return_value = True
-        
+
         test_args = ["limitlens", "--reset-waste"]
         with patch.object(sys, "argv", test_args):
             main()

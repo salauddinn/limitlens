@@ -6,7 +6,7 @@
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
 
-A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Antigravity**, **Pioneer**, and **AgentRouter/Kilo Code**.
+A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Pi**, **Antigravity**, **Pioneer**, and **AgentRouter/Kilo Code**.
 
 If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
 
@@ -59,6 +59,7 @@ alias limitlens="python3 /path/to/limitlens/limitlens.py"
 limitlens            # full status across all tools
 limitlens --sync-codex  # sync all Codex accounts before showing status
 limitlens --tool opencode
+limitlens --tool pi
 limitlens --tool pioneer
 limitlens --tool agentrouter
 limitlens --verbose  # show full usage rows and low-level warnings
@@ -95,7 +96,8 @@ Add a `"display"` section to your configuration to control output behavior:
 *   `amp_usable_pct` (float, default: `30.0`): Percentage threshold below which Amp is flagged as low/unusable.
 
 **Provider Settings:**
-*   `codex.auto_refresh` (boolean, default: `true`): Automatically trigger a background background refresh to fetch fresh quota limits if the cached data is deemed stale.
+*   `codex.auto_refresh` (boolean, default: `true`): Automatically trigger a background refresh to fetch fresh quota limits if the cached data is deemed stale.
+*   `pi.sessions_dir` (string, default: `~/.pi/agent/sessions`): Local Pi session JSONL directory used for observed token/cost usage.
 
 **Privacy & Security:**
 *   `limitlens` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
@@ -111,14 +113,15 @@ The core engine and configuration are completely platform-agnostic, but individu
 | **Amp** | macOS, Linux | Executes the local `amp` binary to fetch quota |
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux systems |
 | **OpenCode** | macOS, Linux, Windows | Reads from the local OpenCode SQLite database |
+| **Pi** | macOS, Linux, Windows | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
 | **AgentRouter/Kilo Code** | Any OS | Reads AgentRouter quota from env-authenticated API or sanitized manual config |
 
 ### Observed Usage Logging
 
-OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model.
+OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model. Pi usage is read locally from `~/.pi/agent/sessions` JSONL files and grouped the same way.
 
-If an OpenCode model is the same underlying quota as another tool, either exclude it from the OpenCode usage rollup with `ignored_models`, or keep it visible and label its parent quota with `model_parents`:
+If an OpenCode or Pi model is the same underlying quota as another tool, either exclude it from the usage rollup with `ignored_models`, or keep it visible and label its parent quota with `model_parents`:
 
 ```json
 {
@@ -128,6 +131,13 @@ If an OpenCode model is the same underlying quota as another tool, either exclud
       "openai/gpt-5.5": "Codex / codex-p1",
       "anthropic/claude-opus-4-8": "Pioneer",
       "google-vertex/*": "Vertex Free Trial"
+    }
+  },
+  "pi": {
+    "sessions_dir": "~/.pi/agent/sessions",
+    "ignored_models": [],
+    "model_parents": {
+      "openai-codex/gpt-5.5": "Codex default"
     }
   }
 }

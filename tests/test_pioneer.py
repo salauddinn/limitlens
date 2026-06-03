@@ -39,7 +39,7 @@ class TestPioneerProvider(unittest.TestCase):
         self.assertNotIn("error", data)
         self.assertEqual(data["email"], "john.doe@example.com")
         self.assertEqual(len(data["tiers"]), 2)
-        
+
         t0 = data["tiers"][0]
         self.assertEqual(t0["label"], "Credits")
         self.assertEqual(t0["remaining"], 10.5)
@@ -72,7 +72,7 @@ class TestPioneerProvider(unittest.TestCase):
     @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
     def test_pioneer_network_error(self, mock_config, mock_urlopen):
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
-        
+
         data = get_pioneer_data(self.args)
         self.assertIn("Connection refused", data["error"])
 

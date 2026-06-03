@@ -159,5 +159,6 @@ def display_custom_text(data, args):
             print(f"    {tier['label']:<16} {b}  {tier['pct_left']:5.1f}% left  {remaining}/{total}  used {used}")
         if tool.get("request_count"):
             print_c(f"    requests         {tool['request_count']}", "\033[90m", args.no_color)
-        if tool.get("note"):
+        tool_filter = getattr(args, "tool", "custom")
+        if tool.get("note") and (tool_filter == "custom" or getattr(args, "verbose", False) or getattr(args, "all", False)):
             print_c(f"    note             {tool['note']}", "\033[90m", args.no_color)

@@ -417,10 +417,14 @@ def get_codex_data(args, config=None):
     return {"accounts": data}
 
 def display_codex_text(data, args):
-    print_c(f"\n  Codex", "\033[1;36m", args.no_color)
     if "error" in data:
+        if data["error"] == "all codex accounts are ignored by config" and args.tool != "codex" and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+            return
+        print_c(f"\n  Codex", "\033[1;36m", args.no_color)
         print_c(f"    ⚠ {data['error']}", "\033[33m", args.no_color)
         return
+
+    print_c(f"\n  Codex", "\033[1;36m", args.no_color)
 
     for acc in data.get("accounts", []):
         visible_limits = []

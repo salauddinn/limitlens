@@ -25,6 +25,7 @@ from .providers import (
     get_amp_data, display_amp_text,
     get_antigravity_data, display_antigravity_text,
     get_opencode_data, display_opencode_text,
+    get_pi_data, display_pi_text,
     get_pioneer_data, display_pioneer_text,
     get_agentrouter_data, display_agentrouter_text,
     get_commandcode_data, display_commandcode_text,
@@ -39,7 +40,7 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pioneer", "agentrouter", "commandcode", "custom", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "pioneer", "agentrouter", "commandcode", "custom", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -64,6 +65,7 @@ def main():
         "amp": "Amp",
         "antigravity": "Antigravity",
         "opencode": "observed usage",
+        "pi": "Pi usage",
         "pioneer": "Pioneer",
         "agentrouter": "AgentRouter",
         "commandcode": "Command Code",
@@ -96,6 +98,8 @@ def main():
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
             if args.tool in ("opencode", "all"):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
+            if args.tool == "pi":
+                fetchers["pi"] = executor.submit(get_pi_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and config.get("pioneer", {}).get("enabled", False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
             if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
@@ -126,7 +130,7 @@ def main():
         stale_names = []
         now = time.monotonic()
         auto_refresh = config.get("codex", {}).get("auto_refresh", True)
-        
+
         if auto_refresh:
             for acc in result.get("codex", {}).get("accounts", []):
                 name = acc.get("name")
@@ -136,7 +140,7 @@ def main():
                 if args.watch and last_attempt is not None and now - last_attempt < codex_refresh_cooldown:
                     continue
                 stale_names.append(name)
-                
+
         if stale_names:
             for name in stale_names:
                 codex_refresh_attempts[name] = now
@@ -240,6 +244,8 @@ def main():
             display_custom_text(result["custom"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
+        if "pi" in result:
+            display_pi_text(result["pi"], args)
 
         print("\n  " + "─" * 52)
         if args.watch:

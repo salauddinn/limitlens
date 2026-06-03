@@ -84,11 +84,11 @@ def parse_pioneer_billing(data, args):
         remaining = _float(data.get("credits_remaining") or data.get("remaining"), 0.0)
         used = data.get("credits_used") or data.get("used") or max(0.0, total - remaining)
         used = _float(used, 0.0)
-        
+
         if total <= 0 and remaining > 0:
             total = remaining
             used = 0.0
-            
+
         if total > 0:
             tiers_data = [{
                 "label": data.get("plan", "Credits"),
@@ -110,10 +110,10 @@ def parse_pioneer_billing(data, args):
             used = max(0.0, total - remaining)
         if total <= 0 and remaining > 0:
             total = remaining
-        
+
         pct_left = (remaining / total * 100) if total > 0 else 0.0
         pct_used = 100.0 - pct_left
-        
+
         info["tiers"].append({
             "label": label,
             "remaining": remaining,

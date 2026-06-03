@@ -175,11 +175,20 @@ def should_show_detail(args):
 DEFAULT_CONFIG = {
     "codex": {
         "enabled": True,
+        "auto_refresh": True,
         "ignored_accounts": [],
     },
     "opencode": {
         "enabled": True,
         "db_path": "~/.local/share/opencode/opencode.db",
+        "days": [1, 7],
+        "providers": [],
+        "ignored_models": [],
+        "model_parents": {},
+    },
+    "pi": {
+        "enabled": True,
+        "sessions_dir": "~/.pi/agent/sessions",
         "days": [1, 7],
         "providers": [],
         "ignored_models": [],

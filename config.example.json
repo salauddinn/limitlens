@@ -1,6 +1,7 @@
 {
   "codex": {
     "enabled": true,
+    "auto_refresh": true,
     "ignored_accounts": []
   },
   "opencode": {
@@ -15,6 +16,14 @@
       "google-vertex/*": "Vertex Free Trial"
     },
     "credit_limits": []
+  },
+  "pi": {
+    "enabled": true,
+    "sessions_dir": "~/.pi/agent/sessions",
+    "days": [1, 7],
+    "providers": [],
+    "ignored_models": [],
+    "model_parents": {}
   },
   "copilot_cli": {
     "enabled": true,
