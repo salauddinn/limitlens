@@ -1,46 +1,117 @@
 """
-Usage tracker: maintain an accurate history of usage and quota consumption.
-Stores data in a simple JSON format to allow easy import and export.
-Computes usage by observing deltas between limitlens runs.
+Usage tracker: compute usage from snapshots and handle import/export.
+
+Rather than maintaining a mutable state file (which is prone to race conditions),
+usage is computed dynamically from the append-only snapshots log collected by
+waste_tracker.py. Imported historical data is merged on the fly for display.
 """
 
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 
-USAGE_PATH = os.environ.get("LIMITLENS_USAGE_PATH") or os.path.expanduser("~/.cache/limitlens/usage.json")
+from . import waste_tracker
 
-def _load_data():
-    if not os.path.exists(USAGE_PATH):
-        return {"version": 1, "state": {}, "history": {}}
+IMPORTED_USAGE_PATH = os.environ.get("LIMITLENS_IMPORTED_USAGE_PATH") or os.path.expanduser("~/.cache/limitlens/imported_usage.json")
+
+def _load_imported_data():
+    if not os.path.exists(IMPORTED_USAGE_PATH):
+        return {}
     try:
-        with open(USAGE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if "state" not in data:
-                data["state"] = {}
-            if "history" not in data:
-                data["history"] = {}
-            return data
+        with open(IMPORTED_USAGE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
     except (json.JSONDecodeError, OSError):
-        return {"version": 1, "state": {}, "history": {}}
+        return {}
 
-def _save_data(data):
+def _save_imported_data(data):
     try:
-        os.makedirs(os.path.dirname(USAGE_PATH), exist_ok=True)
-        # Write atomically
-        tmp_path = USAGE_PATH + ".tmp"
+        os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), exist_ok=True)
+        tmp_path = IMPORTED_USAGE_PATH + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        os.replace(tmp_path, USAGE_PATH)
+        os.replace(tmp_path, IMPORTED_USAGE_PATH)
     except OSError:
         pass
 
+def compute_daily_usage(days=365):
+    """
+    Compute daily usage by playing back snapshots from snapshots.jsonl.
+    Returns: dict[date_str] -> dict[key] -> usage_float
+    """
+    rows = waste_tracker._load_snapshots()
+    if not rows:
+        return {}
+
+    by_key = {}
+    for row in rows:
+        key = row["key"]
+        by_key.setdefault(key, []).append(row)
+
+    history = {}
+    
+    for key, series in by_key.items():
+        series.sort(key=lambda r: r["_ts"])
+        for prev, curr in zip(series, series[1:]):
+            date_str = curr["_ts"].strftime("%Y-%m-%d")
+            usage = 0.0
+
+            if waste_tracker._is_reset_event(prev, curr):
+                # When a reset happens, we assume usage was the remainder in the old bucket
+                # plus what we see used in the new bucket. BUT waste_tracker assumes the 
+                # remainder in the old bucket was "wasted" (unused). 
+                # To align with not overcounting, we only count the usage we can verify:
+                # which is the usage in the new bucket (100 - curr.pct_left).
+                usage = 100.0 - (curr.get("pct_left") or 0.0)
+            else:
+                p_val = prev.get("pct_left") or 0.0
+                c_val = curr.get("pct_left") or 0.0
+                if c_val < p_val:
+                    usage = p_val - c_val
+            
+            if usage > 0:
+                if date_str not in history:
+                    history[date_str] = {}
+                history[date_str][key] = round(history[date_str].get(key, 0.0) + usage, 2)
+                
+    return history
+
+def _get_merged_history():
+    """Merge dynamically computed usage with imported historical usage."""
+    live = compute_daily_usage()
+    imported = _load_imported_data()
+    
+    merged = {}
+    all_dates = set(live.keys()) | set(imported.keys())
+    
+    for date_str in all_dates:
+        merged[date_str] = {}
+        for k, v in imported.get(date_str, {}).items():
+            merged[date_str][k] = v
+        for k, v in live.get(date_str, {}).items():
+            prev_v = merged[date_str].get(k, 0.0)
+            merged[date_str][k] = max(prev_v, v)
+            
+    return merged
+
+def _load_data():
+    """
+    Backward compatibility for cli.py which prints raw data.
+    """
+    return {"version": 2, "history": _get_merged_history()}
+
+def record_usage(result):
+    """
+    Deprecated: Usage is now derived dynamically from waste_tracker snapshots.
+    This function remains as a no-op for backward compatibility with cli.py.
+    """
+    pass
+
 def export_usage(export_path):
-    data = _load_data()
+    history = _get_merged_history()
+    export_data = {"version": 2, "history": history}
     try:
         with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(export_data, f, indent=2)
         return True
     except OSError:
         return False
@@ -49,150 +120,36 @@ def import_usage(import_path):
     try:
         with open(import_path, "r", encoding="utf-8") as f:
             new_data = json.load(f)
-
-        data = _load_data()
-
-        # Merge state
-        for k, v in new_data.get("state", {}).items():
-            if k not in data["state"] or v.get("ts", 0) > data["state"][k].get("ts", 0):
-                data["state"][k] = v
-
-        # Merge history
-        for date_str, daily_usage in new_data.get("history", {}).items():
-            if date_str not in data["history"]:
-                data["history"][date_str] = {}
+            
+        incoming_history = new_data.get("history", {})
+        if not incoming_history and not new_data.get("version"):
+            if any(isinstance(v, dict) for v in new_data.values()):
+                incoming_history = new_data
+                
+        imported = _load_imported_data()
+        
+        for date_str, daily_usage in incoming_history.items():
+            if date_str not in imported:
+                imported[date_str] = {}
             for k, v in daily_usage.items():
-                data["history"][date_str][k] = data["history"][date_str].get(k, 0) + v
-
-        _save_data(data)
+                imported[date_str][k] = max(imported[date_str].get(k, 0.0), v)
+                
+        _save_imported_data(imported)
         return True
     except (json.JSONDecodeError, OSError):
         return False
 
-def _reset_at_seconds(value):
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.timestamp()
-        except ValueError:
-            return None
-    return None
-
-def _extract_snapshots(result):
-    """Extract current quota state from the result."""
-    snapshots = {}
-    ts = datetime.now(timezone.utc).timestamp()
-
-    # Codex
-    codex = result.get("codex") or {}
-    for acc in codex.get("accounts", []):
-        if "error" in acc:
-            continue
-        for lim in acc.get("limits", []):
-            pct_left = lim.get("left_percent")
-            if pct_left is not None:
-                key = f"codex-{acc['name']}::{lim['label']}"
-                snapshots[key] = {
-                    "pct_left": float(pct_left),
-                    "reset_at": _reset_at_seconds(lim.get("reset_time")),
-                    "ts": ts
-                }
-
-    # Antigravity
-    ag = result.get("antigravity") or {}
-    for prof in ag.get("profiles", []):
-        if prof.get("status") != "running":
-            continue
-        for m in prof.get("models", []):
-            pct_left = m.get("pct_left")
-            if pct_left is not None:
-                key = f"antigravity:{prof['name']}::{m.get('label', '')}"
-                snapshots[key] = {
-                    "pct_left": float(pct_left),
-                    "reset_at": _reset_at_seconds(m.get("reset_time")),
-                    "ts": ts
-                }
-
-    # Amp / Pioneer / Custom could also be tracked if they provide pct_left
-    for tool_name in ["amp", "pioneer", "custom"]:
-        tool_data = result.get(tool_name) or {}
-        for item in tool_data.get("limits", []) or tool_data.get("tiers", []):
-            pct_left = item.get("pct_left")
-            if pct_left is not None:
-                key = f"{tool_name}::{item.get('name', '')}"
-                snapshots[key] = {
-                    "pct_left": float(pct_left),
-                    "reset_at": _reset_at_seconds(item.get("reset_time") or item.get("resets_at")),
-                    "ts": ts
-                }
-
-    return snapshots
-
-def record_usage(result):
-    """
-    Compare current snapshots to previous state to compute and record usage.
-    """
-    data = _load_data()
-    snapshots = _extract_snapshots(result)
-
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if today not in data["history"]:
-        data["history"][today] = {}
-
-    for key, current in snapshots.items():
-        prev = data["state"].get(key)
-
-        if prev:
-            # Calculate usage
-            usage = 0.0
-
-            # Did it reset?
-            # A reset happens if pct_left increased significantly OR reset_at moved forward
-            pct_jump = current["pct_left"] - prev["pct_left"]
-
-            p_reset = prev.get("reset_at")
-            c_reset = current.get("reset_at")
-            c_ts = current["ts"]
-
-            is_reset = False
-            if pct_jump >= 30: # 30% jump
-                is_reset = True
-            elif p_reset and c_reset and c_ts >= p_reset and c_reset > p_reset + 60:
-                is_reset = True
-
-            if is_reset:
-                # We assume we used from 100% down to current pct_left after reset
-                # Plus whatever we used before the reset (which we missed, unless we just count it as prev)
-                # Actually, simplest accurate tracking:
-                usage = 100.0 - current["pct_left"]
-            else:
-                if current["pct_left"] < prev["pct_left"]:
-                    usage = prev["pct_left"] - current["pct_left"]
-
-            if usage > 0:
-                data["history"][today][key] = round(data["history"][today].get(key, 0.0) + usage, 2)
-
-        data["state"][key] = current
-
-    _save_data(data)
-
 def display_usage_report(args, print_c):
-    data = _load_data()
+    history = _get_merged_history()
     print_c("\n  ═══ Usage Tracking Report ═══", "\033[1;35m", args.no_color)
 
-    if not data["history"]:
+    if not history:
         print_c("    No usage history recorded yet.", "\033[90m", args.no_color)
         return
 
-    for date_str in sorted(data["history"].keys(), reverse=True)[:7]: # Last 7 days
+    for date_str in sorted(history.keys(), reverse=True)[:7]: # Last 7 days
         print_c(f"\n  Date: {date_str}", "\033[1m", args.no_color)
-        daily = data["history"][date_str]
+        daily = history[date_str]
 
         if not daily:
             print_c("    No usage", "\033[90m", args.no_color)
