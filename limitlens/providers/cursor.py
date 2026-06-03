@@ -26,7 +26,8 @@ def get_cursor_token(sys_name):
     for path in paths:
         if os.path.exists(path):
             try:
-                uri = f"file:{path}?mode=ro"
+                import pathlib
+                uri = f"{pathlib.Path(path).as_uri()}?mode=ro"
                 conn = sqlite3.connect(uri, uri=True)
                 cursor = conn.cursor()
                 cursor.execute("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'")
@@ -42,8 +43,13 @@ def get_cursor_token(sys_name):
 def fetch_cursor_usage(token):
     req = urllib.request.Request("https://api2.cursor.sh/auth/usage")
     req.add_header("Authorization", f"Bearer {token}")
+    class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+        def http_error_302(self, req, fp, code, msg, headers):
+            raise Exception("Redirects are not allowed.")
+        http_error_301 = http_error_303 = http_error_307 = http_error_302
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        opener = urllib.request.build_opener(NoRedirectHandler())
+        with opener.open(req, timeout=10) as resp:
             return json.loads(resp.read().decode())
     except Exception:
         return None
@@ -55,9 +61,9 @@ def parse_cursor_data(payload, args, cfg=None):
         
     cfg = cfg or {}
     
-    gpt4 = payload.get("gpt-4", {})
+    gpt4 = payload.get("gpt-4") or {}
     # Sometimes it's nested in a different way or they have 'premium-models'
-    premium = payload.get("premium-models", gpt4)
+    premium = payload.get("premium-models") or gpt4
     
     num_requests = _number(premium.get("numRequests", gpt4.get("numRequests")), 0.0)
     max_requests = _number(premium.get("maxRequestUsage", gpt4.get("maxRequestUsage")), 0.0)
@@ -109,14 +115,14 @@ def display_cursor_text(data, args):
     if "error" in data:
         if args.verbose:
             section("Cursor", args)
-            print_c(f"    Error: {data['error']}", "\033[91m", args.no_color)
+            print_c(f"    Error: {data['error']}", "\033[91m", getattr(args, 'no_color', False))
         return
         
     section(data.get("name", "Cursor"), args)
     
     tiers = data.get("tiers", [])
     if not tiers:
-        print_c("    No usage data found.", "\033[90m", args.no_color)
+        print_c("    No usage data found.", "\033[90m", getattr(args, 'no_color', False))
         
     for tier in tiers:
         label = tier.get("label", "Requests")
@@ -127,7 +133,7 @@ def display_cursor_text(data, args):
         unit = tier.get("unit", "req")
         
         if pct_left is not None and total is not None:
-            b = bar(pct_used, no_color=args.no_color)
-            print_c(f"    {label}: {pct_left:5.1f}% left  {b}  ({int(used)}/{int(total)} {unit})", "", args.no_color)
+            b = bar(pct_used, no_color=getattr(args, 'no_color', False))
+            print_c(f"    {label}: {pct_left:5.1f}% left  {b}  ({int(used)}/{int(total)} {unit})", "", getattr(args, 'no_color', False))
         else:
-            print_c(f"    {label}: {int(used)} {unit} used (Unlimited/Enterprise)", "\033[94m", args.no_color)
+            print_c(f"    {label}: {int(used)} {unit} used (Unlimited/Enterprise)", "\033[94m", getattr(args, 'no_color', False))

@@ -35,7 +35,7 @@ def redact_text(text):
         return text
     redacted = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", lambda m: redact_email(m.group(0)), text)
     home = os.path.expanduser("~")
-    if home:
+    if home and home != "/":
         redacted = redacted.replace(home, "~")
     redacted = re.sub(r'(\.codex-)[^/\s]+', r'\1***', redacted)
     return redacted
@@ -119,9 +119,10 @@ def _fmt_tokens(n):
         n = int(n)
     except (TypeError, ValueError):
         return "0"
-    if n >= 1_000_000:
+    abs_n = abs(n)
+    if abs_n >= 1_000_000:
         return f"{n/1_000_000:.1f}M"
-    if n >= 1_000:
+    if abs_n >= 1_000:
         return f"{n/1_000:.1f}K"
     return str(n)
 
@@ -159,7 +160,8 @@ def identity_line(name, detail, args, status=None):
         print(f"\n  {styled_name}")
 
 def print_warning(message, args):
-    print_c(f"    ⚠ {message.replace('⚠ ', '')}", "\033[33m", args.no_color)
+    msg_str = str(message or "")
+    print_c(f"    ⚠ {msg_str.replace('⚠ ', '')}", "\033[33m", args.no_color)
 
 def print_error(message, args):
     print_c(f"    ✖ {message.replace('✖ ', '')}", "\033[31m", args.no_color)
@@ -256,8 +258,9 @@ def limitlens_config_path():
     return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
 
 def load_limitlens_config():
+    import copy
     path = limitlens_config_path()
-    config = DEFAULT_CONFIG
+    config = copy.deepcopy(DEFAULT_CONFIG)
     if not os.path.exists(path):
         return config
     try:

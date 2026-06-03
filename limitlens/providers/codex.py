@@ -290,7 +290,7 @@ def get_codex_data(args, config=None):
     for name, home in accounts.items():
         acc_data = {
             "name": name,
-            "home": redact_path(home) if args.redact else home,
+            "home": redact_path(home) if getattr(args, 'redact', True) else home,
         }
 
         if not os.path.exists(home):
@@ -308,7 +308,7 @@ def get_codex_data(args, config=None):
             data.append(acc_data)
             continue
 
-        acc_data["session_file"] = redact_path(session) if args.redact else session
+        acc_data["session_file"] = redact_path(session) if getattr(args, 'redact', True) else session
         session_mtime = get_session_mtime(session)
         if session_mtime is not None:
             acc_data["last_updated"] = datetime.fromtimestamp(session_mtime, timezone.utc).isoformat()
@@ -418,13 +418,13 @@ def get_codex_data(args, config=None):
 
 def display_codex_text(data, args):
     if "error" in data:
-        if data["error"] == "all codex accounts are ignored by config" and args.tool != "codex" and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
+        if data["error"] == "all codex accounts are ignored by config" and getattr(args, 'tool', None) != "codex" and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
             return
-        print_c(f"\n  Codex", "\033[1;36m", args.no_color)
-        print_c(f"    ⚠ {data['error']}", "\033[33m", args.no_color)
+        print_c(f"\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
+        print_c(f"    ⚠ {data['error']}", "\033[33m", getattr(args, 'no_color', False))
         return
 
-    print_c(f"\n  Codex", "\033[1;36m", args.no_color)
+    print_c(f"\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
 
     for acc in data.get("accounts", []):
         visible_limits = []
@@ -437,16 +437,16 @@ def display_codex_text(data, args):
             continue
 
         label = "codex" if acc['name'] == 'default' else f"codex-{acc['name']}"
-        if args.no_color:
+        if getattr(args, 'no_color', False):
             print(f"\n  {label}  {acc['home']}")
         else:
             print(f"\n  \033[1m{label}\033[0m  \033[90m{acc['home']}\033[0m")
 
         if "error" in acc:
             if "not found" in acc["error"] or "✖" in acc["error"]:
-                print_c(f"    ✖ {acc['error'].replace('✖ ', '')}", "\033[31m", args.no_color)
+                print_c(f"    ✖ {acc['error'].replace('✖ ', '')}", "\033[31m", getattr(args, 'no_color', False))
             else:
-                print_c(f"    ⚠ {acc['error'].replace('⚠ ', '')}", "\033[33m", args.no_color)
+                print_c(f"    ⚠ {acc['error'].replace('⚠ ', '')}", "\033[33m", getattr(args, 'no_color', False))
             continue
 
         last_updated = acc.get("last_updated")
@@ -456,7 +456,7 @@ def display_codex_text(data, args):
                 print_c(
                     f"    last updated {format_timestamp(updated_dt)}",
                     "\033[90m",
-                    args.no_color,
+                    getattr(args, 'no_color', False),
                 )
             except ValueError:
                 pass
@@ -465,9 +465,9 @@ def display_codex_text(data, args):
             pct = lim["used_percent"]
             left = lim["left_percent"]
             rst = lim["reset_time_fmt"]
-            b = bar(pct, no_color=args.no_color)
+            b = bar(pct, no_color=getattr(args, 'no_color', False))
             stale_hint = "  ⟲" if lim.get("is_stale") else ""
-            if args.no_color:
+            if getattr(args, 'no_color', False):
                 print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {rst}{stale_hint}")
             else:
                 stale_color = "\033[33m" if lim.get("is_stale") else "\033[90m"
@@ -484,7 +484,7 @@ def display_codex_text(data, args):
                 f"reasoning {_fmt_tokens(tokens.get('reasoning_output_tokens', 0))}  "
                 f"total {_fmt_tokens(tokens.get('total_tokens', 0))}"
             )
-            print_c(line, "\033[90m", args.no_color)
+            print_c(line, "\033[90m", getattr(args, 'no_color', False))
 
 
 # ── Refresh helpers ─────────────────────────────────────────────────────────

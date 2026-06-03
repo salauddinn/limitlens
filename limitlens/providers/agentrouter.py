@@ -202,7 +202,7 @@ def display_agentrouter_text(data, args):
         pct_left = tier.get("pct_left", 0.0)
         pct_used = tier.get("pct_used", 0.0)
         unit = tier.get("unit") or data.get("unit") or "units"
-        b = bar(min(100.0, pct_used), no_color=args.no_color)
+        b = bar(min(100.0, pct_used), no_color=getattr(args, 'no_color', False))
         used = _format_units(tier.get("used", 0.0))
         total = _format_units(tier.get("total", 0.0))
         remaining = _format_units(tier.get("remaining", 0.0))
@@ -211,7 +211,7 @@ def display_agentrouter_text(data, args):
         request_count = data.get("request_count", 0)
         if request_count:
             avg = _format_units(tier.get("avg_per_request", 0.0))
-            print_c(f"    requests         {request_count}  avg {avg} {unit}/request", "\033[90m", args.no_color)
+            print_c(f"    requests         {request_count}  avg {avg} {unit}/request", "\033[90m", getattr(args, 'no_color', False))
 
     if data.get("group"):
-        print_c(f"    group            {data['group']}", "\033[90m", args.no_color)
+        print_c(f"    group            {data['group']}", "\033[90m", getattr(args, 'no_color', False))

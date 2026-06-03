@@ -465,8 +465,8 @@ def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeou
     req.add_header("Connect-Protocol-Version", "1")
     req.add_header("x-codeium-csrf-token", csrf_token)
 
-    resp = urllib.request.urlopen(req, timeout=timeout, context=ctx)
-    return json.loads(resp.read().decode("utf-8"))
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
 def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3):
     try:
@@ -861,7 +861,7 @@ def display_antigravity_text(data, args):
             print_error(data["error"], args)
         return
 
-    show_detail = getattr(args, "verbose", False) or getattr(args, "all", False) or args.tool == "antigravity"
+    show_detail = getattr(args, "verbose", False) or getattr(args, "all", False) or getattr(args, 'tool', None) == "antigravity"
     visible_profiles = []
     for prof in data.get("profiles", []):
         if prof.get("status") == "stale" and not show_detail:
@@ -878,7 +878,7 @@ def display_antigravity_text(data, args):
         has_stale = any(p.get("status") == "stale" for p in data.get("profiles", []))
         if has_stale:
             section("Antigravity", args)
-            print_c("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", args.no_color)
+            print_c("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", getattr(args, 'no_color', False))
         return
 
     section("Antigravity", args)
@@ -906,7 +906,7 @@ def display_antigravity_text(data, args):
                 print_c(
                     f"    {label} {format_timestamp(checked_dt)}",
                     "\033[90m",
-                    args.no_color,
+                    getattr(args, 'no_color', False),
                 )
             except ValueError:
                 pass
@@ -918,9 +918,9 @@ def display_antigravity_text(data, args):
             pct_used = 100.0 - pct_left
             rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
             label = m["label"]
-            b = bar(pct_used, no_color=args.no_color)
+            b = bar(pct_used, no_color=getattr(args, 'no_color', False))
             pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
-            if args.no_color:
+            if getattr(args, 'no_color', False):
                 print(f"    {label:<20} {b}  {pct_fmt} left  {rst}")
             else:
                 print(f"    {label:<20} {b}  {pct_fmt} left  \033[90m{rst}\033[0m")

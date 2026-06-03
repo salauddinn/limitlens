@@ -216,7 +216,7 @@ def display_pioneer_text(data, args):
 
     if not visible_tiers:
         if is_verbose(args):
-            print_c("    (no active credit tiers)", "\033[90m", args.no_color)
+            print_c("    (no active credit tiers)", "\033[90m", getattr(args, 'no_color', False))
         return
 
     for tier in visible_tiers:
@@ -228,7 +228,7 @@ def display_pioneer_text(data, args):
             short = short[:15]
 
         b_val = pct_used if pct_used is not None else 0.0
-        b = bar(b_val, no_color=args.no_color)
+        b = bar(b_val, no_color=getattr(args, 'no_color', False))
         unit = tier.get("unit") or data.get("unit") or "$"
         
         t_tot = tier.get("total")
@@ -244,7 +244,7 @@ def display_pioneer_text(data, args):
             
         pct_str = f"{pct_left:5.1f}% left" if pct_left is not None else "    ?% left"
         
-        if args.no_color:
+        if getattr(args, 'no_color', False):
             print(f"    {short:<16} {b}  {pct_str}  {amount}  {used_str}")
         else:
             print(f"    {short:<16} {b}  {pct_str}  \033[90m{amount}  {used_str}\033[0m")
@@ -253,8 +253,8 @@ def display_pioneer_text(data, args):
         used_today = _float(data.get("used_today"), 0.0)
         inferences = int(_float(data.get("inferences_today"), 0.0))
         if used_today and inferences:
-            print_c(f"    today           ${used_today:.2f} used on {inferences} inferences", "\033[90m", args.no_color)
+            print_c(f"    today           ${used_today:.2f} used on {inferences} inferences", "\033[90m", getattr(args, 'no_color', False))
         elif used_today:
-            print_c(f"    today           ${used_today:.2f} used", "\033[90m", args.no_color)
+            print_c(f"    today           ${used_today:.2f} used", "\033[90m", getattr(args, 'no_color', False))
         else:
-            print_c(f"    today           {inferences} inferences", "\033[90m", args.no_color)
+            print_c(f"    today           {inferences} inferences", "\033[90m", getattr(args, 'no_color', False))

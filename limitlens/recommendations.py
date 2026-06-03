@@ -136,13 +136,13 @@ def _codex_candidates(codex_data):
         if left <= 0.5:
             continue
         stale = bool(bottleneck.get("is_stale"))
-        name = f"codex ({bottleneck['label']})" if acc['name'] == 'default' else f"codex-{acc['name']} ({bottleneck['label']})"
+        name = f"codex ({bottleneck.get('label', 'limit')})" if acc.get('name', 'Unknown') == 'default' else f"codex-{acc.get('name', 'Unknown')} ({bottleneck.get('label', 'limit')})"
         if stale:
             name += " (stale)"
         out.append({
             "tool": "codex",
             "name": name,
-            "command": "codex" if acc['name'] == 'default' else f"CODEX_HOME=~/.codex-{acc['name']} codex",
+            "command": "codex" if acc.get('name', 'Unknown') == 'default' else f"CODEX_HOME=~/.codex-{acc.get('name', 'Unknown')} codex",
             "headroom_pct": left,
             "reset_at": bottleneck.get("reset_time"),
             "reset_label": bottleneck.get("reset_time_fmt"),
@@ -344,6 +344,7 @@ def _custom_candidates(custom_data):
 
 
 def _all_candidates(result, parse_to_utc, fmt_reset):
+    result = result or {}
     cands = []
     cands += _codex_candidates(result.get("codex"))
     cands += _amp_candidates(result.get("amp"))

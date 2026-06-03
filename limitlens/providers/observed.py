@@ -535,7 +535,7 @@ def display_pi_text(data, args):
 
 def display_usage_rows(rows, args):
     if not rows:
-        print_c("      no usage", "\033[90m", args.no_color)
+        print_c("      no usage", "\033[90m", getattr(args, 'no_color', False))
         return
 
     max_rows = len(rows) if getattr(args, "verbose", False) else 3
@@ -547,7 +547,7 @@ def display_usage_rows(rows, args):
     for provider, provider_rows in grouped.items():
         if shown >= max_rows:
             break
-        print_c(f"      {provider}", "\033[90m", args.no_color)
+        print_c(f"      {provider}", "\033[90m", getattr(args, 'no_color', False))
         for row in provider_rows:
             if shown >= max_rows:
                 break
@@ -566,11 +566,11 @@ def display_usage_rows(rows, args):
 
     hidden = len(rows) - shown
     if hidden > 0:
-        print_c(f"      +{hidden} more (use --verbose)", "\033[90m", args.no_color)
+        print_c(f"      +{hidden} more (use --verbose)", "\033[90m", getattr(args, 'no_color', False))
 
 def display_usage_rows_detailed(rows, args):
     if not rows:
-        print_c("      no usage", "\033[90m", args.no_color)
+        print_c("      no usage", "\033[90m", getattr(args, 'no_color', False))
         return
     for row in rows:
         toks = row.get("tokens") or {}
@@ -608,7 +608,7 @@ def format_credit_pair(remaining, total, unit):
 def display_credit_limits(limits, args):
     if not limits:
         return
-    print_c("    credits", "\033[90m", args.no_color)
+    print_c("    credits", "\033[90m", getattr(args, 'no_color', False))
     for limit in limits:
         unit = limit.get("unit") or "credits"
         remaining = float_value(limit.get("remaining"), 0.0)
@@ -627,9 +627,9 @@ def display_usage_source(name, data, args):
         if hide_optional_error and not getattr(args, "verbose", False):
             return
         print(f"\n  {name}")
-        print_c(f"    not configured: {data['error']}", "\033[90m", args.no_color)
+        print_c(f"    not configured: {data['error']}", "\033[90m", getattr(args, 'no_color', False))
         if data.get("hint"):
-            print_c(f"    {data['hint']}", "\033[90m", args.no_color)
+            print_c(f"    {data['hint']}", "\033[90m", getattr(args, 'no_color', False))
         return
     windows = data.get("windows", [])
     credit_limits = data.get("credit_limits") or []
@@ -645,21 +645,21 @@ def display_usage_source(name, data, args):
         if not models and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
             continue
         label = "today" if win["days"] == 1 else f"last {win['days']}d"
-        print_c(f"    {label}", "\033[90m", args.no_color)
+        print_c(f"    {label}", "\033[90m", getattr(args, 'no_color', False))
         if getattr(args, "verbose", False):
             display_usage_rows_detailed(models, args)
         else:
             display_usage_rows(models, args)
 
 def display_opencode_text(data, args):
-    if args.tool not in ("opencode", "pi", "all"):
+    if getattr(args, 'tool', None) not in ("opencode", "pi", "all"):
         return
         
     op = data.get("opencode") or {}
     pi = data.get("pi") or {}
     co = data.get("copilot_cli") or {}
     sources = [("opencode", op), ("pi", pi), ("copilot-cli", co)]
-    if args.tool == "pi":
+    if getattr(args, 'tool', None) == "pi":
         sources = [("pi", pi)]
     
     if not (getattr(args, "verbose", False) or getattr(args, "all", False)):
@@ -667,11 +667,11 @@ def display_opencode_text(data, args):
         for name, source in sources:
             has_data = has_data or any(w.get("models") for w in source.get("windows", []))
             has_data = has_data or bool(source.get("credit_limits"))
-            has_data = has_data or ("error" in source and (name == "opencode" or args.tool == name))
+            has_data = has_data or ("error" in source and (name == "opencode" or getattr(args, 'tool', None) == name))
         if not has_data:
             return
 
-    print_c(f"\n  Spend / Usage", "\033[1;36m", args.no_color)
+    print_c(f"\n  Spend / Usage", "\033[1;36m", getattr(args, 'no_color', False))
     for name, source in sources:
         display_usage_source(name, source, args)
 
@@ -683,7 +683,7 @@ def compact_reco_name(name):
     return name
 
 def display_at_glance(result, recs, args):
-    print_c("\n  At a glance", "\033[1;35m", args.no_color)
+    print_c("\n  At a glance", "\033[1;35m", getattr(args, 'no_color', False))
     labels = (
         ("hard", "hard task"),
         ("quick", "quick edit"),
@@ -692,12 +692,12 @@ def display_at_glance(result, recs, args):
     for key, label in labels:
         picks = recs.get(key) or []
         if not picks:
-            print_c(f"    {label:<10} no usable option", "\033[33m", args.no_color)
+            print_c(f"    {label:<10} no usable option", "\033[33m", getattr(args, 'no_color', False))
             continue
         top = picks[0]
         reset = f" · {top['reset_label']}" if top.get("reset_label") else ""
         line = f"    {label:<10} {compact_reco_name(top['name'])} · {top['headroom_pct']:.0f}% left{reset}"
-        print_c(line, "\033[32m", args.no_color)
+        print_c(line, "\033[32m", getattr(args, 'no_color', False))
 
     usage_sources = result.get("opencode") or {}
     top_usage = []
@@ -719,5 +719,5 @@ def display_at_glance(result, recs, args):
         print_c(
             f"    top usage  {row['source']}:{row['provider']}/{row['model']} · {_fmt_tokens(toks)} tokens today{cost_text}{parent_text}",
             "\033[90m",
-            args.no_color,
+            getattr(args, 'no_color', False),
         )

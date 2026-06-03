@@ -92,25 +92,25 @@ def main():
         result = {}
         fetchers = {}
         with ThreadPoolExecutor(max_workers=6) as executor:
-            if args.tool == "codex" or (args.tool == "all" and config.get("codex", {}).get("enabled", True)):
+            if args.tool == "codex" or (args.tool == "all" and str(config.get("codex", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
                 fetchers["codex"] = executor.submit(get_codex_data, args, config)
-            if args.tool == "amp" or (args.tool == "all" and config.get("amp", {}).get("enabled", True)):
+            if args.tool == "amp" or (args.tool == "all" and str(config.get("amp", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
                 fetchers["amp"] = executor.submit(get_amp_data, args)
-            if args.tool == "antigravity" or (args.tool == "all" and config.get("antigravity", {}).get("enabled", True)):
+            if args.tool == "antigravity" or (args.tool == "all" and str(config.get("antigravity", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
-            if args.tool == "opencode" or (args.tool == "all" and config.get("opencode", {}).get("enabled", True)):
+            if args.tool == "opencode" or (args.tool == "all" and str(config.get("opencode", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-            if args.tool == "pi" or (args.tool == "all" and config.get("pi", {}).get("enabled", False)):
+            if args.tool == "pi" or (args.tool == "all" and str(config.get("pi", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
-            if args.tool == "pioneer" or (args.tool == "all" and config.get("pioneer", {}).get("enabled", False)):
+            if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-            if args.tool == "agentrouter" or (args.tool == "all" and config.get("agentrouter", {}).get("enabled", False)):
+            if args.tool == "agentrouter" or (args.tool == "all" and str(config.get("agentrouter", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
-            if args.tool == "commandcode" or (args.tool == "all" and config.get("commandcode", {}).get("enabled", False)):
+            if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
-            if args.tool == "custom" or (args.tool == "all" and config.get("custom_tools", {}).get("enabled", False)):
+            if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
-            if args.tool == "cursor" or (args.tool == "all" and config.get("cursor", {}).get("enabled", True)):
+            if args.tool == "cursor" or (args.tool == "all" and str(config.get("cursor", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
                 fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
             for key, fut in fetchers.items():
                 try:

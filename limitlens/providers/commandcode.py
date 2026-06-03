@@ -139,7 +139,7 @@ def display_commandcode_text(data, args):
     for tier in visible_tiers:
         pct_left = tier.get("pct_left", 0.0)
         pct_used = tier.get("pct_used", 0.0)
-        b = bar(pct_used, no_color=args.no_color)
+        b = bar(pct_used, no_color=getattr(args, 'no_color', False))
         print(f"    credits          {b}  {pct_left:5.1f}% left  {tier['remaining']:.4f}/{tier['total']:.4f} credits")
 
     credits = data.get("credits") or {}
@@ -151,6 +151,6 @@ def display_commandcode_text(data, args):
     ):
         value = credits.get(key, 0.0)
         if value:
-            print_c(f"    {label:<16} {value:.4f} credits", "\033[90m", args.no_color)
+            print_c(f"    {label:<16} {value:.4f} credits", "\033[90m", getattr(args, 'no_color', False))
     if credits.get("below_threshold"):
-        print_c(f"    threshold        below {credits.get('threshold', 0.0):.4f}", "\033[33m", args.no_color)
+        print_c(f"    threshold        below {credits.get('threshold', 0.0):.4f}", "\033[33m", getattr(args, 'no_color', False))

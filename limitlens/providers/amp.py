@@ -46,7 +46,7 @@ def get_amp_data(args):
     email_match = re.search(r"Signed in as (\S+)", output)
     if email_match:
         email = email_match.group(1)
-        info["email"] = redact_email(email) if args.redact else email
+        info["email"] = redact_email(email) if getattr(args, 'redact', True) else email
 
     for line in output.splitlines():
         tier_match = re.match(
@@ -137,7 +137,7 @@ def display_amp_text(data, args):
     identity_line("amp", display_email, args)
 
     if not visible_tiers:
-        print_c(f"    {data.get('raw_output', '')}", "\033[90m", args.no_color)
+        print_c(f"    {data.get('raw_output', '')}", "\033[90m", getattr(args, 'no_color', False))
         return
 
     for tier in visible_tiers:
@@ -159,13 +159,13 @@ def display_amp_text(data, args):
 
         if pct_left is None:
             # Credit-only tier: no total known, show just the dollar amount
-            if args.no_color:
+            if getattr(args, 'no_color', False):
                 print(f"    {short:<14}   ${tier['remaining']:.2f} remaining{replenish}{full_at}")
             else:
                 print(f"    {short:<14}   \033[90m${tier['remaining']:.2f} remaining{replenish}{full_at}\033[0m")
         else:
-            b = bar(pct_used, no_color=args.no_color)
-            if args.no_color:
+            b = bar(pct_used, no_color=getattr(args, 'no_color', False))
+            if getattr(args, 'no_color', False):
                 print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}")
             else:
                 print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}\033[0m")
