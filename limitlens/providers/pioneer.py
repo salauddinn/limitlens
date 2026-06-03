@@ -29,7 +29,7 @@ def _has_config_balance(cfg):
     if not isinstance(cfg, dict):
         return False
     keys = (
-        "tiers", "credits_remaining", "credits_used", "credits_total", "remaining", "total",
+        "tiers", "credits_remaining", "credits_used", "credits_total",
         "free_tier_remaining", "total_usage", "credit_limit",
     )
     return any(key in cfg for key in keys)
@@ -109,10 +109,10 @@ def parse_pioneer_billing(data, args):
         if total > 0 and used <= 0:
             used = max(0.0, total - remaining)
         if total <= 0 and remaining > 0:
-            total = remaining
+            total = None
 
-        pct_left = (remaining / total * 100) if total > 0 else 0.0
-        pct_used = 100.0 - pct_left
+        pct_left = (remaining / total * 100) if (total is not None and total > 0) else None
+        pct_used = 100.0 - pct_left if pct_left is not None else None
 
         info["tiers"].append({
             "label": label,
@@ -129,7 +129,7 @@ def parse_pioneer_billing(data, args):
         pct_left = tier["pct_left"]
         visible = True
         if disp_cfg["auto_hide_enabled"]:
-            if pct_left < 10.0:
+            if pct_left is not None and pct_left < 10.0:
                 visible = False
         tier["visible"] = visible
 
@@ -177,11 +177,21 @@ def get_pioneer_data(args, config=None):
         return {"error": "Invalid JSON response from Pioneer API"}
 
     if not parsed:
+        if _has_config_balance(cfg):
+            return parse_pioneer_billing(cfg, args)
         return {"error": "Empty response from Pioneer API"}
 
     data = parsed.get("data", parsed)
+    if not data:
+        if _has_config_balance(cfg):
+            return parse_pioneer_billing(cfg, args)
+        return {"error": "Empty data in Pioneer API response"}
+
     if isinstance(data, dict):
-        data = {**cfg, **data}
+        merged = {**cfg, **data}
+        if not data.get("tiers") and cfg.get("tiers"):
+            merged["tiers"] = cfg["tiers"]
+        data = merged
     return parse_pioneer_billing(data, args)
 
 
@@ -217,18 +227,27 @@ def display_pioneer_text(data, args):
         if len(short) > 15:
             short = short[:15]
 
-        b = bar(pct_used, no_color=args.no_color)
+        b_val = pct_used if pct_used is not None else 0.0
+        b = bar(b_val, no_color=args.no_color)
         unit = tier.get("unit") or data.get("unit") or "$"
+        
+        t_tot = tier.get("total")
+        t_rem = tier.get("remaining", 0.0)
+        t_used = tier.get("used", 0.0)
+
         if unit == "$":
-            amount = f"${tier['remaining']:.2f}/${tier['total']:.2f}"
-            used = f"${tier.get('used', 0.0):.2f} used"
+            amount = f"${t_rem:.2f}/${t_tot:.2f}" if t_tot is not None else f"${t_rem:.2f}"
+            used_str = f"${t_used:.2f} used"
         else:
-            amount = f"{tier['remaining']:.2f}/{tier['total']:.2f} {unit}"
-            used = f"{tier.get('used', 0.0):.2f} {unit} used"
+            amount = f"{t_rem:.2f}/{t_tot:.2f} {unit}" if t_tot is not None else f"{t_rem:.2f} {unit}"
+            used_str = f"{t_used:.2f} {unit} used"
+            
+        pct_str = f"{pct_left:5.1f}% left" if pct_left is not None else "    ?% left"
+        
         if args.no_color:
-            print(f"    {short:<16} {b}  {pct_left:5.1f}% left  {amount}  {used}")
+            print(f"    {short:<16} {b}  {pct_str}  {amount}  {used_str}")
         else:
-            print(f"    {short:<16} {b}  {pct_left:5.1f}% left  \033[90m{amount}  {used}\033[0m")
+            print(f"    {short:<16} {b}  {pct_str}  \033[90m{amount}  {used_str}\033[0m")
 
     if data.get("used_today") or data.get("inferences_today"):
         used_today = _float(data.get("used_today"), 0.0)

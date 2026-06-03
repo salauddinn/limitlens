@@ -79,7 +79,7 @@ def parse_agentrouter_quota(payload, args, cfg=None):
     used = max(0.0, _number(data.get("used_quota"), 0.0))
     remaining = max(0.0, quota - used) if quota > 0 else 0.0
     request_count = max(0, _int(data.get("request_count"), 0))
-    pct_left = (remaining / quota * 100.0) if quota > 0 else 0.0
+    pct_left = max(0.0, (remaining / quota * 100.0)) if quota > 0 else 0.0
     pct_used = (used / quota * 100.0) if quota > 0 else 0.0
 
     unit = str(data.get("unit") or cfg.get("unit_label") or "units")
@@ -144,7 +144,7 @@ def get_agentrouter_data(args, config=None):
     manual = _manual_payload(cfg)
     headers = _auth_headers_from_env()
 
-    if not headers:
+    if not (headers.get("authorization") or headers.get("cookie")):
         if manual:
             return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
         return {"error": "AGENTROUTER_API_TOKEN or AGENTROUTER_COOKIE not set"}
@@ -172,6 +172,8 @@ def get_agentrouter_data(args, config=None):
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
+        if manual:
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
         return {"error": "Invalid JSON response from AgentRouter API"}
 
     return parse_agentrouter_quota(parsed, args, cfg)
@@ -200,7 +202,7 @@ def display_agentrouter_text(data, args):
         pct_left = tier.get("pct_left", 0.0)
         pct_used = tier.get("pct_used", 0.0)
         unit = tier.get("unit") or data.get("unit") or "units"
-        b = bar(pct_used, no_color=args.no_color)
+        b = bar(min(100.0, pct_used), no_color=args.no_color)
         used = _format_units(tier.get("used", 0.0))
         total = _format_units(tier.get("total", 0.0))
         remaining = _format_units(tier.get("remaining", 0.0))
