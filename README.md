@@ -128,10 +128,13 @@ Bring real-time quota visibility to your terminal window.
 ## ⚙️ Configuration & Privacy
 
 No configuration is required by default, but LimitLens is highly customizable.
-Create a config file at `~/.config/limitlens/config.json`:
+Create a config file at `~/.config/limitlens/config.json`. You can completely disable any supported provider by setting its `"enabled"` property to `false`:
 
 ```json
 {
+  "cursor": {
+    "enabled": false
+  },
   "display": {
     "auto_hide_enabled": true,
     "auto_hide_days": 1,

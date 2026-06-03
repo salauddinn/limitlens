@@ -4,6 +4,15 @@
     "auto_refresh": true,
     "ignored_accounts": []
   },
+  "cursor": {
+    "enabled": true
+  },
+  "amp": {
+    "enabled": true
+  },
+  "antigravity": {
+    "enabled": true
+  },
   "opencode": {
     "enabled": true,
     "db_path": "~/.local/share/opencode/opencode.db",
