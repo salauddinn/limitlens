@@ -269,9 +269,10 @@ class TestCLI(unittest.TestCase):
 
         mock_custom.assert_called_once()
 
+    @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("limitlens.waste_tracker.reset_snapshots")
     @patch("limitlens.cli.print_c")
-    def test_reset_waste(self, mock_print, mock_reset):
+    def test_reset_waste(self, mock_print, mock_reset, mock_config):
         mock_reset.return_value = True
 
         test_args = ["limitlens", "--reset-waste"]

@@ -172,114 +172,14 @@ def should_show_warning(message, args):
 def should_show_detail(args):
     return is_verbose(args)
 
-# ── Config ──────────────────────────────────────────────────────────────────
+from .config import (
+    DEFAULT_CONFIG,
+    deep_merge,
+    limitlens_config_path,
+    validate_config_types,
+    apply_env_overrides,
+    load_limitlens_config,
+    load_display_config,
+    configured_days,
+)
 
-DEFAULT_CONFIG = {
-    "codex": {
-        "enabled": True,
-        "auto_refresh": True,
-        "ignored_accounts": [],
-    },
-    "opencode": {
-        "enabled": True,
-        "db_path": "~/.local/share/opencode/opencode.db",
-        "days": [1, 7],
-        "providers": [],
-        "ignored_models": [],
-        "model_parents": {},
-    },
-    "pi": {
-        "enabled": True,
-        "sessions_dir": "~/.pi/agent/sessions",
-        "days": [1, 7],
-        "providers": [],
-        "ignored_models": [],
-        "model_parents": {},
-    },
-    "copilot_cli": {
-        "enabled": True,
-        "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
-        "days": [1, 7],
-    },
-    "pioneer": {
-        "enabled": False,
-    },
-    "agentrouter": {
-        "enabled": False,
-        "quota_url": "https://agentrouter.org/api/user/self",
-        "unit_label": "units",
-    },
-    "commandcode": {
-        "enabled": False,
-        "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
-    },
-    "custom_tools": {
-        "enabled": False,
-        "tools": {},
-    },
-    "display": {
-        "auto_hide_enabled": True,
-        "auto_hide_days": 1,
-        "amp_usable_pct": 30.0,
-    },
-}
-
-def load_display_config():
-    config = load_limitlens_config()
-    disp = config.get("display") or {}
-    try:
-        auto_hide_enabled = bool(disp.get("auto_hide_enabled", True))
-    except (TypeError, ValueError):
-        auto_hide_enabled = True
-    try:
-        auto_hide_days = int(disp.get("auto_hide_days", 1))
-    except (TypeError, ValueError):
-        auto_hide_days = 1
-    try:
-        amp_usable_pct = float(disp.get("amp_usable_pct", 30.0))
-    except (TypeError, ValueError):
-        amp_usable_pct = 30.0
-    return {
-        "auto_hide_enabled": auto_hide_enabled,
-        "auto_hide_days": auto_hide_days,
-        "amp_usable_pct": amp_usable_pct,
-    }
-
-def deep_merge(base, override):
-    out = dict(base)
-    for key, value in (override or {}).items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = deep_merge(out[key], value)
-        else:
-            out[key] = value
-    return out
-
-def limitlens_config_path():
-    return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
-
-def load_limitlens_config():
-    import copy
-    path = limitlens_config_path()
-    config = copy.deepcopy(DEFAULT_CONFIG)
-    if not os.path.exists(path):
-        return config
-    try:
-        with open(path, encoding="utf-8") as f:
-            user_config = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return config
-    if not isinstance(user_config, dict):
-        return config
-    return deep_merge(config, user_config)
-
-def configured_days(config_section):
-    days = config_section.get("days", [1, 7]) if isinstance(config_section, dict) else [1, 7]
-    out = []
-    for value in days:
-        try:
-            day = int(value)
-        except (TypeError, ValueError):
-            continue
-        if day > 0 and day not in out:
-            out.append(day)
-    return out or [1, 7]
