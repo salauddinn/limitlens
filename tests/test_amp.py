@@ -4,7 +4,7 @@
 import argparse
 import subprocess
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from limitlens.providers.amp import get_amp_data, display_amp_text
 

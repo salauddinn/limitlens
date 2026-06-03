@@ -1,4 +1,3 @@
-import json
 import unittest
 from unittest.mock import patch, mock_open
 from datetime import datetime, timezone

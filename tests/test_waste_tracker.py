@@ -1,7 +1,4 @@
-import json
-import os
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import patch, mock_open, MagicMock
 
 from limitlens import waste_tracker

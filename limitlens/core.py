@@ -6,7 +6,6 @@ the standard library and is imported by providers, cli, recommendations,
 and waste_tracker.
 """
 
-import json
 import os
 import re
 from datetime import datetime, timezone
@@ -172,7 +171,7 @@ def should_show_warning(message, args):
 def should_show_detail(args):
     return is_verbose(args)
 
-from .config import (
+from .config import (  # noqa: F401, E402
     DEFAULT_CONFIG,
     deep_merge,
     limitlens_config_path,
@@ -182,4 +181,3 @@ from .config import (
     load_display_config,
     configured_days,
 )
-

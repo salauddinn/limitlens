@@ -1,9 +1,8 @@
-import os
 import sys
 import json
 import pytest
 import subprocess
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 # Mock rumps BEFORE importing limitlens.menubar
 mock_rumps = MagicMock()
@@ -19,8 +18,8 @@ mock_rumps.timer = lambda x: (lambda f: f)
 mock_rumps.clicked = lambda x: (lambda f: f)
 sys.modules['rumps'] = mock_rumps
 
-import limitlens.menubar
-from limitlens.menubar import LimitLensApp
+import limitlens.menubar  # noqa: E402
+from limitlens.menubar import LimitLensApp  # noqa: E402
 
 @pytest.fixture
 def app():
@@ -85,11 +84,7 @@ def test_fetch_data_success_empty(app):
     mock_proc.returncode = 0
     mock_proc.stdout = json.dumps(mock_data)
 
-    def side_effect_exists(path):
-        return True
-
     with patch("threading.Thread") as mock_thread, \
-         patch("limitlens.menubar.os.path.exists", side_effect=side_effect_exists), \
          patch("subprocess.run", return_value=mock_proc):
          
         def mock_thread_init(target, daemon):
@@ -162,11 +157,7 @@ def test_fetch_data_success_with_quotas(app):
     mock_proc.returncode = 0
     mock_proc.stdout = json.dumps(mock_data)
 
-    def side_effect_exists(path):
-        return True
-
     with patch("threading.Thread") as mock_thread, \
-         patch("limitlens.menubar.os.path.exists", side_effect=side_effect_exists), \
          patch("subprocess.run", return_value=mock_proc), \
          patch.object(app, 'notify') as mock_notify:
          
@@ -212,11 +203,7 @@ def test_fetch_data_subprocess_error(app):
     mock_proc.returncode = 1
     mock_proc.stderr = "some error\nlast error line"
 
-    def side_effect_exists(path):
-        return True
-
     with patch("threading.Thread") as mock_thread, \
-         patch("limitlens.menubar.os.path.exists", side_effect=side_effect_exists), \
          patch("subprocess.run", return_value=mock_proc):
          
         def mock_thread_init(target, daemon):
@@ -228,11 +215,7 @@ def test_fetch_data_subprocess_error(app):
         assert app._pending_title == "🤖 Err: last error line"
 
 def test_fetch_data_subprocess_timeout(app):
-    def side_effect_exists(path):
-        return True
-
     with patch("threading.Thread") as mock_thread, \
-         patch("limitlens.menubar.os.path.exists", side_effect=side_effect_exists), \
          patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
          
         def mock_thread_init(target, daemon):
@@ -244,11 +227,7 @@ def test_fetch_data_subprocess_timeout(app):
         assert app._pending_title == "🤖 Timeout"
 
 def test_fetch_data_subprocess_exception(app):
-    def side_effect_exists(path):
-        return True
-
     with patch("threading.Thread") as mock_thread, \
-         patch("limitlens.menubar.os.path.exists", side_effect=side_effect_exists), \
          patch("subprocess.run", side_effect=ValueError("some bad error")):
          
         def mock_thread_init(target, daemon):

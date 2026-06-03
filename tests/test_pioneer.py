@@ -3,7 +3,6 @@ import os
 import urllib.error
 from unittest.mock import patch, MagicMock, ANY
 
-import pytest
 
 from limitlens.providers.pioneer import (
     _float,

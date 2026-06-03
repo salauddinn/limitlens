@@ -2,8 +2,7 @@ import json
 import sqlite3
 import tempfile
 import os
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timezone
 
 import pytest
 from limitlens.providers.observed import (

@@ -8,6 +8,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 import argparse
+import sqlite3
+import subprocess
 from unittest.mock import patch
 
 from limitlens.providers.codex import (
@@ -18,6 +20,18 @@ from limitlens.providers.codex import (
     window_key_and_label,
     get_codex_data,
     filter_accounts,
+    discover_accounts,
+    find_latest_session,
+    get_session_files_since,
+    parse_session_tokens,
+    find_log_issue_in_sqlite,
+    find_log_issue_in_text,
+    display_codex_text,
+    refresh_account,
+    refresh_accounts,
+    refresh_all_accounts,
+    account_is_ignored,
+    find_log_issue,
 )
 
 
@@ -322,28 +336,6 @@ class TestStalenessDetection(unittest.TestCase):
         self.assertIn("stale", lim["reset_time_fmt"])
 
 
-import json
-import os
-import tempfile
-import unittest
-from datetime import datetime, timedelta, timezone
-import argparse
-from unittest.mock import patch
-import subprocess
-
-from limitlens.providers.codex import (
-    discover_accounts,
-    find_latest_session,
-    get_session_files_since,
-    parse_session_tokens,
-    find_log_issue_in_sqlite,
-    find_log_issue_in_text,
-    display_codex_text,
-    refresh_account,
-    refresh_accounts,
-    refresh_all_accounts,
-    get_codex_data
-)
 
 class TestDiscoverAccounts(unittest.TestCase):
     @patch("limitlens.providers.codex.Path.home")
@@ -573,30 +565,6 @@ class TestGetCodexDataWeekly(unittest.TestCase):
         self.assertEqual(len(accounts), 1)
         self.assertEqual(accounts[0]["tokens"]["total_tokens"], 30)
 
-import json
-import os
-import tempfile
-import unittest
-from datetime import datetime, timedelta, timezone
-import argparse
-from unittest.mock import patch, mock_open
-import subprocess
-import sqlite3
-
-from limitlens.providers.codex import (
-    account_is_ignored,
-    parse_usage_limit_message,
-    parse_request_error_message,
-    find_log_issue_in_sqlite,
-    find_log_issue_in_text,
-    find_log_issue,
-    get_codex_data,
-    display_codex_text,
-    refresh_account,
-    refresh_accounts,
-    refresh_all_accounts,
-    parse_limits
-)
 
 class TestCodexEdgeCases(unittest.TestCase):
     def test_account_is_ignored(self):

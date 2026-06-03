@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 import unittest
-import os
 from unittest.mock import patch
 from limitlens.config import (
     deep_merge,
     configured_days,
-    load_display_config,
-    load_limitlens_config,
-    ConfigValidationError
+    load_display_config
 )
 
 class TestConfig(unittest.TestCase):

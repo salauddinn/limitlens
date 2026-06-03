@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock, mock_open
 import socket
 import ssl
-import json
 import urllib.error
 import urllib.request
 

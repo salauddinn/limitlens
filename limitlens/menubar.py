@@ -8,7 +8,6 @@ remaining quota percentages, helping users avoid rate limits. It also triggers
 desktop notifications when quotas run critically low.
 """
 import json
-import os
 import subprocess  # nosec B404
 import threading
 import sys

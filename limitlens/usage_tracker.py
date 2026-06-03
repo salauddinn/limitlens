@@ -8,7 +8,6 @@ waste_tracker.py. Imported historical data is merged on the fly for display.
 
 import json
 import os
-from datetime import datetime, timezone
 
 from . import waste_tracker
 
