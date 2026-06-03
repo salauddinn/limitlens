@@ -11,6 +11,15 @@ DEFAULT_CONFIG = {
         "auto_refresh": True,
         "ignored_accounts": [],
     },
+    "cursor": {
+        "enabled": True,
+    },
+    "amp": {
+        "enabled": True,
+    },
+    "antigravity": {
+        "enabled": True,
+    },
     "opencode": {
         "enabled": True,
         "db_path": "~/.local/share/opencode/opencode.db",

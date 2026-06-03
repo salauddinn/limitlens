@@ -49,6 +49,9 @@ def _main():
     parser.add_argument("--quick", action="store_true", help="One-line recommendation for quick edits / grunt work")
     parser.add_argument("--cli", action="store_true", help="One-line recommendation for CLI / scripting / pair-prog")
     parser.add_argument("--waste", action="store_true", help="Show waste report (%% of quota wasted at reset over last N days)")
+    parser.add_argument("--usage", action="store_true", help="Show usage tracking history")
+    parser.add_argument("--export-usage", type=str, help="Export usage tracking history to JSON file")
+    parser.add_argument("--import-usage", type=str, help="Import usage tracking history from JSON file")
     parser.add_argument("--days", type=int, default=7, help="Window for --waste report (default: 7)")
     parser.add_argument("--record", action="store_true", help="Quietly record a snapshot for waste tracking, then exit")
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
@@ -154,11 +157,42 @@ def _main():
     # or waste_tracker.py are missing (e.g. in isolated test runs).
     from . import recommendations as rec_mod
     from . import waste_tracker
+    from . import usage_tracker
 
     def _record(result):
         if not args.no_record:
             waste_tracker.record_snapshot(result)
+            usage_tracker.record_usage(result)
 
+
+    if args.export_usage:
+        ok = usage_tracker.export_usage(args.export_usage)
+        if ok:
+            print_c(f"  ✓ usage exported to {args.export_usage}", "\033[32m", args.no_color)
+        else:
+            print_c(f"  ⚠ failed to export usage to {args.export_usage}", "\033[31m", args.no_color)
+        return
+
+    if args.import_usage:
+        ok = usage_tracker.import_usage(args.import_usage)
+        if ok:
+            print_c(f"  ✓ usage imported from {args.import_usage}", "\033[32m", args.no_color)
+        else:
+            print_c(f"  ⚠ failed to import usage from {args.import_usage}", "\033[31m", args.no_color)
+        return
+
+    if args.usage:
+        try:
+            result = fetch_and_refresh()
+            _record(result)
+        except Exception as e:
+            if not args.json:
+                print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
+        if args.json:
+            print(json.dumps(usage_tracker._load_data(), indent=2))
+        else:
+            usage_tracker.display_usage_report(args, print_c)
+        return
     if args.reset_waste:
         ok = waste_tracker.reset_snapshots()
         if ok:
@@ -231,7 +265,7 @@ def _main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
             print_c("\n  Quota Left", "\033[1m", args.no_color)
 
         if "codex" in result:
@@ -240,6 +274,8 @@ def _main():
             display_amp_text(result["amp"], args)
         if "antigravity" in result:
             display_antigravity_text(result["antigravity"], args)
+        if "pi" in result:
+            display_pi_text(result["pi"], args)
         if "pioneer" in result:
             display_pioneer_text(result["pioneer"], args)
         if "agentrouter" in result:
@@ -252,8 +288,6 @@ def _main():
             display_cursor_text(result["cursor"], args)
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
-        if "pi" in result:
-            display_pi_text(result["pi"], args)
 
         print("\n  " + "─" * 52)
         if args.watch:

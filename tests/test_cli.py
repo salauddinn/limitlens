@@ -284,8 +284,9 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(any("waste history cleared" in str(call) for call in mock_print.mock_calls))
 
 
+    @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("argparse.ArgumentParser.error")
-    def test_invalid_interval(self, mock_error):
+    def test_invalid_interval(self, mock_error, mock_config):
         test_args = ["limitlens", "--interval", "0"]
         with patch.object(sys, "argv", test_args):
             main()
@@ -347,9 +348,10 @@ class TestCLI(unittest.TestCase):
         mock_refresh_accounts.assert_called_once_with(["stale_me"], TEST_CONFIG)
         self.assertTrue(any("refreshing stale codex accounts" in str(c) for c in mock_print.mock_calls))
 
+    @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("limitlens.waste_tracker.reset_snapshots", return_value=False)
     @patch("limitlens.cli.print_c")
-    def test_reset_waste_failure(self, mock_print, mock_reset):
+    def test_reset_waste_failure(self, mock_print, mock_reset, mock_config):
         test_args = ["limitlens", "--reset-waste"]
         with patch.object(sys, "argv", test_args):
             main()
