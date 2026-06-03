@@ -1,263 +1,154 @@
-# LimitLens
+<div align="center">
+  <img src="assets/limitlens_logo.png" alt="LimitLens Logo" width="150" style="border-radius: 20px;"/>
+  <h1>LimitLens 💡</h1>
+  <p><strong>The ultimate unified quota monitor for AI coding tools.</strong></p>
 
-[![CI](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml/badge.svg)](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+  [![CI](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml/badge.svg)](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+  [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
+  <br />
+</div>
 
-A unified status and quota checker for popular AI coding tools: **Codex**, **Amp**, **OpenCode**, **Pi**, **Antigravity**, **Pioneer**, and **AgentRouter/Kilo Code**.
-
-If you juggle multiple AI subscriptions and accounts and frequently run into rate limits, `limitlens` gives you a local, zero-dependency CLI tool (and an iTerm2 widget!) to monitor all of your available quotas in one place.
+If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **zero-dependency, local CLI tool**—along with a macOS menubar app and an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
 
 <p align="center">
-  <img src="assets/limitlens_status.png" alt="LimitLens Status Dashboard" width="480" style="max-width: 100%;">
-  <img src="assets/limitlens_reco.png" alt="LimitLens Smart Recommendation" width="480" style="max-width: 100%;">
+  <img src="assets/limitlens_status.png" alt="LimitLens Status Dashboard" width="45%" style="border-radius: 8px;">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/limitlens_reco.png" alt="LimitLens Smart Recommendation" width="45%" style="border-radius: 8px;">
 </p>
 
-## Features
-- **Unified Quota Tracking:** Instantly see the remaining headroom, reset times, and limits across all your installed accounts and profiles.
-- **Zero-Dependency CLI:** Written purely in standard Python with no runtime package dependencies; install with pip or run from a clone.
-- **iTerm2 Widget Included:** Features a built-in background script that puts a live, real-time widget in your iTerm2 status bar.
-- **Smart Recommendations:** Automatically suggests the best tool to use based on your remaining quota to avoid wasting your fast premium limits.
+---
 
-## Installation
+## ✨ Features
 
-### Option 1: pip install (recommended)
+- **📊 Unified Dashboard:** Instantly view remaining headroom, reset times, and limits across all your installed accounts and profiles.
+- **🧠 Smart Recommendations:** Automatically suggests the best tool for the job based on remaining quotas to prevent wasting premium fast requests.
+- **⚡ Zero-Dependency CLI:** Written purely in standard Python with absolutely no runtime package dependencies required.
+- **🍎 macOS Menubar App:** A sleek native menubar app that lives in your system tray and warns you when you run low.
+- **📟 iTerm2 Widget:** Native background script that powers a live, real-time widget directly in your terminal's status bar.
+- **🔒 Privacy First:** Never transmits or stores API keys or session cookies. Local outputs automatically redact sensitive paths and emails.
+
+---
+
+## 🚀 Installation
+
+### Option 1: pip install (Recommended)
+Install globally into your environment to access the `limitlens` command instantly:
 ```sh
 python -m pip install git+https://github.com/salauddinn/limitlens.git
 ```
 
-This installs the `limitlens` command in your active Python environment. You can also run it as a module:
-```sh
-limitlens --help
-python -m limitlens --help
-```
-
-### Option 2: Local development setup
+### Option 2: Clone and Alias
 ```sh
 git clone https://github.com/salauddinn/limitlens.git
 cd limitlens
-python -m pip install -e ".[dev]"
-python -m pytest
+# Add this to your ~/.zshrc or ~/.bashrc:
+alias limitlens="python3 $(pwd)/limitlens.py"
 ```
 
-### Option 3: Clone and alias
-Clone this repository anywhere on your machine:
-```sh
-git clone https://github.com/salauddinn/limitlens.git
-```
+---
 
-Then, add a permanent alias to your shell profile (e.g., `~/.zshrc`):
-```sh
-alias limitlens="python3 /path/to/limitlens/limitlens.py"
-```
+## 🔌 Supported Integrations
 
-## Usage
-
-```sh
-limitlens            # full status across all tools
-limitlens --sync-codex  # sync all Codex accounts before showing status
-limitlens --tool opencode
-limitlens --tool pi
-limitlens --tool pioneer
-limitlens --tool agentrouter
-limitlens --verbose  # show full usage rows and low-level warnings
-limitlens --help     # flags (e.g. --no-color, tool filters)
-```
-
-Codex stale session data is refreshed automatically before output. Use `--sync-codex` when you want to refresh every discovered Codex account, even if current data looks fresh.
-
-## iTerm2 Status Bar Widget
-
-You can add a live-updating widget to your iTerm2 status bar that shows your available quotas!
-
-1. Open **iTerm2**.
-2. Go to **Scripts -> Manage -> New Python Script**.
-3. Choose **Basic** -> **Long-Running Daemon**.
-4. Name it `iterm_widget.py`.
-5. Open the newly created file and copy-paste the contents of `iterm_widget.py` from this repository.
-6. **Important:** Edit the `USER_LIMITLENS_DIR` variable at the top of the script to point to the absolute path where you cloned this repository.
-7. Go to **iTerm2 Preferences -> Profiles -> Session -> Configure Status Bar** and drag the "LimitLens Widget" into your active components.
-
-*(Note: If you are an advanced user, you can simply symlink `iterm_widget.py` directly into your `~/Library/Application Support/iTerm2/Scripts/AutoLaunch` folder, and the script will automatically detect its directory without any configuration needed!)*
-
-## Configuration (Optional)
-
-Defaults work out of the box without a config file. To customize tracking and display behavior:
-1. Copy `config.example.json` to `~/.config/limitlens/config.json`, OR
-2. Set the environment variable `LIMITLENS_CONFIG=/path/to/config.json`.
-
-### Display & Privacy Settings
-
-Add a `"display"` section to your configuration to control output behavior:
-*   `auto_hide_enabled` (boolean, default: `true`): Automatically hide tools that have not been used recently to keep your terminal output clean.
-*   `auto_hide_days` (integer, default: `1`): Number of days of inactivity before a tool is hidden.
-*   `amp_usable_pct` (float, default: `30.0`): Percentage threshold below which Amp is flagged as low/unusable.
-
-**Provider Settings:**
-*   `codex.auto_refresh` (boolean, default: `true`): Automatically trigger a background refresh to fetch fresh quota limits if the cached data is deemed stale.
-*   `pi.sessions_dir` (string, default: `~/.pi/agent/sessions`): Local Pi session JSONL directory used for observed token/cost usage.
-
-**Privacy & Security:**
-*   `limitlens` does not store or transmit any sensitive information (such as API keys, secrets, or session cookies).
-*   Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
-
-### Platform Support
-
-The core engine and configuration are completely platform-agnostic, but individual providers have varying support depending on the underlying tool's native environment:
+LimitLens natively parses configs, SQLite databases, and APIs for leading tools. 
 
 | Provider | Supported OS | Notes / Details |
-|---|---|---|
+|:---|:---|:---|
 | **Codex** | macOS, Linux | Parses local configurations from `~/.codex-*` |
-| **Amp** | macOS, Linux | Executes the local `amp` binary to fetch quota |
-| **Antigravity** | macOS, Linux | Limited to Darwin/Linux systems |
-| **OpenCode** | macOS, Linux, Windows | Reads from the local OpenCode SQLite database |
-| **Pi** | macOS, Linux, Windows | Reads local `~/.pi/agent/sessions` JSONL usage data |
+| **Amp** | macOS, Linux | Executes local `amp` binary to fetch quota |
+| **Antigravity** | macOS, Linux | Limited to Darwin/Linux configurations |
+| **Cursor** | macOS, Linux, Win | Fetches active limits across Cursor tiers |
+| **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
+| **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
-| **AgentRouter/Kilo Code** | Any OS | Reads AgentRouter quota from env-authenticated API or sanitized manual config |
+| **AgentRouter / Kilo Code** | Any OS | Reads AgentRouter quota via env-authenticated API or custom config |
+| **Command Code**| Any OS | Web billing queried using `COMMANDCODE_COOKIE` |
 
-### Observed Usage Logging
+---
 
-OpenCode usage is read automatically from its local SQLite DB and grouped by provider/model. Pi usage is read locally from `~/.pi/agent/sessions` JSONL files and grouped the same way.
+## 💻 Usage
 
-If an OpenCode or Pi model is the same underlying quota as another tool, either exclude it from the usage rollup with `ignored_models`, or keep it visible and label its parent quota with `model_parents`:
+Monitor everything with a single command:
+
+```sh
+limitlens            # Show full status across all tracked AI tools
+limitlens --tool codex  # Filter output to a specific tool
+limitlens --watch    # Keep alive and refresh every 5 seconds
+limitlens --reco     # Only print the smart AI tool recommendation
+limitlens --waste    # Show waste report (% of quota wasted over 7 days)
+```
+
+> **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh.
+
+---
+
+## 🍎 macOS Menubar App
+
+LimitLens includes a native menubar app so you don't even have to open a terminal to check your limits.
+1. Install dependencies: `pip install rumps`
+2. Run the menubar app:
+   ```sh
+   python3 limitlens/menubar.py
+   ```
+It will add a bulb icon to your tray and notify you if your preferred AI quotas run critically low.
+
+---
+
+## 📟 iTerm2 Widget
+
+Bring real-time quota visibility to your terminal window.
+
+1. Open **iTerm2**.
+2. Go to **Scripts > Manage > New Python Script**.
+3. Choose **Basic** -> **Long-Running Daemon** and name it `iterm_widget.py`.
+4. Copy the contents of `iterm_widget.py` from this repository into the new file.
+5. Edit the `USER_LIMITLENS_DIR` variable inside to point to your clone.
+6. Enable it via **iTerm2 Preferences > Profiles > Session > Configure Status Bar**.
+
+---
+
+## ⚙️ Configuration & Privacy
+
+No configuration is required by default, but LimitLens is highly customizable.
+Create a config file at `~/.config/limitlens/config.json`:
 
 ```json
 {
-  "opencode": {
-    "ignored_models": [],
-    "model_parents": {
-      "openai/gpt-5.5": "Codex / codex-p1",
-      "anthropic/claude-opus-4-8": "Pioneer",
-      "google-vertex/*": "Vertex Free Trial"
-    }
+  "display": {
+    "auto_hide_enabled": true,
+    "auto_hide_days": 1,
+    "amp_usable_pct": 30.0
   },
-  "pi": {
-    "sessions_dir": "~/.pi/agent/sessions",
-    "ignored_models": [],
-    "model_parents": {
-      "openai-codex/gpt-5.5": "Codex default"
-    }
-  }
-}
-```
-
-To show manually tracked OpenCode credit balances alongside observed usage, add `credit_limits` under the `opencode` config:
-
-```json
-{
-  "opencode": {
-    "credit_limits": [
-      { "name": "Vertex Free Trial", "total": 28442.99, "remaining": 27793.82, "unit": "₹" }
-    ]
-  }
-}
-```
-
-You can provide `remaining`, `used`, or both. If `total` and `remaining` are set, LimitLens computes the used amount automatically.
-
-For Copilot CLI usage, launch Copilot with:
-```sh
-COPILOT_OTEL_FILE_EXPORTER_PATH=~/.cache/limitlens/copilot-otel.jsonl copilot
-```
-
-For Pioneer, set `PIONEER_API_TOKEN` in your environment. If your account uses a team billing endpoint, add the team id to your config and LimitLens will call `/billing/team/{team_id}/full-status`:
-
-```json
-{
-  "pioneer": {
-    "enabled": true,
-    "team_id": "your-team-id"
-  }
-}
-```
-
-The Pioneer `full-status` response reports usage in cents-like units, so LimitLens displays `credit_limit: 3000.0` as `$30.00`.
-
-For AgentRouter/Kilo Code, use environment variables for sensitive auth. Do not put copied curl cookies, session IDs, or bearer tokens in `config.json`:
-
-```sh
-export AGENTROUTER_COOKIE='<cookie value from your shell secret store>'
-export AGENTROUTER_NEW_API_USER='145176'
-limitlens --tool agentrouter
-```
-
-If you only want local tracking for AgentRouter/Kilo Code, treat it as a custom tool instead of storing copied API/session material:
-
-```json
-{
   "custom_tools": {
     "enabled": true,
     "tools": {
       "kilo": {
         "name": "Kilo Code",
-        "command": "use Kilo Code",
-        "surface": "ide",
-        "quality": "premium",
-        "cost_class": "prepaid",
-        "unit": "units",
         "total": 84917038,
-        "used": 2582962,
-        "request_count": 42
+        "used": 2582962
       }
     }
   }
 }
 ```
 
-For Command Code credits, LimitLens can query the web billing endpoint, but the session cookie must come from your shell environment. Do not put the cookie in `config.json`:
+### 🔒 Privacy Guarantee
+* `limitlens` does **not** store or transmit any sensitive information (such as API keys, secrets, or session cookies).
+* All operations are local or direct to the provider's API.
+* Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
 
+---
+
+## 🤝 Contributing & Support
+
+We welcome contributions! To test locally:
 ```sh
-export COMMANDCODE_COOKIE='<commandcode.ai cookie from your shell secret store>'
-limitlens --tool commandcode
+python -m pip install -e ".[dev]"
+python -m pytest tests/
 ```
 
-Enable it for the main dashboard with:
+If **LimitLens** has saved you from rate limits, consider buying me a coffee to support continued development!
 
-```json
-{
-  "commandcode": {
-    "enabled": true,
-    "credits_url": "https://api.commandcode.ai/internal/billing/credits?"
-  }
-}
-```
-
-For any other tool that does not need a dedicated API parser, use `custom_tools`. This is config-only and safe for manually tracked quotas. Pioneer can also be represented this way if you are manually tracking the balance:
-
-```json
-{
-  "custom_tools": {
-    "enabled": true,
-    "tools": {
-      "pioneer": {
-        "name": "Pioneer",
-        "command": "pioneer",
-        "surface": "cli",
-        "quality": "premium",
-        "cost_class": "metered",
-        "unit": "$",
-        "total": 30.0,
-        "remaining": 23.94,
-        "used": 6.06,
-        "request_count": 78,
-        "note": "$6.06 used today on 78 inferences"
-      }
-    }
-  }
-}
-```
-
-## Testing
-
-To run the unit tests:
-```sh
-python3 -m pytest tests/
-```
-
-## Support
-
-If `limitlens` helps you manage your AI quotas and avoid rate limits, consider buying me a coffee!
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
+<a href="https://buymeacoffee.com/salauddin.n" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 145px !important;" ></a>

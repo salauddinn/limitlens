@@ -158,7 +158,7 @@ def get_agentrouter_data(args, config=None):
         req.add_header(key, value)
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if manual:

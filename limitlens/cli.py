@@ -7,8 +7,6 @@ and waste tracker into the unified ``limitlens`` command.
 
 import argparse
 import json
-import os
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -33,9 +31,7 @@ from .providers import (
     get_cursor_data, display_cursor_text,
 )
 from .providers.observed import display_at_glance
-
-
-def main():
+def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, and Antigravity")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
@@ -138,7 +134,7 @@ def main():
         if auto_refresh:
             for acc in result.get("codex", {}).get("accounts", []):
                 name = acc.get("name")
-                if not name or not any(l.get("is_stale") for l in acc.get("limits", [])):
+                if not name or not any(lim.get("is_stale") for lim in acc.get("limits", [])):
                     continue
                 last_attempt = codex_refresh_attempts.get(name)
                 if args.watch and last_attempt is not None and now - last_attempt < codex_refresh_cooldown:
@@ -223,7 +219,7 @@ def main():
             print(json.dumps(payload, indent=2))
             return
 
-        print_c(f"\n  AI Tools Status", "\033[1m", args.no_color)
+        print_c("\n  AI Tools Status", "\033[1m", args.no_color)
         if args.watch:
             print_c(
                 f"  watching every {args.interval:g}s  updated {format_timestamp(datetime.now().astimezone())}",
@@ -283,3 +279,16 @@ def main():
     result = fetch_and_refresh()
     _record(result)
     display_result(result)
+
+def main():
+    """Main execution wrapper to gracefully handle top-level exceptions."""
+    try:
+        _main()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        import sys
+        print("\n  \033[31m[LimitLens] An unexpected error occurred.\033[0m")
+        print(f"  \033[90mDetails:\033[0m {e}")
+        print("  \033[90mIf this persists, please open an issue on GitHub.\033[0m\n")
+        sys.exit(1)

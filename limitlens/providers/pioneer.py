@@ -160,7 +160,7 @@ def get_pioneer_data(args, config=None):
     req.add_header("referer", "https://agent.pioneer.ai/")
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if _has_config_balance(cfg):

@@ -1,452 +1,402 @@
-#!/usr/bin/env python3
-"""Tests for limitlens.providers.observed — OpenCode SQLite + Copilot OTel usage."""
-
 import json
-import os
 import sqlite3
 import tempfile
-import unittest
-import argparse
-import io
-from contextlib import redirect_stdout
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
+import pytest
 from limitlens.providers.observed import (
-    get_opencode_usage,
-    get_pi_usage,
-    display_opencode_text,
-    parse_otel_timestamp,
-    pi_usage_tokens,
+    usage_window_start, millis_from_dt, empty_usage_totals, add_usage,
+    token_total_value, usage_summary_rows, float_value, first_present,
+    normalize_credit_limit, get_opencode_credit_limits, model_is_ignored,
+    model_parent_label, get_opencode_usage, find_values_by_key,
+    first_number_for_keys, first_string_for_keys, parse_otel_timestamp,
+    get_copilot_cli_usage, pi_usage_cost, pi_usage_tokens, get_pi_usage,
+    get_opencode_data, get_pi_data, display_pi_text, display_usage_rows,
+    display_usage_rows_detailed, format_credit_amount, format_credit_pair,
+    display_credit_limits, display_usage_source, display_opencode_text,
+    compact_reco_name, display_at_glance
 )
 
-class TestOpenCodeUsage(unittest.TestCase):
-    def test_get_opencode_usage_from_sqlite(self):
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            db_path = f.name
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute("CREATE TABLE message (time_created integer NOT NULL, data text NOT NULL)")
-            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-            payload = {
-                "role": "assistant",
-                "providerID": "google-vertex",
-                "modelID": "gemini-test",
-                "cost": 0.25,
-                "tokens": {
-                    "total": 100,
-                    "input": 30,
-                    "output": 20,
-                    "reasoning": 5,
-                    "cache": {"read": 40, "write": 5},
-                },
-                "time": {"created": now_ms, "completed": now_ms + 1},
+# test usage_window_start
+def test_usage_window_start():
+    dt = usage_window_start(1)
+    now = datetime.now(timezone.utc)
+    assert (now - dt).total_seconds() >= 86390 # roughly 1 day
+    
+# test millis_from_dt
+def test_millis_from_dt():
+    dt = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert millis_from_dt(dt) == 1672531200000
+
+def test_empty_usage_totals():
+    totals = empty_usage_totals()
+    assert totals["requests"] == 0
+    assert totals["cost"] == 0.0
+    assert totals["tokens"]["total"] == 0
+
+def test_add_usage():
+    t = empty_usage_totals()
+    add_usage(t, cost=1.5, tokens={"total": 10, "input": 4, "output": 6})
+    assert t["requests"] == 1
+    assert t["cost"] == 1.5
+    assert t["tokens"]["total"] == 10
+    assert t["tokens"]["input"] == 4
+    assert t["tokens"]["output"] == 6
+    # bad cost
+    add_usage(t, cost="invalid", tokens={"cache": {"read": 5, "write": 5}})
+    assert t["requests"] == 2
+    assert t["cost"] == 1.5
+    assert t["tokens"]["cache_read"] == 5
+
+# test token_total_value
+def test_token_total_value():
+    assert token_total_value({"total": 10}) == 10
+    assert token_total_value({"input": 2, "output": 3}) == 5
+    assert token_total_value({"cache": {"read": 4, "write": 1}}) == 5
+    assert token_total_value(None) == 0
+
+def test_usage_summary_rows():
+    by_key = {
+        ("openai", "gpt-4"): {"requests": 10, "cost": 0.5, "tokens": {"total": 100}, "parent": "gpt"},
+        ("anthropic", "claude"): {"requests": 5, "cost": 0.1, "tokens": {"total": 50}},
+    }
+    rows = usage_summary_rows(by_key)
+    assert len(rows) == 2
+    assert rows[0]["model"] == "gpt-4"
+    assert rows[0]["parent"] == "gpt"
+    assert rows[1]["model"] == "claude"
+
+def test_float_value():
+    assert float_value(1.5) == 1.5
+    assert float_value("2.5") == 2.5
+    assert float_value("invalid", 3.0) == 3.0
+
+def test_first_present():
+    assert first_present({"a": 1, "b": 2}, ("c", "b", "a")) == 2
+    assert first_present({}, ("a",)) is None
+
+def test_normalize_credit_limit():
+    assert normalize_credit_limit({"credits_total": 100, "credits_remaining": 50})["remaining"] == 50.0
+    assert normalize_credit_limit({"total": 100, "used": 20})["remaining"] == 80.0
+    assert normalize_credit_limit({"remaining": 40, "used": 60})["total"] == 100.0
+    assert normalize_credit_limit(None) is None
+    assert normalize_credit_limit({"total": -1, "remaining": -1, "used": -1}) is None
+    assert normalize_credit_limit({"total": 100})["remaining"] == 100.0
+    assert normalize_credit_limit({"remaining": 100})["total"] == 100.0
+
+def test_get_opencode_credit_limits():
+    cfg = {"credit_limits": [{"credits_total": 100, "credits_remaining": 50}]}
+    limits = get_opencode_credit_limits(cfg)
+    assert len(limits) == 1
+    assert limits[0]["total"] == 100
+    
+    cfg2 = {"credit_limits": {"my_limit": {"credits_total": 10, "credits_remaining": 5}}}
+    limits2 = get_opencode_credit_limits(cfg2)
+    assert len(limits2) == 1
+    assert limits2[0]["name"] == "my_limit"
+
+    cfg3 = {"credits_total": 50, "credits_remaining": 10}
+    assert len(get_opencode_credit_limits(cfg3)) == 1
+    
+    cfg4 = {"credit_limits": {"my_limit": 5, "credits_total": 100, "credits_remaining": 50}}
+    assert len(get_opencode_credit_limits(cfg4)) == 1
+
+def test_model_is_ignored():
+    assert model_is_ignored("openai", "gpt-4", ["openai/gpt-4"])
+    assert model_is_ignored("openai", "gpt-4", "gpt-4")
+    assert not model_is_ignored("openai", "gpt-4", ["claude"])
+    assert not model_is_ignored("openai", "gpt-4", None)
+
+def test_model_parent_label():
+    parents = {"openai/gpt-4": "gpt4-group", "anthropic/*": "anthropic-group", "llama": "meta"}
+    assert model_parent_label("openai", "gpt-4", parents) == "gpt4-group"
+    assert model_parent_label("anthropic", "claude-3", parents) == "anthropic-group"
+    assert model_parent_label("meta", "llama", parents) == "meta"
+    assert model_parent_label("meta", "llama2", parents) is None
+    assert model_parent_label("a", "b", None) is None
+
+def test_find_values_by_key():
+    assert find_values_by_key({"a": 1, "b": {"a": 2}}, {"a"}) == [1, 2]
+    assert find_values_by_key([{"a": 1}, {"a": 2}], {"a"}) == [1, 2]
+
+def test_first_number_for_keys():
+    assert first_number_for_keys({"a": 1, "b": "invalid", "c": {"a": 2}}, ["a"]) == 1
+    assert first_number_for_keys({"x": "y"}, ["a"]) == 0
+
+def test_first_string_for_keys():
+    assert first_string_for_keys({"a": "val1"}, ["a"]) == "val1"
+    assert first_string_for_keys({"a": ""}, ["a"]) == "unknown"
+
+def test_parse_otel_timestamp():
+    assert parse_otel_timestamp(1672531200.0) == datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert parse_otel_timestamp(1672531200000) == datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert parse_otel_timestamp(1672531200000000000) == datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert parse_otel_timestamp("1672531200") == datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert parse_otel_timestamp("2023-01-01T00:00:00Z") == datetime(2023, 1, 1, tzinfo=timezone.utc)
+    assert parse_otel_timestamp(None) is None
+    assert parse_otel_timestamp("invalid") is None
+
+@pytest.fixture
+def opencode_db():
+    fd, path = tempfile.mkstemp()
+    os.close(fd)
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE message (id INTEGER, time_created INTEGER, data TEXT)")
+    
+    # insert data
+    now_ms = millis_from_dt(datetime.now(timezone.utc))
+    valid_data = {
+        "role": "assistant",
+        "providerID": "openai",
+        "modelID": "gpt-4",
+        "tokens": {"total": 100},
+        "cost": 0.05,
+        "time": {"created": now_ms}
+    }
+    conn.execute("INSERT INTO message VALUES (1, ?, ?)", (now_ms, json.dumps(valid_data)))
+    
+    invalid_data = "{"
+    conn.execute("INSERT INTO message VALUES (2, ?, ?)", (now_ms, invalid_data))
+    
+    no_tokens = {"role": "assistant"}
+    conn.execute("INSERT INTO message VALUES (3, ?, ?)", (now_ms, json.dumps(no_tokens)))
+    
+    conn.commit()
+    conn.close()
+    
+    yield path
+    os.remove(path)
+
+def test_get_opencode_usage(opencode_db):
+    config = {
+        "opencode": {
+            "enabled": True,
+            "db_path": opencode_db,
+            "providers": ["openai"],
+            "ignored_models": ["gpt-3.5"],
+            "parents": {"openai/gpt-4": "gpt4-parent"}
+        }
+    }
+    usage = get_opencode_usage(config)
+    assert "error" not in usage
+    assert "windows" in usage
+    models = usage["windows"][0]["models"]
+    assert len(models) == 1
+    assert models[0]["model"] == "gpt-4"
+    assert models[0]["parent"] == "gpt4-parent"
+    assert models[0]["tokens"]["total"] == 100
+    
+    # disabled
+    assert get_opencode_usage({"opencode": {"enabled": False}}) == {"disabled": True}
+    # missing db
+    assert "error" in get_opencode_usage({"opencode": {"db_path": "/nonexistent/db.sqlite"}})
+
+@pytest.fixture
+def copilot_otel():
+    fd, path = tempfile.mkstemp()
+    os.close(fd)
+    
+    now_ns = int(datetime.now(timezone.utc).timestamp() * 1e9)
+    valid_record = {
+        "timeUnixNano": now_ns,
+        "gen_ai.usage.input_tokens": 50,
+        "gen_ai.usage.output_tokens": 100,
+        "gen_ai.system": "github-copilot",
+        "gen_ai.request.model": "gpt-4-copilot"
+    }
+    
+    with open(path, "w") as f:
+        f.write(json.dumps(valid_record) + "\n")
+        f.write("invalid json\n")
+        f.write('{"timeUnixNano": 1}\n') # old
+        
+    yield path
+    os.remove(path)
+
+def test_get_copilot_cli_usage(copilot_otel):
+    config = {
+        "copilot_cli": {
+            "enabled": True,
+            "otel_jsonl_path": copilot_otel
+        }
+    }
+    usage = get_copilot_cli_usage(config)
+    assert "error" not in usage
+    assert len(usage["windows"]) > 0
+    models = usage["windows"][0]["models"]
+    if models:
+        assert models[0]["model"] == "gpt-4-copilot"
+        assert models[0]["tokens"]["input"] == 50
+        assert models[0]["tokens"]["output"] == 100
+        
+    assert get_copilot_cli_usage({"copilot_cli": {"enabled": False}}) == {"disabled": True}
+    assert "error" in get_copilot_cli_usage({"copilot_cli": {"otel_jsonl_path": "/nonexistent/path"}})
+
+def test_pi_usage_cost():
+    assert pi_usage_cost({"cost": 1.5}) == 1.5
+    assert pi_usage_cost({"cost": {"total": 2.0}}) == 2.0
+    assert pi_usage_cost(None) == 0
+
+def test_pi_usage_tokens():
+    assert pi_usage_tokens({"input": 10, "output": 20})["total"] == 30
+    assert pi_usage_tokens({"totalTokens": 100})["total"] == 100
+    assert pi_usage_tokens(None) == {}
+
+@pytest.fixture
+def pi_sessions():
+    path = tempfile.mkdtemp()
+    
+    now_ms = millis_from_dt(datetime.now(timezone.utc))
+    valid_record = {
+        "type": "message",
+        "timestamp": now_ms,
+        "message": {
+            "role": "assistant",
+            "provider": "anthropic",
+            "model": "claude-3",
+            "usage": {"input": 100, "output": 50, "cost": 0.01}
+        }
+    }
+    
+    with open(os.path.join(path, "session.jsonl"), "w") as f:
+        f.write(json.dumps(valid_record) + "\n")
+        f.write("invalid json\n")
+        
+    yield path
+    # clean up
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.rmdir(path)
+
+def test_get_pi_usage(pi_sessions):
+    config = {
+        "pi": {
+            "enabled": True,
+            "sessions_dir": pi_sessions
+        }
+    }
+    usage = get_pi_usage(config)
+    assert "error" not in usage
+    models = usage["windows"][0]["models"]
+    if models:
+        assert models[0]["model"] == "claude-3"
+        assert models[0]["tokens"]["input"] == 100
+
+    assert get_pi_usage({"pi": {"enabled": False}}) == {"disabled": True}
+    assert "error" in get_pi_usage({"pi": {"sessions_dir": "/nonexistent/pi/dir"}})
+
+def test_get_opencode_data():
+    data = get_opencode_data({}, {})
+    assert "opencode" in data
+    assert "pi" in data
+    assert "copilot_cli" in data
+
+def test_get_pi_data():
+    data = get_pi_data({}, {})
+    assert isinstance(data, dict)
+
+# Output tests
+class DummyArgs:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+def test_display_usage_rows(capsys):
+    rows = [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100}, "parent": "p"}]
+    display_usage_rows(rows, DummyArgs(verbose=False, no_color=True))
+    captured = capsys.readouterr()
+    assert "m1" in captured.out
+    
+    display_usage_rows([], DummyArgs(verbose=False, no_color=True))
+    assert "no usage" in capsys.readouterr().out
+
+def test_display_usage_rows_detailed(capsys):
+    rows = [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100, "input": 50, "output": 50}, "parent": "p"}]
+    display_usage_rows_detailed(rows, DummyArgs(verbose=False, no_color=True))
+    captured = capsys.readouterr()
+    assert "m1" in captured.out
+
+    display_usage_rows_detailed([], DummyArgs(verbose=False, no_color=True))
+    assert "no usage" in capsys.readouterr().out
+
+def test_format_credit_amount():
+    assert format_credit_amount(10.5, "USD") == "$10.50"
+    assert format_credit_amount(10.5, "INR") == "₹10.50"
+    assert format_credit_amount(10.5, "credits") == "10.50 credits"
+
+def test_format_credit_pair():
+    assert format_credit_pair(5.5, 10.0, "USD") == "$5.50/$10.00"
+    assert format_credit_pair(5.5, 10.0, "credits") == "5.50/10.00 credits"
+
+def test_display_credit_limits(capsys):
+    limits = [{"name": "test", "remaining": 5.0, "total": 10.0, "used": 5.0, "pct_left": 50.0, "unit": "USD"}]
+    display_credit_limits(limits, DummyArgs(no_color=True))
+    captured = capsys.readouterr()
+    assert "test" in captured.out
+    assert "$5.00/$10.00" in captured.out
+
+def test_display_usage_source(capsys):
+    display_usage_source("test", {"disabled": True}, DummyArgs())
+    assert capsys.readouterr().out == ""
+    
+    display_usage_source("test", {"error": "err"}, DummyArgs(no_color=True, verbose=True))
+    assert "err" in capsys.readouterr().out
+    
+    data = {
+        "windows": [{"days": 1, "since": "2023-01-01", "models": [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100}, "parent": "p"}]}]
+    }
+    display_usage_source("test", data, DummyArgs(no_color=True, verbose=True))
+    assert "m1" in capsys.readouterr().out
+    
+    data_empty = {"windows": [{"days": 1, "since": "2023-01-01", "models": []}]}
+    display_usage_source("test", data_empty, DummyArgs(no_color=True, verbose=False, all=False))
+    assert capsys.readouterr().out == ""
+    
+    display_usage_source("test", data_empty, DummyArgs(no_color=True, verbose=True, all=False))
+    assert "no usage" in capsys.readouterr().out
+
+def test_display_opencode_text(capsys):
+    data = {
+        "opencode": {"windows": [{"days": 1, "since": "2023-01-01", "models": [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100}, "parent": "p"}]}]}
+    }
+    display_opencode_text(data, DummyArgs(tool="all", no_color=True, verbose=True))
+    assert "m1" in capsys.readouterr().out
+    
+    data_empty = {"opencode": {"windows": []}}
+    display_opencode_text(data_empty, DummyArgs(tool="all", no_color=True, verbose=False, all=False))
+    assert capsys.readouterr().out == ""
+
+def test_display_pi_text(capsys):
+    data = {"windows": [{"days": 1, "since": "2023-01-01", "models": [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100}, "parent": "p"}]}]}
+    display_pi_text(data, DummyArgs(tool="all", no_color=True, verbose=True))
+    assert "m1" in capsys.readouterr().out
+
+def test_compact_reco_name():
+    assert compact_reco_name("antigravity: Claude Opus 4.6") == "ag: Opus 4.6"
+    assert compact_reco_name("Gemini 3.5 Flash") == "Flash"
+    assert compact_reco_name("Gemini 3.1 Pro") == "Gemini Pro"
+
+def test_display_at_glance(capsys):
+    result = {
+        "opencode": {
+            "op": {
+                "windows": [{"days": 1, "models": [{"provider": "p", "model": "m", "tokens": {"total": 100}, "cost": 0.0, "parent": ""}]}]
             }
-            conn.execute("INSERT INTO message VALUES (?, ?)", (now_ms, json.dumps(payload)))
-            conn.commit()
-            conn.close()
-
-            result = get_opencode_usage({
-                "opencode": {
-                    "enabled": True,
-                    "db_path": db_path,
-                    "days": [1],
-                    "providers": [],
-                }
-            })
-
-            models = result["windows"][0]["models"]
-            self.assertEqual(len(models), 1)
-            self.assertEqual(models[0]["provider"], "google-vertex")
-            self.assertEqual(models[0]["model"], "gemini-test")
-            self.assertEqual(models[0]["requests"], 1)
-            self.assertEqual(models[0]["tokens"]["total"], 100)
-            self.assertEqual(models[0]["tokens"]["cache_read"], 40)
-        finally:
-            os.unlink(db_path)
-
-    def test_disabled(self):
-        result = get_opencode_usage({"opencode": {"enabled": False}})
-        self.assertTrue(result.get("disabled"))
-
-    def test_missing_db(self):
-        result = get_opencode_usage({
-            "opencode": {
-                "enabled": True,
-                "db_path": "/nonexistent/path/opencode.db",
-                "days": [1],
-                "providers": [],
-            }
-        })
-        self.assertIn("error", result)
-
-    def test_credit_limits_from_config(self):
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            db_path = f.name
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute("CREATE TABLE message (time_created integer NOT NULL, data text NOT NULL)")
-            conn.commit()
-            conn.close()
-
-            result = get_opencode_usage({
-                "opencode": {
-                    "enabled": True,
-                    "db_path": db_path,
-                    "days": [1],
-                    "credit_limits": [
-                        {"name": "monthly", "total": 100, "remaining": 60},
-                        {"name": "api", "remaining": 7, "used": 3},
-                    ],
-                }
-            })
-
-            limits = {limit["name"]: limit for limit in result["credit_limits"]}
-            self.assertEqual(limits["monthly"]["used"], 40.0)
-            self.assertEqual(limits["monthly"]["pct_left"], 60.0)
-            self.assertEqual(limits["api"]["total"], 10.0)
-        finally:
-            os.unlink(db_path)
-
-    def test_ignored_models_exclude_duplicate_usage(self):
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            db_path = f.name
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute("CREATE TABLE message (time_created integer NOT NULL, data text NOT NULL)")
-            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-            for provider, model in (("openai", "gpt-5.5"), ("anthropic", "claude-test")):
-                payload = {
-                    "role": "assistant",
-                    "providerID": provider,
-                    "modelID": model,
-                    "tokens": {"total": 100},
-                    "time": {"created": now_ms},
-                }
-                conn.execute("INSERT INTO message VALUES (?, ?)", (now_ms, json.dumps(payload)))
-            conn.commit()
-            conn.close()
-
-            result = get_opencode_usage({
-                "opencode": {
-                    "enabled": True,
-                    "db_path": db_path,
-                    "days": [1],
-                    "ignored_models": ["openai/gpt-5.5"],
-                }
-            })
-
-            models = result["windows"][0]["models"]
-            self.assertEqual(len(models), 1)
-            self.assertEqual(models[0]["provider"], "anthropic")
-            self.assertEqual(models[0]["model"], "claude-test")
-        finally:
-            os.unlink(db_path)
-
-    def test_model_parent_labels_are_added(self):
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            db_path = f.name
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute("CREATE TABLE message (time_created integer NOT NULL, data text NOT NULL)")
-            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-            payload = {
-                "role": "assistant",
-                "providerID": "google-vertex",
-                "modelID": "gemini-test",
-                "tokens": {"total": 100},
-                "time": {"created": now_ms},
-            }
-            conn.execute("INSERT INTO message VALUES (?, ?)", (now_ms, json.dumps(payload)))
-            conn.commit()
-            conn.close()
-
-            result = get_opencode_usage({
-                "opencode": {
-                    "enabled": True,
-                    "db_path": db_path,
-                    "days": [1],
-                    "model_parents": {"google-vertex/*": "Vertex Free Trial"},
-                }
-            })
-
-            model = result["windows"][0]["models"][0]
-            self.assertEqual(model["parent"], "Vertex Free Trial")
-        finally:
-            os.unlink(db_path)
-
-    def test_get_pi_usage_from_local_sessions(self):
-        with tempfile.TemporaryDirectory() as sessions_dir:
-            session_path = os.path.join(sessions_dir, "project", "session.jsonl")
-            os.makedirs(os.path.dirname(session_path))
-            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-            records = [
-                {"type": "session", "version": 3, "id": "s1", "timestamp": datetime.now(timezone.utc).isoformat()},
-                {
-                    "type": "message",
-                    "id": "a1",
-                    "parentId": None,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "message": {
-                        "role": "assistant",
-                        "provider": "openai-codex",
-                        "model": "gpt-5.5",
-                        "timestamp": now_ms,
-                        "usage": {
-                            "input": 100,
-                            "output": 50,
-                            "cacheRead": 25,
-                            "cacheWrite": 5,
-                            "totalTokens": 180,
-                            "cost": {"total": 0.12},
-                        },
-                    },
-                },
-            ]
-            with open(session_path, "w", encoding="utf-8") as f:
-                for rec in records:
-                    f.write(json.dumps(rec) + "\n")
-
-            result = get_pi_usage({"pi": {"enabled": True, "sessions_dir": sessions_dir, "days": [1]}})
-
-            models = result["windows"][0]["models"]
-            self.assertEqual(len(models), 1)
-            self.assertEqual(models[0]["provider"], "openai-codex")
-            self.assertEqual(models[0]["model"], "gpt-5.5")
-            self.assertEqual(models[0]["requests"], 1)
-            self.assertEqual(models[0]["tokens"]["total"], 180)
-            self.assertEqual(models[0]["tokens"]["cache_read"], 25)
-            self.assertAlmostEqual(models[0]["cost"], 0.12)
-
-    def test_pi_ignored_models_exclude_duplicate_usage(self):
-        with tempfile.TemporaryDirectory() as sessions_dir:
-            session_path = os.path.join(sessions_dir, "session.jsonl")
-            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-            with open(session_path, "w", encoding="utf-8") as f:
-                for provider, model in (("openai-codex", "gpt-5.5"), ("google-vertex", "gemini-test")):
-                    f.write(json.dumps({
-                        "type": "message",
-                        "id": model,
-                        "parentId": None,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "message": {
-                            "role": "assistant",
-                            "provider": provider,
-                            "model": model,
-                            "timestamp": now_ms,
-                            "usage": {"totalTokens": 100},
-                        },
-                    }) + "\n")
-
-            result = get_pi_usage({
-                "pi": {
-                    "enabled": True,
-                    "sessions_dir": sessions_dir,
-                    "days": [1],
-                    "ignored_models": ["openai-codex/gpt-5.5"],
-                }
-            })
-
-            models = result["windows"][0]["models"]
-            self.assertEqual(len(models), 1)
-            self.assertEqual(models[0]["provider"], "google-vertex")
-
-    def test_display_opencode_in_all_view_when_data_exists(self):
-        data = {
-            "opencode": {
-                "windows": [
-                    {
-                        "days": 1,
-                        "models": [
-                            {
-                                "provider": "openai",
-                                "model": "gpt-test",
-                                "requests": 1,
-                                "cost": 0,
-                                "tokens": {"total": 123},
-                            }
-                        ],
-                    }
-                ]
-            },
-            "copilot_cli": {"disabled": True},
         }
-        args = argparse.Namespace(tool="all", verbose=False, all=False, no_color=True)
-        buf = io.StringIO()
-
-        with redirect_stdout(buf):
-            display_opencode_text(data, args)
-
-        self.assertIn("Spend / Usage", buf.getvalue())
-        self.assertIn("gpt-test", buf.getvalue())
-
-    def test_display_opencode_credit_limits(self):
-        data = {
-            "opencode": {
-                "credit_limits": [
-                    {
-                        "name": "monthly",
-                        "unit": "credits",
-                        "total": 100.0,
-                        "remaining": 60.0,
-                        "used": 40.0,
-                        "pct_left": 60.0,
-                    }
-                ],
-                "windows": [],
-            },
-            "copilot_cli": {"disabled": True},
-        }
-        args = argparse.Namespace(tool="opencode", verbose=False, all=False, no_color=True)
-        buf = io.StringIO()
-
-        with redirect_stdout(buf):
-            display_opencode_text(data, args)
-
-        output = buf.getvalue()
-        self.assertIn("monthly", output)
-        self.assertIn("60.0% left", output)
-        self.assertIn("used 40.00 credits", output)
-
-    def test_display_pi_error_for_direct_tool(self):
-        data = {
-            "opencode": {"windows": []},
-            "pi": {"error": "Pi sessions dir not found: ~/.pi/agent/sessions"},
-            "copilot_cli": {"disabled": True},
-        }
-        args = argparse.Namespace(tool="pi", verbose=False, all=False, no_color=True)
-        buf = io.StringIO()
-
-        with redirect_stdout(buf):
-            display_opencode_text(data, args)
-
-        output = buf.getvalue()
-        self.assertIn("pi", output)
-        self.assertIn("Pi sessions dir not found", output)
-
-    def test_display_pi_usage(self):
-        data = {
-            "opencode": {"windows": []},
-            "pi": {
-                "windows": [
-                    {
-                        "days": 1,
-                        "models": [
-                            {
-                                "provider": "openai-codex",
-                                "model": "gpt-5.5",
-                                "requests": 2,
-                                "cost": 0.5,
-                                "tokens": {"total": 1234},
-                            }
-                        ],
-                    }
-                ]
-            },
-            "copilot_cli": {"disabled": True},
-        }
-        args = argparse.Namespace(tool="opencode", verbose=False, all=False, no_color=True)
-        buf = io.StringIO()
-
-        with redirect_stdout(buf):
-            display_opencode_text(data, args)
-
-        output = buf.getvalue()
-        self.assertIn("pi", output)
-        self.assertIn("gpt-5.5", output)
-        self.assertIn("1.2K tokens", output)
-
-    def test_display_parent_and_inr_credit_limits(self):
-        data = {
-            "opencode": {
-                "credit_limits": [
-                    {
-                        "name": "Vertex Free Trial",
-                        "unit": "₹",
-                        "total": 28442.99,
-                        "remaining": 27793.82,
-                        "used": 649.17,
-                        "pct_left": 97.72,
-                    }
-                ],
-                "windows": [
-                    {
-                        "days": 1,
-                        "models": [
-                            {
-                                "provider": "google-vertex",
-                                "model": "gemini-test",
-                                "requests": 1,
-                                "cost": 0,
-                                "tokens": {"total": 100},
-                                "parent": "Vertex Free Trial",
-                            }
-                        ],
-                    }
-                ],
-            },
-            "copilot_cli": {"disabled": True},
-        }
-        args = argparse.Namespace(tool="opencode", verbose=False, all=False, no_color=True)
-        buf = io.StringIO()
-
-        with redirect_stdout(buf):
-            display_opencode_text(data, args)
-
-        output = buf.getvalue()
-        self.assertIn("₹27793.82/₹28442.99", output)
-        self.assertIn("parent: Vertex Free Trial", output)
-
-class TestObservedHelpers(unittest.TestCase):
-    def test_parse_otel_timestamp_numeric(self):
-        # Test numeric float-string parsing
-        dt1 = parse_otel_timestamp("1717430000.123")
-        self.assertIsNotNone(dt1)
-        self.assertEqual(dt1.timestamp(), 1717430000.123)
-
-        # Test integer string parsing
-        dt2 = parse_otel_timestamp("1717430000")
-        self.assertIsNotNone(dt2)
-        self.assertEqual(dt2.timestamp(), 1717430000)
-
-        # Test nanoseconds integer string parsing
-        dt3 = parse_otel_timestamp("1717430000000000000")
-        self.assertIsNotNone(dt3)
-        self.assertEqual(dt3.timestamp(), 1717430000)
-
-        # Test standard ISO string parsing
-        dt4 = parse_otel_timestamp("2024-06-03T15:00:00Z")
-        self.assertIsNotNone(dt4)
-        self.assertEqual(dt4.tzinfo, timezone.utc)
-
-        # Test invalid values return None
-        self.assertIsNone(parse_otel_timestamp("invalid-date"))
-        self.assertIsNone(parse_otel_timestamp(None))
-
-    def test_pi_usage_tokens_calculation(self):
-        # Case 1: total token count is provided
-        usage1 = {
-            "totalTokens": 150,
-            "input": 100,
-            "output": 50,
-            "reasoningTokens": 20,
-        }
-        res1 = pi_usage_tokens(usage1)
-        self.assertEqual(res1["total"], 150)
-        self.assertEqual(res1["reasoning"], 20)
-
-        # Case 2: total is missing, fallback to input + output
-        usage2 = {
-            "input": 120,
-            "output": 60,
-            "reasoning": 30,
-        }
-        res2 = pi_usage_tokens(usage2)
-        self.assertEqual(res2["total"], 180)
-        self.assertEqual(res2["reasoning"], 30)
-
-        # Case 3: empty/invalid usage dict
-        self.assertEqual(pi_usage_tokens(None), {})
-
-
-if __name__ == "__main__":
-    unittest.main()
+    }
+    recs = {
+        "hard": [{"name": "Opus", "reset_label": "reset", "headroom_pct": 100.0}],
+    }
+    display_at_glance(result, recs, DummyArgs(no_color=True))
+    captured = capsys.readouterr()
+    assert "hard task" in captured.out
+    assert "Opus" in captured.out
+    assert "p/m" in captured.out
+    
+    display_at_glance({}, {}, DummyArgs(no_color=True))
+    assert "no usable option" in capsys.readouterr().out

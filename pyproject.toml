@@ -33,6 +33,9 @@ keywords = ["ai", "quota", "codex", "amp", "antigravity", "cli", "developer-tool
 dev = [
     "pytest>=7.0",
 ]
+mac = [
+    "rumps>=0.4.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/salauddinn/limitlens"
@@ -41,6 +44,7 @@ Issues = "https://github.com/salauddinn/limitlens/issues"
 
 [project.scripts]
 limitlens = "limitlens.cli:main"
+limitlens-menubar = "limitlens.menubar:main"
 
 [tool.setuptools.packages.find]
 include = ["limitlens*"]

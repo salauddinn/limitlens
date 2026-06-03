@@ -1,129 +1,387 @@
-#!/usr/bin/env python3
-"""Tests for limitlens.providers.pioneer — pioneer usage parsing."""
-
-import argparse
 import json
 import os
-import unittest
 import urllib.error
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
-from limitlens.providers.pioneer import get_pioneer_data
+import pytest
+
+from limitlens.providers.pioneer import (
+    _float,
+    _has_config_balance,
+    _pioneer_money,
+    parse_pioneer_billing,
+    get_pioneer_data,
+    display_pioneer_text,
+)
 
 
-class TestPioneerProvider(unittest.TestCase):
-    def setUp(self):
-        self.args = argparse.Namespace(redact=False)
-        self.args_redacted = argparse.Namespace(redact=True)
+class DummyArgs:
+    def __init__(self, **kwargs):
+        self.redact = True
+        self.verbose = False
+        self.all = False
+        self.no_color = False
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_billing_parsing_success(self, mock_config, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "data": {
-                "email": "john.doe@example.com",
-                "plan": "Pro Plan",
-                "tiers": [
-                    {"label": "Credits", "remaining": 10.5, "total": 50.0, "used": 39.5},
-                    {"label": "Bonus", "remaining": 5.0, "total": 5.0, "used": 0.0}
-                ]
+
+def test_float():
+    assert _float("1.23") == 1.23
+    assert _float(1.23) == 1.23
+    assert _float(None, 2.0) == 2.0
+    assert _float("invalid", 3.0) == 3.0
+
+
+def test_has_config_balance():
+    assert _has_config_balance({"tiers": []}) is True
+    assert _has_config_balance({"credits_remaining": 10}) is True
+    assert _has_config_balance({"other": 10}) is False
+    assert _has_config_balance(None) is False
+    assert _has_config_balance("string") is False
+
+
+def test_pioneer_money():
+    assert _pioneer_money("1234") == 12.34
+    assert _pioneer_money(0) == 0.0
+    assert _pioneer_money(None) == 0.0
+
+
+@patch("limitlens.providers.pioneer.redact_email")
+@patch("limitlens.providers.pioneer.load_display_config")
+def test_parse_pioneer_billing(mock_disp, mock_redact):
+    mock_disp.return_value = {"auto_hide_enabled": True}
+    mock_redact.return_value = "te**@example.com"
+    
+    assert parse_pioneer_billing(None, DummyArgs()) == {"error": "Unexpected response format"}
+    
+    data = {
+        "email": "test@example.com",
+        "team_id": "team_1",
+        "team_name": "Team",
+        "plan": "Pro",
+        "used_today": "100.5",
+        "inferences_today": "10",
+        "unit": "credits",
+        "tiers": [
+            {
+                "label": "Credits",
+                "remaining": 50,
+                "total": 100,
+                "used": 50,
+                "unit": "credits"
+            },
+            {
+                "label": "Empty",
+                "remaining": 0,
+                "total": 0,
+                "used": 0
+            },
+            {
+                "label": "NoTotal",
+                "remaining": 10,
+                "total": 0,
+                "used": 0
+            },
+            {
+                "label": "NoUsed",
+                "remaining": 50,
+                "total": 100,
+                "used": 0
             }
-        }).encode("utf-8")
-        # Ensure context manager works
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
+        ]
+    }
+    
+    args = DummyArgs()
+    res = parse_pioneer_billing(data, args)
+    
+    assert res["email"] == "te**@example.com"
+    assert res["team_id"] == "team_1"
+    assert res["team_name"] == "Team"
+    assert res["plan"] == "Pro"
+    assert res["used_today"] == 100.5
+    assert res["inferences_today"] == 10
+    
+    assert len(res["tiers"]) == 3  # Empty tier should be skipped
+    
+    t1 = res["tiers"][0]
+    assert t1["remaining"] == 50.0
+    assert t1["total"] == 100.0
+    assert t1["used"] == 50.0
+    assert t1["pct_left"] == 50.0
+    assert t1["pct_used"] == 50.0
+    assert t1["visible"] is True
 
-        # Test unredacted
-        data = get_pioneer_data(self.args)
-        self.assertNotIn("error", data)
-        self.assertEqual(data["email"], "john.doe@example.com")
-        self.assertEqual(len(data["tiers"]), 2)
-
-        t0 = data["tiers"][0]
-        self.assertEqual(t0["label"], "Credits")
-        self.assertEqual(t0["remaining"], 10.5)
-        self.assertEqual(t0["total"], 50.0)
-        self.assertEqual(t0["pct_left"], 21.0)
-
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_email_redaction(self, mock_config, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "email": "john.doe@example.com",
-            "credits_remaining": 10.0,
-            "credits_total": 50.0
-        }).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
-
-        data = get_pioneer_data(self.args_redacted)
-        self.assertEqual(data["email"], "jo***@example.com")
-
-    @patch.dict(os.environ, {}, clear=True)
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    def test_pioneer_token_not_set(self, mock_config):
-        data = get_pioneer_data(self.args)
-        self.assertEqual(data["error"], "PIONEER_API_TOKEN environment variable not set")
-
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_network_error(self, mock_config, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
-
-        data = get_pioneer_data(self.args)
-        self.assertIn("Connection refused", data["error"])
-
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_invalid_json(self, mock_config, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"Not JSON"
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
-
-        data = get_pioneer_data(self.args)
-        self.assertEqual(data["error"], "Invalid JSON response from Pioneer API")
-
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_empty_response(self, mock_config, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"{}"
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
-
-        data = get_pioneer_data(self.args)
-        self.assertEqual(data["error"], "Empty response from Pioneer API")
-
-    @patch("limitlens.providers.pioneer.urllib.request.urlopen")
-    @patch("limitlens.providers.pioneer.load_limitlens_config", return_value={"pioneer": {"team_id": "team-1"}})
-    @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test-token"})
-    def test_pioneer_full_status_parsing(self, mock_config, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "team_id": "team-1",
-            "team_name": "No's Team",
-            "payment_plan": "hobby",
-            "total_usage": 605.7127,
-            "credit_limit": 3000.0,
-            "free_tier_remaining": 2394.2873,
-        }).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
-
-        data = get_pioneer_data(self.args)
-
-        req = mock_urlopen.call_args[0][0]
-        self.assertIn("/billing/team/team-1/full-status", req.full_url)
-        self.assertEqual(data["team_name"], "No's Team")
-        self.assertEqual(data["plan"], "hobby")
-        self.assertEqual(len(data["tiers"]), 1)
-        self.assertAlmostEqual(data["tiers"][0]["total"], 30.0)
-        self.assertAlmostEqual(data["tiers"][0]["remaining"], 23.942873)
-        self.assertAlmostEqual(data["tiers"][0]["used"], 6.057127)
+    t2 = res["tiers"][1]
+    assert t2["remaining"] == 10.0
+    assert t2["total"] is None
+    assert t2["used"] == 0.0
+    assert t2["pct_left"] is None
+    
+    t3 = res["tiers"][2]
+    assert t3["remaining"] == 50.0
+    assert t3["total"] == 100.0
+    assert t3["used"] == 50.0  # max(0, total - remaining)
+    
+    # Test auto hide visible false
+    data["tiers"] = [{"label": "Hidden", "remaining": 5, "total": 100, "used": 95}]
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert res["tiers"][0]["visible"] is False
 
 
-if __name__ == "__main__":
-    unittest.main()
+@patch("limitlens.providers.pioneer.load_display_config")
+def test_parse_pioneer_billing_no_tiers_but_credit_limit(mock_disp):
+    mock_disp.return_value = {"auto_hide_enabled": False}
+    data = {
+        "credit_limit": 1000,
+        "free_tier_remaining": 500,
+        "total_usage": 500
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert len(res["tiers"]) == 1
+    t = res["tiers"][0]
+    assert t["total"] == 10.0
+    assert t["remaining"] == 5.0
+    assert t["used"] == 5.0
+    
+    data = {
+        "credit_limit": 0,
+        "free_tier_remaining": 500,
+        "total_usage": 500
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert res["tiers"][0]["total"] == 10.0
+
+    data = {
+        "credit_limit": 1000,
+        "free_tier_remaining": 0,
+        "total_usage": 500
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert res["tiers"][0]["remaining"] == 5.0
+
+    data = {
+        "credit_limit": 1000,
+        "free_tier_remaining": 1000,
+        "total_usage": 0
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert res["tiers"][0]["used"] == 0.0
+
+
+@patch("limitlens.providers.pioneer.load_display_config")
+def test_parse_pioneer_billing_no_tiers_but_credits_remaining(mock_disp):
+    mock_disp.return_value = {"auto_hide_enabled": False}
+    data = {
+        "credits_total": 100.0,
+        "credits_remaining": 20.0
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert len(res["tiers"]) == 1
+    t = res["tiers"][0]
+    assert t["total"] == 100.0
+    assert t["remaining"] == 20.0
+    assert t["used"] == 80.0
+
+    data = {
+        "credits_total": 0.0,
+        "credits_remaining": 20.0
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert len(res["tiers"]) == 1
+    t = res["tiers"][0]
+    assert t["total"] == 20.0
+    assert t["used"] == 0.0
+
+    data = {
+        "credits_total": 100.0,
+        "credits_remaining": 20.0,
+        "credits_used": 50.0
+    }
+    res = parse_pioneer_billing(data, DummyArgs())
+    assert len(res["tiers"]) == 1
+    t = res["tiers"][0]
+    assert t["used"] == 50.0
+
+
+@patch("limitlens.providers.pioneer.load_limitlens_config")
+@patch.dict(os.environ, clear=True)
+def test_get_pioneer_data_no_token(mock_cfg):
+    mock_cfg.return_value = {}
+    res = get_pioneer_data(DummyArgs())
+    assert res["error"] == "PIONEER_API_TOKEN environment variable not set"
+    
+    mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "test", "remaining": 10, "total": 100, "used": 90}]}}
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        assert "tiers" in res
+        assert len(res["tiers"]) == 1
+
+
+@patch("limitlens.providers.pioneer.load_limitlens_config")
+@patch("urllib.request.urlopen")
+@patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
+def test_get_pioneer_data_success(mock_urlopen, mock_cfg):
+    mock_cfg.return_value = {}
+    cm = MagicMock()
+    cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
+    mock_urlopen.return_value.__enter__.return_value = cm
+    
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs(redact=False))
+        assert res["email"] == "test@pioneer"
+
+    # Test nested empty data
+    cm.read.return_value = json.dumps({"data": {}}).encode("utf-8")
+    res = get_pioneer_data(DummyArgs())
+    assert res["error"] == "Empty data in Pioneer API response"
+
+    # Test completely empty response
+    cm.read.return_value = json.dumps(None).encode("utf-8")
+    res = get_pioneer_data(DummyArgs())
+    assert res["error"] == "Empty response from Pioneer API"
+
+    # Test invalid json
+    cm.read.return_value = b"invalid json"
+    res = get_pioneer_data(DummyArgs())
+    assert res["error"] == "Invalid JSON response from Pioneer API"
+
+
+@patch("limitlens.providers.pioneer.load_limitlens_config")
+@patch("urllib.request.urlopen")
+@patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token", "PIONEER_TEAM_ID": "team_1"}, clear=True)
+def test_get_pioneer_data_team_id(mock_urlopen, mock_cfg):
+    mock_cfg.return_value = {}
+    cm = MagicMock()
+    cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
+    mock_urlopen.return_value.__enter__.return_value = cm
+    
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs(redact=False))
+        assert res["email"] == "test@pioneer"
+
+
+@patch("limitlens.providers.pioneer.load_limitlens_config")
+@patch("urllib.request.urlopen")
+@patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
+def test_get_pioneer_data_urlopen_error(mock_urlopen, mock_cfg):
+    mock_cfg.return_value = {}
+    mock_urlopen.side_effect = urllib.error.URLError("test error")
+    res = get_pioneer_data(DummyArgs())
+    assert "API request failed" in res["error"]
+
+    mock_urlopen.side_effect = Exception("general error")
+    res = get_pioneer_data(DummyArgs())
+    assert "Request failed" in res["error"]
+
+
+@patch("limitlens.providers.pioneer.load_limitlens_config")
+@patch("urllib.request.urlopen")
+@patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
+def test_get_pioneer_data_fallback_config(mock_urlopen, mock_cfg):
+    mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "fallback", "remaining": 10, "total": 100, "used": 90}]}}
+    
+    mock_urlopen.side_effect = urllib.error.URLError("error")
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        assert res["tiers"][0]["label"] == "fallback"
+
+    mock_urlopen.side_effect = Exception("error")
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        assert res["tiers"][0]["label"] == "fallback"
+
+    cm = MagicMock()
+    cm.read.return_value = json.dumps(None).encode("utf-8")
+    mock_urlopen.return_value.__enter__.return_value = cm
+    mock_urlopen.side_effect = None
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        assert res["tiers"][0]["label"] == "fallback"
+
+    cm.read.return_value = json.dumps({"data": None}).encode("utf-8")
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        assert res["tiers"][0]["label"] == "fallback"
+        
+    cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
+    with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
+        res = get_pioneer_data(DummyArgs())
+        # Merged data test
+        assert res["tiers"][0]["label"] == "fallback"
+
+
+@patch("limitlens.providers.pioneer.print_error")
+@patch("limitlens.providers.pioneer.section")
+def test_display_pioneer_text_error(mock_section, mock_print_error):
+    display_pioneer_text({"error": "test error"}, DummyArgs())
+    mock_section.assert_called_with("Pioneer", ANY)
+    mock_print_error.assert_called_with("test error", ANY)
+    
+    
+@patch("limitlens.providers.pioneer.print_c")
+@patch("limitlens.providers.pioneer.identity_line")
+@patch("limitlens.providers.pioneer.section")
+@patch("builtins.print")
+def test_display_pioneer_text(mock_print, mock_section, mock_identity_line, mock_print_c):
+    data = {
+        "email": "test@pioneer",
+        "tiers": [
+            {
+                "label": "Prefix:LongLabelThatExceedsFifteenCharacters",
+                "visible": True,
+                "pct_left": 10.0,
+                "pct_used": 90.0,
+                "total": 100.0,
+                "remaining": 10.0,
+                "used": 90.0,
+                "unit": "tokens"
+            },
+            {
+                "label": "Credits",
+                "visible": True,
+                "pct_left": 50.0,
+                "pct_used": 50.0,
+                "total": 100.0,
+                "remaining": 50.0,
+                "used": 50.0,
+                "unit": "$"
+            },
+            {
+                "label": "Hidden",
+                "visible": False,
+                "pct_left": 50.0,
+                "pct_used": 50.0,
+                "total": 100.0,
+                "remaining": 50.0,
+                "used": 50.0,
+                "unit": "$"
+            }
+        ],
+        "used_today": 10.5,
+        "inferences_today": 5,
+    }
+    
+    # default color
+    args = DummyArgs(verbose=False, all=False, no_color=False)
+    display_pioneer_text(data, args)
+    
+    # no color
+    args = DummyArgs(verbose=False, all=False, no_color=True)
+    display_pioneer_text(data, args)
+
+    # empty tiers but verbose
+    data_empty = {"email": "test@pioneer", "tiers": []}
+    args_verbose = DummyArgs(verbose=True, all=False, no_color=False)
+    display_pioneer_text(data_empty, args_verbose)
+
+    # only used today
+    data_used = {"email": "test@pioneer", "tiers": [{"label": "C", "visible": True, "pct_left": 0, "pct_used": 0, "total": None, "remaining": 0, "used": 0, "unit": "$"}], "used_today": 10.5, "inferences_today": 0}
+    args_norm = DummyArgs(verbose=False, all=False, no_color=False)
+    display_pioneer_text(data_used, args_norm)
+
+    # only inferences
+    data_inf = {"email": "test@pioneer", "tiers": [{"label": "C", "visible": True, "pct_left": None, "pct_used": None, "total": None, "remaining": 0, "used": 0, "unit": "$"}], "used_today": 0, "inferences_today": 5}
+    display_pioneer_text(data_inf, args_norm)
+
+    # not visible, not verbose/all
+    display_pioneer_text({"tiers": [{"visible": False}]}, DummyArgs())

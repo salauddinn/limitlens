@@ -23,7 +23,7 @@ Each candidate has:
 """
 
 from datetime import datetime, timezone
-
+import re
 
 # ── Classification ──────────────────────────────────────────────────────────
 
@@ -53,8 +53,6 @@ WASTE_REDUCTION_MIN_HEADROOM_PCT = 10
 # candidates at or above this threshold.
 ANTIGRAVITY_MIN_HEADROOM_PCT = 20
 
-
-import re
 
 def _classify_model_label(label):
     if not label:

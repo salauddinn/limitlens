@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import sqlite3
-import subprocess
+import subprocess  # nosec B404
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -19,10 +19,6 @@ from limitlens.core import (
     format_timestamp,
     bar,
     print_c,
-    print_warning,
-    print_error,
-    is_verbose,
-    identity_line,
     _fmt_tokens,
     load_display_config,
 )
@@ -420,11 +416,11 @@ def display_codex_text(data, args):
     if "error" in data:
         if data["error"] == "all codex accounts are ignored by config" and getattr(args, 'tool', None) != "codex" and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
             return
-        print_c(f"\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
+        print_c("\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
         print_c(f"    ⚠ {data['error']}", "\033[33m", getattr(args, 'no_color', False))
         return
 
-    print_c(f"\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
+    print_c("\n  Codex", "\033[1;36m", getattr(args, 'no_color', False))
 
     for acc in data.get("accounts", []):
         visible_limits = []
@@ -505,7 +501,7 @@ def refresh_account(codex_home, timeout=30):
             capture_output=True,
             text=True,
             cwd=os.path.expanduser("~"),
-        )
+        )  # nosec B603
         return True, None
     except subprocess.TimeoutExpired:
         return False, "timeout"

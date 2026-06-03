@@ -35,8 +35,8 @@ def get_cursor_token(sys_name):
                 conn.close()
                 if row:
                     return row[0]
-            except Exception:
-                pass
+            except (sqlite3.Error, OSError):
+                continue
     return None
 
 

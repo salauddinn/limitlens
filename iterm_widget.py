@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
+"""
+LimitLens iTerm2 Status Bar Widget.
+
+This module provides an iTerm2 background script that creates a custom status bar
+component. It continuously polls LimitLens for quota statuses and displays the
+most relevant available tool (or highest quota) directly in the iTerm2 terminal window.
+"""
 import asyncio
-import glob
 import iterm2
 import json
 import os
@@ -80,11 +86,14 @@ async def main(connection):
     state = {"status": "💡 AI: Loading..."}
 
     def fetch_status_sync():
-        script_path = os.path.join(LIMITLENS_DIR, "limitlens.py")
-        if not os.path.exists(script_path):
-            return None
-        cmd = [PYTHON_BIN, script_path, "--json"]
-        return subprocess.run(cmd, capture_output=True, text=True)
+        import shutil
+        limitlens_bin = shutil.which("limitlens")
+        if limitlens_bin:
+            cmd = [limitlens_bin, "--json"]
+            return subprocess.run(cmd, capture_output=True, text=True)
+            
+        cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR)
 
     async def poll_status():
         loop = asyncio.get_running_loop()

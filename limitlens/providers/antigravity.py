@@ -7,11 +7,11 @@ import platform
 import re
 import socket
 import ssl
-import subprocess
+import subprocess  # nosec B404
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from limitlens.core import (
     is_reset_passed,
@@ -35,8 +35,8 @@ from limitlens.core import (
 AG_PROBE_TCP_TIMEOUT = 0.2
 AG_PROBE_HTTP_TIMEOUT = 1.2
 AG_MODEL_HTTP_TIMEOUT = 2.0
-AGY_CLI_CONFIG_DIR = os.path.expanduser("~/.gemini/antigravity-cli")
-AGY_CLI_CSRF_TOKEN = "no-token"
+AGY_CLI_CONFIG_DIR = os.environ.get("AGY_CONFIG_DIR") or os.path.expanduser("~/.gemini/antigravity-cli")
+AGY_CLI_CSRF_TOKEN = "no-token"  # nosec B105
 
 def get_antigravity_named_profiles(sys_name):
     profiles = set()
@@ -57,7 +57,7 @@ def get_antigravity_named_profiles(sys_name):
         result = subprocess.run(
             ["ps", "-e", "-ww", "-o", "pid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
-        )
+        )  # nosec B603 B607
     except (subprocess.SubprocessError, OSError) as e:
         return sorted(profiles), f"profile process lookup failed: {e}"
 
@@ -73,7 +73,7 @@ def collect_listening_ports(pids, sys_name):
     for pid in pids:
         if sys_name == "Linux":
             try:
-                ss_result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=10, errors="replace")
+                ss_result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=10, errors="replace")  # nosec B603 B607
                 if ss_result.returncode != 0:
                     process_errors.append(f"ss failed for pid {pid}: {ss_result.stderr.strip()}")
                     continue
@@ -90,7 +90,7 @@ def collect_listening_ports(pids, sys_name):
                 lsof_result = subprocess.run(
                     ["lsof", "-a", "-iTCP", "-sTCP:LISTEN", "-P", "-n", "-p", str(pid)],
                     capture_output=True, text=True, timeout=10, errors="replace",
-                )
+                )  # nosec B603 B607
                 if lsof_result.returncode != 0:
                     process_errors.append(f"lsof failed for pid {pid}: {lsof_result.stderr.strip()}")
                     continue
@@ -123,7 +123,7 @@ def find_language_server_for_profile(profile, sys_name):
         ps_result = subprocess.run(
             ["ps", "-e", "-ww", "-o", "pid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
-        )
+        )  # nosec B603 B607
     except (subprocess.SubprocessError, OSError) as e:
         return None, None, f"Failed to list processes: {e}", {}
 
@@ -163,7 +163,7 @@ def find_language_server_for_profile(profile, sys_name):
             ppid_result = subprocess.run(
                 ["ps", "-e", "-ww", "-o", "pid=,ppid=,command="],
                 capture_output=True, text=True, timeout=10, errors="replace"
-            )
+            )  # nosec B603 B607
             # Build full descendant set from Electron roots so we catch
             # language servers spawned via intermediary Helper processes
             # (e.g. Electron → Helper Plugin → language_server).
@@ -210,7 +210,7 @@ def find_language_server_for_main_profile(sys_name, known_profiles):
         ps_result = subprocess.run(
             ["ps", "-e", "-ww", "-o", "pid=,ppid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
-        )
+        )  # nosec B603 B607
     except (subprocess.SubprocessError, OSError) as e:
         return None, None, f"Failed to list processes: {e}", {}
 
@@ -312,7 +312,7 @@ def get_config_dir_for_pid(pid, sys_name):
             result = subprocess.run(
                 ["lsof", "-F", "n", "-p", str(pid)],
                 capture_output=True, text=True, timeout=5, errors="replace"
-            )
+            )  # nosec B603 B607
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
                     if line.startswith("n") and ".gemini/antigravity-cli" in line:
@@ -338,7 +338,7 @@ def discover_active_cli_profiles(sys_name):
         ps_result = subprocess.run(
             ["ps", "-e", "-ww", "-o", "pid=,ppid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
-        )
+        )  # nosec B603 B607
     except (subprocess.SubprocessError, OSError):
         return active_profiles
 
@@ -407,7 +407,7 @@ def find_language_server_for_cli(sys_name):
         ps_result = subprocess.run(
             ["ps", "-e", "-ww", "-o", "pid=,command="],
             capture_output=True, text=True, timeout=10, errors="replace"
-        )
+        )  # nosec B603 B607
     except (subprocess.SubprocessError, OSError) as e:
         return None, None, f"Failed to list processes: {e}", {}
 
@@ -465,7 +465,7 @@ def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeou
     req.add_header("Connect-Protocol-Version", "1")
     req.add_header("x-codeium-csrf-token", csrf_token)
 
-    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:  # nosec B310
         return json.loads(resp.read().decode("utf-8"))
 
 def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3):
@@ -721,10 +721,14 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
     prof_data["status"] = "running"
     def get_priority(lbl):
         lbl = lbl.lower()
-        if "sonnet" in lbl: return 1
-        if "opus" in lbl: return 2
-        if "pro" in lbl: return 3
-        if "gemini" in lbl: return 4
+        if "sonnet" in lbl:
+            return 1
+        if "opus" in lbl:
+            return 2
+        if "pro" in lbl:
+            return 3
+        if "gemini" in lbl:
+            return 4
         return 5
 
     groups = {}

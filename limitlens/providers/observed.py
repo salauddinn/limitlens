@@ -11,7 +11,6 @@ from limitlens.core import (
     parse_to_utc,
     configured_days,
     print_c,
-    is_verbose,
     _fmt_tokens,
 )
 
@@ -671,7 +670,7 @@ def display_opencode_text(data, args):
         if not has_data:
             return
 
-    print_c(f"\n  Spend / Usage", "\033[1;36m", getattr(args, 'no_color', False))
+    print_c("\n  Spend / Usage", "\033[1;36m", getattr(args, 'no_color', False))
     for name, source in sources:
         display_usage_source(name, source, args)
 

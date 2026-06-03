@@ -23,7 +23,8 @@ import os
 from datetime import datetime, timedelta, timezone
 
 
-SNAPSHOT_PATH = os.path.expanduser("~/.cache/limitlens/snapshots.jsonl")
+import os
+SNAPSHOT_PATH = os.environ.get("LIMITLENS_SNAPSHOT_PATH") or os.path.expanduser("~/.cache/limitlens/snapshots.jsonl")
 RESET_DETECT_PCT = 30   # pct_left jump that signals a reset event
 RESET_AT_MIN_DELTA_SEC = 60  # reset_at must shift forward by at least this much
 SNAPSHOT_PRUNE_DAYS = 90  # keep ~3 months of history

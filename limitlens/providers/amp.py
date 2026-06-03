@@ -1,7 +1,7 @@
 """Amp provider — queries `amp usage` CLI for spend/credit data."""
 
 import re
-import subprocess
+import subprocess  # nosec B404
 from datetime import datetime, timedelta
 
 from limitlens.core import (
@@ -25,7 +25,7 @@ def get_amp_data(args):
         result = subprocess.run(
             ["amp", "usage"],
             capture_output=True, text=True, timeout=15, errors="replace"
-        )
+        )  # nosec B603 B607
     except FileNotFoundError:
         return {"error": "amp not installed"}
     except (subprocess.SubprocessError, OSError) as e:

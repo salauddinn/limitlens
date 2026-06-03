@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
+"""
+LimitLens Menubar Application.
+
+This module provides a lightweight macOS menubar application using `rumps`.
+It polls the LimitLens CLI for quota data and updates the menubar with real-time
+remaining quota percentages, helping users avoid rate limits. It also triggers
+desktop notifications when quotas run critically low.
+"""
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import threading
+import sys
 import rumps
-
-LIMITLENS_DIR = os.path.dirname(os.path.realpath(__file__))
-PYTHON_BIN = os.path.join(LIMITLENS_DIR, ".venv", "bin", "python3")
-if not os.path.exists(PYTHON_BIN):
-    PYTHON_BIN = "python3"
-SCRIPT_PATH = os.path.join(LIMITLENS_DIR, "limitlens.py")
 
 class LimitLensApp(rumps.App):
     def __init__(self):
@@ -48,7 +51,7 @@ class LimitLensApp(rumps.App):
 
     def notify(self, title, message):
         script = 'on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\n end run'
-        subprocess.Popen(["osascript", "-e", script, message, title])
+        subprocess.Popen(["osascript", "-e", script, message, title])  # nosec B603 B607
 
     def fetch_data(self):
         if self._is_fetching:
@@ -57,12 +60,8 @@ class LimitLensApp(rumps.App):
         
         def worker():
             try:
-                if not os.path.exists(SCRIPT_PATH):
-                    self._pending_title = "🤖 Err: limitlens.py not found"
-                    return
-                    
-                cmd = [PYTHON_BIN, SCRIPT_PATH, "--json"]
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                cmd = [sys.executable, "-m", "limitlens", "--json"]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)  # nosec B603
                 
                 if proc.returncode == 0:
                     data = json.loads(proc.stdout)
@@ -203,9 +202,12 @@ class LimitLensApp(rumps.App):
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-if __name__ == "__main__":
+def main():
     app = LimitLensApp()
     # Fetch data immediately before starting the loop
     app.fetch_data()
     app.run()
+
+if __name__ == "__main__":
+    main()
 
