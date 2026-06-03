@@ -39,7 +39,7 @@ def get_amp_data(args):
         return {"error": error or f"exit code {result.returncode}"}
 
     raw_output = clean_amp_output(output)
-    if args.redact:
+    if getattr(args, 'redact', True):
         raw_output = redact_text(raw_output)
     info = {"email": None, "tiers": [], "raw_output": raw_output}
 
@@ -50,14 +50,17 @@ def get_amp_data(args):
 
     for line in output.splitlines():
         tier_match = re.match(
-            r"(.+?):\s+\$([0-9.]+)/\$([0-9.]+)\s+remaining"
-            r"(?:\s+\(replenishes\s+\+\$([0-9.]+)/hour\))?",
+            r'^(.+):\s+\$([0-9]+(?:\.[0-9]+)?)/\$([0-9]+(?:\.[0-9]+)?)\s+remaining'
+            r'(?:\s+\(replenishes\s+\+\$([0-9]+(?:\.[0-9]+)?)/hour\))?',
             line.strip(),
         )
         if tier_match:
             label = tier_match.group(1).strip()
-            remaining = float(tier_match.group(2))
-            total = float(tier_match.group(3))
+            try:
+                remaining = float(tier_match.group(2))
+                total = float(tier_match.group(3))
+            except ValueError:
+                continue
             replenish = tier_match.group(4)
             pct_left = (remaining / total * 100) if total > 0 else 0
             tier = {
@@ -74,33 +77,35 @@ def get_amp_data(args):
             continue
 
         credit_match = re.match(
-            r"(.+?):\s+\$([0-9.]+)\s+remaining",
+            r'^(.+):\s+\$([0-9]+(?:\.[0-9]+)?)\s+remaining(?!\s*/)',
             line.strip(),
         )
         if credit_match:
             label = credit_match.group(1).strip()
-            remaining = float(credit_match.group(2))
-            if remaining > 0:
-                info["tiers"].append({
-                    "label": label,
-                    "remaining": remaining,
-                    "total": remaining,
-                    "pct_left": 100.0,
-                    "pct_used": 0.0
-                })
+            try:
+                remaining = float(credit_match.group(2))
+            except ValueError:
+                continue
+            info["tiers"].append({
+                "label": label,
+                "remaining": remaining,
+                "total": None,
+                "pct_left": None,
+                "pct_used": None,
+            })
 
     disp_cfg = load_display_config()
     for tier in info.get("tiers", []):
         pct_left = tier["pct_left"]
         visible = True
         if disp_cfg["auto_hide_enabled"]:
-            if pct_left < 10.0:
+            if pct_left is not None and pct_left < 10.0:
                 rate = tier.get("replenish_rate", 0)
                 if rate <= 0:
                     visible = False
                 else:
                     target_usable = tier["total"] * (disp_cfg["amp_usable_pct"] / 100.0)
-                    hours_to_usable = (target_usable - tier["remaining"]) / rate
+                    hours_to_usable = max(0, (target_usable - tier["remaining"]) / rate)
                     if hours_to_usable > 24:
                         visible = False
         tier["visible"] = visible
@@ -147,13 +152,20 @@ def display_amp_text(data, args):
 
         full_at = ""
         rate = tier.get("replenish_rate", 0)
-        if is_verbose(args) and rate > 0 and tier["remaining"] < tier["total"]:
-            hours_left = (tier["total"] - tier["remaining"]) / rate
+        if is_verbose(args) and rate > 0 and tier["total"] is not None and tier["remaining"] < tier["total"]:
+            hours_left = max(0.0, tier["total"] - tier["remaining"]) / rate
             full_time = datetime.now().astimezone() + timedelta(hours=hours_left)
             full_at = f"  full at {format_date_pretty(full_time)}"
 
-        b = bar(pct_used, no_color=args.no_color)
-        if args.no_color:
-            print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}")
+        if pct_left is None:
+            # Credit-only tier: no total known, show just the dollar amount
+            if args.no_color:
+                print(f"    {short:<14}   ${tier['remaining']:.2f} remaining{replenish}{full_at}")
+            else:
+                print(f"    {short:<14}   \033[90m${tier['remaining']:.2f} remaining{replenish}{full_at}\033[0m")
         else:
-            print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}\033[0m")
+            b = bar(pct_used, no_color=args.no_color)
+            if args.no_color:
+                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}")
+            else:
+                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}\033[0m")
