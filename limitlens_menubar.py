@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import threading
 import rumps
 
 LIMITLENS_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -14,6 +15,9 @@ class LimitLensApp(rumps.App):
     def __init__(self):
         super(LimitLensApp, self).__init__("💡 AI: Loading...")
         self.menu = ["Refresh Now", rumps.separator, "Quit"]
+        self._is_fetching = False
+        self._pending_title = None
+        self._pending_menu_items = None
 
     @rumps.timer(300)  # Refresh every 5 minutes
     def refresh(self, _=None):
@@ -23,55 +27,147 @@ class LimitLensApp(rumps.App):
     def on_refresh(self, _):
         self.fetch_data()
 
-    def fetch_data(self):
-        try:
-            if not os.path.exists(SCRIPT_PATH):
-                self.title = "🤖 Err: limitlens.py not found"
-                return
-                
-            cmd = [PYTHON_BIN, SCRIPT_PATH, "--json"]
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if proc.returncode == 0:
-                data = json.loads(proc.stdout)
-                
-                recs = data.get("recommendations", {})
-                candidates = recs.get("hard", [])
-                
-                display_items = []
-                for item in candidates:
-                    tool = item.get("tool", "")
-                    pct = item.get("headroom_pct", 0)
-                    
-                    if tool == "antigravity" and pct < 20:
-                        continue
-                    if tool != "antigravity" and pct < 10:
-                        continue
-                        
-                    full_name = item.get("name", "Unknown")
-                    if " (" in full_name:
-                        full_name = full_name.split(" (")[0]
-                        
-                    if " → " in full_name:
-                        prof, model = full_name.split(" → ", 1)
-                        prof = prof.split(":", 1)[-1]
-                        display_name = f"{prof}:{model.split()[0]}"
-                    else:
-                        display_name = full_name.replace("codex-", "")
-                        
-                    display_items.append(f"{display_name}:{pct:.0f}%")
-                
-                if display_items:
-                    self.title = "💡 " + " | ".join(display_items)
-                else:
-                    self.title = "🤖 No quotas available"
+    @rumps.timer(1)
+    def check_updates(self, _):
+        if self._pending_title is not None:
+            self.title = self._pending_title
+            self._pending_title = None
+        if self._pending_menu_items is not None:
+            self.menu.clear()
+            self.menu.add("Refresh Now")
+            self.menu.add(rumps.separator)
+            if self._pending_menu_items:
+                for item in self._pending_menu_items:
+                    self.menu.add(item)
             else:
-                self.title = "🤖 LimitLens: Err"
-        except Exception as e:
-            self.title = f"🤖 Err: {str(e)[:15]}"
+                self.menu.add("No active quotas found")
+            self.menu.add(rumps.separator)
+            self.menu.add("Quit")
+            self._pending_menu_items = None
+
+    def fetch_data(self):
+        if self._is_fetching:
+            return
+        self._is_fetching = True
+        
+        def worker():
+            try:
+                if not os.path.exists(SCRIPT_PATH):
+                    self._pending_title = "🤖 Err: limitlens.py not found"
+                    return
+                    
+                cmd = [PYTHON_BIN, SCRIPT_PATH, "--json"]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                
+                if proc.returncode == 0:
+                    data = json.loads(proc.stdout)
+                    
+                    recs = data.get("recommendations", {})
+                    candidates = recs.get("hard", [])
+                    
+                    display_items = []
+                    for item in candidates:
+                        tool = item.get("tool", "")
+                        pct = item.get("headroom_pct", 0)
+                        
+                        if tool == "antigravity" and pct < 20:
+                            continue
+                        if tool != "antigravity" and pct < 10:
+                            continue
+                            
+                        full_name = item.get("name", "Unknown")
+                        if " (" in full_name:
+                            full_name = full_name.split(" (")[0]
+                            
+                        if " → " in full_name:
+                            prof, model = full_name.split(" → ", 1)
+                            prof = prof.split(":", 1)[-1]
+                            display_name = f"{prof}:{model.split()[0]}"
+                        else:
+                            display_name = full_name.replace("codex-", "")
+                            
+                        display_items.append(f"{display_name}:{pct:.0f}%")
+                    
+                    if display_items:
+                        self._pending_title = "💡 " + " | ".join(display_items)
+                    else:
+                        self._pending_title = "🤖 No quotas available"
+
+                    # Extract all active quotas for rich dropdown display
+                    menu_items = []
+                    
+                    # Codex
+                    codex = data.get("codex") or {}
+                    for acc in codex.get("accounts", []):
+                        if "error" in acc:
+                            continue
+                        acc_name = acc.get("name", "Codex")
+                        for lim in acc.get("limits", []):
+                            label = lim.get("label", "limit")
+                            pct = lim.get("left_percent")
+                            if pct is not None:
+                                menu_items.append(f"Codex ({acc_name}) - {label}: {pct:.0f}% left")
+
+                    # Amp
+                    amp = data.get("amp") or {}
+                    for tier in amp.get("tiers", []):
+                        label = tier.get("label", "Amp")
+                        pct = tier.get("pct_left")
+                        rem = tier.get("remaining")
+                        tot = tier.get("total")
+                        if pct is not None:
+                            menu_items.append(f"{label}: {pct:.1f}% left (${rem:.2f}/${tot:.2f})")
+
+                    # Antigravity
+                    ag = data.get("antigravity") or {}
+                    for prof in ag.get("profiles", []):
+                        prof_name = prof.get("name", "default")
+                        status = prof.get("status", "running")
+                        status_suffix = f" [{status}]" if status != "running" else ""
+                        for m in prof.get("models", []):
+                            label = m.get("label", "model")
+                            pct = m.get("pct_left")
+                            if pct is not None:
+                                menu_items.append(f"Antigravity ({prof_name}) - {label}: {pct:.0f}% left{status_suffix}")
+
+                    # OpenCode / Credits
+                    op_data = data.get("opencode") or {}
+                    for lim in op_data.get("credit_limits", []):
+                        name = lim.get("name", "credits")
+                        pct = lim.get("pct_left")
+                        rem = lim.get("remaining")
+                        tot = lim.get("total")
+                        unit = lim.get("unit") or "credits"
+                        if pct is not None:
+                            unit_sym = "$" if unit.lower() in ("usd", "$") else ""
+                            unit_suf = "" if unit_sym else f" {unit}"
+                            menu_items.append(f"OpenCode ({name}): {pct:.1f}% left ({unit_sym}{rem:.2f}/{unit_sym}{tot:.2f}{unit_suf})")
+
+                    # Pioneer
+                    pioneer = data.get("pioneer") or {}
+                    for tier in pioneer.get("tiers", []):
+                        label = tier.get("label", "Pioneer")
+                        pct = tier.get("pct_left")
+                        if pct is not None:
+                            menu_items.append(f"{label}: {pct:.1f}% left")
+
+                    self._pending_menu_items = menu_items
+                else:
+                    err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
+                    self._pending_title = f"🤖 Err: {err_msg[:20]}"
+            except subprocess.TimeoutExpired:
+                self._pending_title = "🤖 Timeout"
+            except Exception as e:
+                self._pending_title = f"🤖 Err: {str(e)[:15]}"
+            finally:
+                self._is_fetching = False
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
 
 if __name__ == "__main__":
     app = LimitLensApp()
     # Fetch data immediately before starting the loop
     app.fetch_data()
     app.run()
+

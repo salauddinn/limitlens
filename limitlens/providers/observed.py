@@ -335,9 +335,13 @@ def parse_otel_timestamp(value):
         except (OSError, ValueError, OverflowError):
             return None
     if isinstance(value, str):
+        # Try to parse as integer or float first if it looks numeric and is not ISO date format
+        if not any(char in value for char in ("-", ":", "T", "Z")):
+            try:
+                return parse_otel_timestamp(float(value))
+            except ValueError:
+                pass
         try:
-            if value.isdigit():
-                return parse_otel_timestamp(int(value))
             return parse_to_utc(value)
         except (TypeError, ValueError, OSError):
             return None
@@ -421,10 +425,15 @@ def pi_usage_cost(usage):
 def pi_usage_tokens(usage):
     if not isinstance(usage, dict):
         return {}
+    input_t = usage.get("input") or 0
+    output_t = usage.get("output") or 0
+    total_t = usage.get("totalTokens") or usage.get("total") or 0
+    if total_t <= 0:
+        total_t = input_t + output_t
     return {
-        "total": usage.get("totalTokens") or usage.get("total") or 0,
-        "input": usage.get("input") or 0,
-        "output": usage.get("output") or 0,
+        "total": total_t,
+        "input": input_t,
+        "output": output_t,
         "reasoning": usage.get("reasoningTokens") or usage.get("reasoning") or 0,
         "cache_read": usage.get("cacheRead") or usage.get("cache_read") or 0,
         "cache_write": usage.get("cacheWrite") or usage.get("cache_write") or 0,

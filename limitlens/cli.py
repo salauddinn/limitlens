@@ -207,7 +207,13 @@ def main():
         recs = None if args.no_recommend else rec_mod.compute_recommendations(result, parse_to_utc, fmt_reset)
 
         if args.json:
-            payload = dict(result)
+            payload = {}
+            for k, v in result.items():
+                if k == "opencode" and isinstance(v, dict):
+                    for sub_k, sub_v in v.items():
+                        payload[sub_k] = sub_v
+                else:
+                    payload[k] = v
             if recs is not None:
                 payload["recommendations"] = recs
             print(json.dumps(payload, indent=2))

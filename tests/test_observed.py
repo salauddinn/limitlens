@@ -11,8 +11,13 @@ import io
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 
-from limitlens.providers.observed import get_opencode_usage, get_pi_usage, display_opencode_text
-
+from limitlens.providers.observed import (
+    get_opencode_usage,
+    get_pi_usage,
+    display_opencode_text,
+    parse_otel_timestamp,
+    pi_usage_tokens,
+)
 
 class TestOpenCodeUsage(unittest.TestCase):
     def test_get_opencode_usage_from_sqlite(self):
@@ -390,6 +395,57 @@ class TestOpenCodeUsage(unittest.TestCase):
         output = buf.getvalue()
         self.assertIn("₹27793.82/₹28442.99", output)
         self.assertIn("parent: Vertex Free Trial", output)
+
+class TestObservedHelpers(unittest.TestCase):
+    def test_parse_otel_timestamp_numeric(self):
+        # Test numeric float-string parsing
+        dt1 = parse_otel_timestamp("1717430000.123")
+        self.assertIsNotNone(dt1)
+        self.assertEqual(dt1.timestamp(), 1717430000.123)
+
+        # Test integer string parsing
+        dt2 = parse_otel_timestamp("1717430000")
+        self.assertIsNotNone(dt2)
+        self.assertEqual(dt2.timestamp(), 1717430000)
+
+        # Test nanoseconds integer string parsing
+        dt3 = parse_otel_timestamp("1717430000000000000")
+        self.assertIsNotNone(dt3)
+        self.assertEqual(dt3.timestamp(), 1717430000)
+
+        # Test standard ISO string parsing
+        dt4 = parse_otel_timestamp("2024-06-03T15:00:00Z")
+        self.assertIsNotNone(dt4)
+        self.assertEqual(dt4.tzinfo, timezone.utc)
+
+        # Test invalid values return None
+        self.assertIsNone(parse_otel_timestamp("invalid-date"))
+        self.assertIsNone(parse_otel_timestamp(None))
+
+    def test_pi_usage_tokens_calculation(self):
+        # Case 1: total token count is provided
+        usage1 = {
+            "totalTokens": 150,
+            "input": 100,
+            "output": 50,
+            "reasoningTokens": 20,
+        }
+        res1 = pi_usage_tokens(usage1)
+        self.assertEqual(res1["total"], 150)
+        self.assertEqual(res1["reasoning"], 20)
+
+        # Case 2: total is missing, fallback to input + output
+        usage2 = {
+            "input": 120,
+            "output": 60,
+            "reasoning": 30,
+        }
+        res2 = pi_usage_tokens(usage2)
+        self.assertEqual(res2["total"], 180)
+        self.assertEqual(res2["reasoning"], 30)
+
+        # Case 3: empty/invalid usage dict
+        self.assertEqual(pi_usage_tokens(None), {})
 
 
 if __name__ == "__main__":

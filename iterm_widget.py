@@ -40,11 +40,31 @@ async def main(connection):
         candidate = os.path.join(bin_dir, "python3")
         if os.path.exists(candidate):
             return candidate
-        # Fall back to any versioned python3.x binary
-        matches = sorted(glob.glob(os.path.join(bin_dir, "python3.*")))
-        if matches:
-            return matches[-1]  # pick the highest version
-        return None
+
+        if not os.path.isdir(bin_dir):
+            return None
+
+        # Fall back to any versioned python3.x binary, avoiding glob path wildcard issues
+        matches = []
+        try:
+            for name in os.listdir(bin_dir):
+                if name.startswith("python3.") and name[-1].isdigit():
+                    matches.append(name)
+        except OSError:
+            return None
+
+        if not matches:
+            return None
+
+        def _parse_version(name):
+            ver_str = name[len("python3."):]
+            try:
+                return [int(x) for x in ver_str.split(".") if x.isdigit()]
+            except Exception:
+                return []
+
+        matches.sort(key=_parse_version)
+        return os.path.join(bin_dir, matches[-1])
 
     # Detect python path — prefer the venv python, then homebrew, then system
     venv_python = _find_venv_python(os.path.join(LIMITLENS_DIR, ".venv"))
