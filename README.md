@@ -34,7 +34,14 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 
 ## 🚀 Installation
 
-### Option 1: pipx install (Recommended)
+### Quick Install (macOS & Linux)
+One command to install everything — automatically detects your OS, installs `pipx` if needed, and optionally registers the menubar app to start at login:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/install.sh | bash
+```
+
+### Manual Install (pipx)
 Modern systems (like macOS with Homebrew or recent Linux distributions) block global `pip` installs to protect system stability (PEP-668). The best way to install LimitLens globally is using `pipx`.
 
 1. Install `pipx` if you haven't already (e.g., `brew install pipx` or `apt install pipx`).
@@ -47,6 +54,13 @@ Modern systems (like macOS with Homebrew or recent Linux distributions) block gl
      ```sh
      pipx install "git+https://github.com/salauddinn/limitlens.git"
      ```
+
+### Uninstall
+To completely remove LimitLens, the menubar LaunchAgent, and optionally your config:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall.sh | bash
+```
 
 
 
