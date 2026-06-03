@@ -18,6 +18,7 @@ class LimitLensApp(rumps.App):
         self._is_fetching = False
         self._pending_title = None
         self._pending_menu_items = None
+        self._notified_set = set()
 
     @rumps.timer(300)  # Refresh every 5 minutes
     def refresh(self, _=None):
@@ -44,6 +45,13 @@ class LimitLensApp(rumps.App):
             self.menu.add(rumps.separator)
             self.menu.add("Quit")
             self._pending_menu_items = None
+
+    def notify(self, title, message):
+        # Escape quotes to prevent shell injection
+        safe_title = title.replace('"', '\\"')
+        safe_msg = message.replace('"', '\\"')
+        script = f'display notification "{safe_msg}" with title "{safe_title}"'
+        subprocess.Popen(["osascript", "-e", script])
 
     def fetch_data(self):
         if self._is_fetching:
@@ -95,6 +103,19 @@ class LimitLensApp(rumps.App):
 
                     # Extract all active quotas for rich dropdown display
                     menu_items = []
+                    active_keys = set()
+                    
+                    def check_low_quota(id_str, label, pct, details=""):
+                        if pct is None:
+                            return
+                        active_keys.add(id_str)
+                        if pct < 10.0:
+                            if id_str not in self._notified_set:
+                                self.notify("LimitLens Quota Warning", f"{label} is running low ({pct:.1f}% left). {details}".strip())
+                                self._notified_set.add(id_str)
+                        elif pct >= 15.0:
+                            if id_str in self._notified_set:
+                                self._notified_set.remove(id_str)
                     
                     # Codex
                     codex = data.get("codex") or {}
@@ -107,6 +128,7 @@ class LimitLensApp(rumps.App):
                             pct = lim.get("left_percent")
                             if pct is not None:
                                 menu_items.append(f"Codex ({acc_name}) - {label}: {pct:.0f}% left")
+                                check_low_quota(f"codex-{acc_name}-{label}", f"Codex ({acc_name}) {label}", pct)
 
                     # Amp
                     amp = data.get("amp") or {}
@@ -117,6 +139,7 @@ class LimitLensApp(rumps.App):
                         tot = tier.get("total")
                         if pct is not None:
                             menu_items.append(f"{label}: {pct:.1f}% left (${rem:.2f}/${tot:.2f})")
+                            check_low_quota(f"amp-{label}", label, pct, f"(${rem:.2f} remaining)")
 
                     # Antigravity
                     ag = data.get("antigravity") or {}
@@ -129,6 +152,8 @@ class LimitLensApp(rumps.App):
                             pct = m.get("pct_left")
                             if pct is not None:
                                 menu_items.append(f"Antigravity ({prof_name}) - {label}: {pct:.0f}% left{status_suffix}")
+                                if status == "running":
+                                    check_low_quota(f"ag-{prof_name}-{label}", f"Antigravity ({prof_name}) {label}", pct)
 
                     # OpenCode / Credits
                     op_data = data.get("opencode") or {}
@@ -142,6 +167,7 @@ class LimitLensApp(rumps.App):
                             unit_sym = "$" if unit.lower() in ("usd", "$") else ""
                             unit_suf = "" if unit_sym else f" {unit}"
                             menu_items.append(f"OpenCode ({name}): {pct:.1f}% left ({unit_sym}{rem:.2f}/{unit_sym}{tot:.2f}{unit_suf})")
+                            check_low_quota(f"opencode-{name}", f"OpenCode ({name})", pct, f"({unit_sym}{rem:.2f} remaining)")
 
                     # Pioneer
                     pioneer = data.get("pioneer") or {}
@@ -150,6 +176,10 @@ class LimitLensApp(rumps.App):
                         pct = tier.get("pct_left")
                         if pct is not None:
                             menu_items.append(f"{label}: {pct:.1f}% left")
+                            check_low_quota(f"pioneer-{label}", label, pct)
+
+                    # Clean up tracked tools that have disappeared
+                    self._notified_set.intersection_update(active_keys)
 
                     self._pending_menu_items = menu_items
                 else:
