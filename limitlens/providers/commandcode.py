@@ -8,7 +8,7 @@ import urllib.request
 from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section
 
 
-DEFAULT_CREDITS_URL = "https://api.commandcode.ai/internal/billing/credits?"
+DEFAULT_CREDITS_URL = "https://api.commandcode.ai/internal/billing/credits"
 
 
 def _number(value, default=0.0):
@@ -39,17 +39,15 @@ def parse_commandcode_credits(payload, args=None, cfg=None):
     total = max(available, _number(cfg.get("total"), 0.0))
     pct_left = (available / total * 100.0) if total > 0 else 0.0
 
-    tiers = []
-    if total > 0:
-        tiers.append({
-            "label": "credits",
-            "remaining": available,
-            "total": total,
-            "used": max(0.0, total - available),
-            "pct_left": pct_left,
-            "pct_used": 100.0 - pct_left,
-            "unit": "credits",
-        })
+    tiers = [{
+        "label": "credits",
+        "remaining": available,
+        "total": total,
+        "used": max(0.0, total - available),
+        "pct_left": pct_left,
+        "pct_used": 100.0 - pct_left,
+        "unit": "credits",
+    }]
 
     return {
         "name": cfg.get("name") or "Command Code",
@@ -71,7 +69,7 @@ def _auth_headers_from_env():
     elif token:
         headers["authorization"] = token if token.lower().startswith("bearer ") else f"Bearer {token}"
     if cookie:
-        headers["cookie"] = cookie
+        headers["cookie"] = cookie.replace("\r", "").replace("\n", "")
     return headers
 
 

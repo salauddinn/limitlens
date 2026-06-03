@@ -11,8 +11,11 @@ def _float(value, default=0.0):
 
 
 def _format_amount(value, unit):
-    unit = unit or "units"
-    normalized = unit.lower()
+    if value is None:
+        return "?"
+    if unit is None:
+        unit = "units"
+    normalized = str(unit).lower()
     if normalized in ("$", "usd", "dollars"):
         return f"${value:.2f}"
     if normalized in ("₹", "inr", "rupees"):
@@ -35,7 +38,13 @@ def _normalize_tier(raw, default_label, default_unit):
         return None
 
     label = str(raw.get("label") or raw.get("name") or default_label)
-    unit = str(raw.get("unit") or default_unit or "units")
+    unit_val = raw.get("unit")
+    if unit_val is not None:
+        unit = str(unit_val)
+    elif default_unit is not None:
+        unit = str(default_unit)
+    else:
+        unit = "units"
     total = _float(raw.get("total") or raw.get("limit"), 0.0)
     remaining_raw = raw.get("remaining") if "remaining" in raw else raw.get("left")
     used_raw = raw.get("used") if "used" in raw else raw.get("spent")
@@ -45,7 +54,7 @@ def _normalize_tier(raw, default_label, default_unit):
     if total <= 0 and remaining > 0 and used > 0:
         total = remaining + used
     elif total <= 0 and remaining > 0:
-        total = remaining
+        total = None
     elif total > 0 and remaining_raw is None and used_raw is None:
         remaining = total
     elif total > 0 and remaining_raw is None:
@@ -53,10 +62,20 @@ def _normalize_tier(raw, default_label, default_unit):
     elif total > 0 and used_raw is None:
         used = max(0.0, total - remaining)
 
-    if total <= 0 and remaining <= 0 and used <= 0:
-        return None
+    if (total is not None and total <= 0) and remaining <= 0 and used <= 0:
+        if not any(k in raw for k in ("total", "limit", "remaining", "left", "used", "spent")):
+            return None
+        return {
+            "label": label,
+            "unit": unit,
+            "remaining": 0.0,
+            "total": 0.0,
+            "used": 0.0,
+            "pct_left": 0.0,
+            "pct_used": 100.0,
+        }
 
-    pct_left = (remaining / total * 100.0) if total > 0 else 0.0
+    pct_left = (remaining / total * 100.0) if (total is not None and total > 0) else None
     return {
         "label": label,
         "unit": unit,
@@ -64,7 +83,7 @@ def _normalize_tier(raw, default_label, default_unit):
         "total": total,
         "used": used,
         "pct_left": pct_left,
-        "pct_used": 100.0 - pct_left,
+        "pct_used": 100.0 - pct_left if pct_left is not None else None,
     }
 
 
@@ -72,7 +91,8 @@ def _normalize_tool(tool_id, raw):
     if not isinstance(raw, dict) or not raw.get("enabled", True):
         return None
 
-    unit = str(raw.get("unit") or "units")
+    unit_val = raw.get("unit")
+    unit = str(unit_val) if unit_val is not None else "units"
     tiers = []
     raw_tiers = raw.get("tiers")
     if isinstance(raw_tiers, list):
@@ -109,7 +129,7 @@ def get_custom_data(args, config):
     if isinstance(raw_tools, list):
         items = [(tool.get("id") or tool.get("name") or f"tool-{idx}", tool) for idx, tool in enumerate(raw_tools, start=1)]
     elif isinstance(raw_tools, dict):
-        items = raw_tools.items()
+        items = list(raw_tools.items())
     else:
         items = []
 
@@ -123,7 +143,7 @@ def get_custom_data(args, config):
     for tool in tools:
         for tier in tool["tiers"]:
             tier["visible"] = True
-            if disp_cfg["auto_hide_enabled"] and tier["pct_left"] < 5.0:
+            if disp_cfg["auto_hide_enabled"] and tier["pct_left"] is not None and tier["pct_left"] <= 5.0:
                 tier["visible"] = False
 
     return {"tools": tools}
@@ -147,18 +167,24 @@ def display_custom_text(data, args):
         return
 
     section("Custom Tools", args)
+    no_color = getattr(args, "no_color", False)
     for tool in visible_tools:
         identity_line(tool["id"], tool["name"], args)
         if tool.get("status"):
-            print_c(f"    status           {tool['status']}", "\033[90m", args.no_color)
+            print_c(f"    status           {tool['status']}", "\033[90m", no_color)
         for tier in tool.get("tiers", []):
-            b = bar(tier["pct_used"], no_color=args.no_color)
+            pct_used = tier.get("pct_used")
+            pct_left = tier.get("pct_left")
+            b = bar(pct_used if pct_used is not None else 0.0, no_color=no_color)
             remaining = _format_amount(tier["remaining"], tier["unit"])
             total = _format_amount(tier["total"], tier["unit"])
             used = _format_amount(tier["used"], tier["unit"])
-            print(f"    {tier['label']:<16} {b}  {tier['pct_left']:5.1f}% left  {remaining}/{total}  used {used}")
+            if pct_left is not None:
+                print(f"    {tier['label']:<16} {b}  {pct_left:5.1f}% left  {remaining}/{total}  used {used}")
+            else:
+                print(f"    {tier['label']:<16} {b}    ?% left  {remaining}/{total}  used {used}")
         if tool.get("request_count"):
-            print_c(f"    requests         {tool['request_count']}", "\033[90m", args.no_color)
+            print_c(f"    requests         {tool['request_count']}", "\033[90m", no_color)
         tool_filter = getattr(args, "tool", "custom")
         if tool.get("note") and (tool_filter == "custom" or getattr(args, "verbose", False) or getattr(args, "all", False)):
-            print_c(f"    note             {tool['note']}", "\033[90m", args.no_color)
+            print_c(f"    note             {tool['note']}", "\033[90m", no_color)
