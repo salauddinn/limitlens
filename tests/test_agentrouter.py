@@ -107,6 +107,20 @@ class TestAgentRouterProvider(unittest.TestCase):
 
     @patch("limitlens.providers.agentrouter._open_no_redirect")
     @patch("limitlens.providers.agentrouter.load_limitlens_config", return_value={"agentrouter": {}})
+    @patch.dict(os.environ, {"AGENTROUTER_COOKIE": "test\r\n-cookie", "AGENTROUTER_NEW_API_USER": "145\r\n176"})
+    def test_live_request_sanitizes_env_headers(self, mock_config, mock_open):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"data": {"quota": 100, "used_quota": 1}, "success": True}).encode("utf-8")
+        mock_open.return_value.__enter__.return_value = mock_resp
+
+        get_agentrouter_data(self.args)
+
+        req = mock_open.call_args[0][0]
+        self.assertEqual(req.headers["Cookie"], "test-cookie")
+        self.assertEqual(req.headers["New-api-user"], "145176")
+
+    @patch("limitlens.providers.agentrouter._open_no_redirect")
+    @patch("limitlens.providers.agentrouter.load_limitlens_config", return_value={"agentrouter": {}})
     @patch.dict(os.environ, {"AGENTROUTER_COOKIE": "test-cookie"})
     def test_network_error(self, mock_config, mock_open):
         mock_open.side_effect = urllib.error.URLError("Connection refused")

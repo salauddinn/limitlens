@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.3] - 2026-06-04
+
+### Fixed
+- Sanitize AgentRouter auth-related environment headers before API requests
+- Add Windows CI coverage and package classifier to match documented support
+- Keep the CI matrix running after a single job failure so release failures are diagnosable
+
 ## [1.2.2] - 2026-06-04
 
 ### Fixed

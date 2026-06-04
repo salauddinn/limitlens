@@ -137,6 +137,10 @@ def _open_no_redirect(req, timeout=10):
     return opener.open(req, timeout=timeout)
 
 
+def _clean_header_value(value):
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 def _auth_headers_from_env():
     headers = {}
     authorization = os.environ.get("AGENTROUTER_AUTHORIZATION")
@@ -145,13 +149,14 @@ def _auth_headers_from_env():
     user_id = os.environ.get("AGENTROUTER_NEW_API_USER")
 
     if authorization:
-        headers["authorization"] = authorization
+        headers["authorization"] = _clean_header_value(authorization)
     elif token:
+        token = _clean_header_value(token)
         headers["authorization"] = token if token.lower().startswith("bearer ") else f"Bearer {token}"
     if cookie:
-        headers["cookie"] = cookie
+        headers["cookie"] = _clean_header_value(cookie)
     if user_id:
-        headers["New-API-User"] = user_id
+        headers["New-API-User"] = _clean_header_value(user_id)
     return headers
 
 
