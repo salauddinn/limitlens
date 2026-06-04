@@ -19,7 +19,7 @@ async def main(connection):
         short_description="LimitLens Widget",
         detailed_description="Shows the best AI tool to avoid quota waste",
         knobs=[],
-        exemplar="💡 AI: 80%",
+        exemplar="🪐███99  ⚡██░67  🧠█░░30",
         update_cadence=900.0,
         identifier="com.limitlens.status"
     )
@@ -83,7 +83,7 @@ async def main(connection):
     else:
         PYTHON_BIN = "python3"
 
-    state = {"status": "💡 AI: Loading..."}
+    state = {"status": "⏳ Loading..."}
 
     def fetch_status_sync():
         import shutil
@@ -100,52 +100,72 @@ async def main(connection):
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
         return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
 
+    # Map tool identifiers → unique icons for instant visual differentiation
+    TOOL_ICONS = {
+        "antigravity":  "🪐",
+        "codex":        "⚡",
+        "claude":       "🧠",
+        "gemini":       "💎",
+        "gpt":          "🤖",
+        "cursor":       "🖱️",
+        "copilot":      "✈️",
+        "mistral":      "🌪️",
+        "llama":        "🦙",
+        "groq":         "⚙️",
+        "perplexity":   "🔍",
+        "cohere":       "🔵",
+    }
+
+    def _tool_icon(tool_key, name):
+        """Return a unique icon for the tool, falling back to a generic one."""
+        key = (tool_key or "").lower()
+        name_lower = (name or "").lower()
+        for k, icon in TOOL_ICONS.items():
+            if k in key or k in name_lower:
+                return icon
+        return "🔷"
+
+    def _bar(pct):
+        """Mini 3-char fill bar: ███ / ██░ / █░░ / ░░░"""
+        if pct is None:
+            return "░░░"
+        filled = round(pct / 100 * 3)
+        return "█" * filled + "░" * (3 - filled)
+
     def status_from_proc(proc):
         if proc is None:
-            return "🤖 Err: Set USER_LIMITLENS_DIR in widget script"
+            return "⚠️ Set USER_LIMITLENS_DIR"
         if proc.returncode != 0:
             err = (proc.stderr or "").strip().split("\n")[-1]
-            return f"🤖 Err: {err[:20]}" if err else "🤖 LimitLens: Err"
+            return f"⚠️ {err[:15]}" if err else "⚠️ LimitLens Err"
 
         data = json.loads(proc.stdout)
         recs = data.get("recommendations", {})
-
-        def _emoji(pct):
-            if pct is None: return "⚪"
-            if pct >= 50: return "🟢"
-            if pct >= 15: return "🟡"
-            return "🔴"
 
         display_items = []
         for item in recs.get("hard", []):
             tool = item.get("tool", "")
             pct = item.get("headroom_pct", 0)
-            
+
             if tool == "antigravity" and pct < 20:
                 continue
             if tool != "antigravity" and pct < 10:
                 continue
-                
+
             full_name = item.get("name", "Unknown")
-            # Strip bottleneck info like " (weekly)"
             if " (" in full_name:
                 full_name = full_name.split(" (")[0]
-                
-            if " → " in full_name:
-                prof, model = full_name.split(" → ", 1)
-                prof = prof.split(":", 1)[-1]
-                display_name = f"{prof}:{model.split()[0]}"
-            else:
-                display_name = full_name.replace("codex-", "")
-                
-            display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
-        
+
+            icon = _tool_icon(tool, full_name)
+            # Compact: icon + bar + percent, e.g.  🪐███99  ⚡██░67  🧠░░░12
+            display_items.append(f"{icon}{_bar(pct)}{pct:.0f}")
+
         if display_items:
-            visible = display_items[:3]
+            visible = display_items[:4]
             extra = len(display_items) - len(visible)
             suffix = f" +{extra}" if extra > 0 else ""
-            return "💡 " + " | ".join(visible) + suffix
-        return "🤖 No quotas available"
+            return "  ".join(visible) + suffix
+        return "⚪ No quota"
 
     async def refresh_state_once(loop):
         try:
