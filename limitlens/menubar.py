@@ -36,6 +36,10 @@ class LimitLensApp(rumps.App):
     def on_refresh(self, _):
         self.fetch_data()
 
+    @rumps.clicked("Quit")
+    def on_quit(self, _):
+        rumps.quit_application()
+
     @rumps.timer(1)
     def check_updates(self, _):
         if self._pending_title is not None:
