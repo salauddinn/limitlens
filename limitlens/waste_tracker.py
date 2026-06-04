@@ -164,6 +164,8 @@ def record_snapshot(result):
 
 def _parse_ts(s):
     try:
+        if isinstance(s, str):
+            s = s.replace("Z", "+00:00")
         dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
