@@ -6,9 +6,11 @@
   [![CI](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml/badge.svg)](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+  [![Website](https://img.shields.io/badge/Website-limitlens.vercel.app-cyan.svg)](https://limitlens.vercel.app)
   [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
 
   <br />
+  <a href="https://limitlens.vercel.app">🌐 limitlens.vercel.app</a>
 </div>
 
 If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **zero-dependency, local CLI tool**—along with a macOS menubar app and an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
