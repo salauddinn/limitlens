@@ -506,9 +506,9 @@ def compute_recommendations(result, parse_to_utc, fmt_reset):
 # ── Display ─────────────────────────────────────────────────────────────────
 
 TIER_HEADERS = {
-    "hard":  "Right now (hard task / multi-file refactor):",
-    "quick": "Right now (quick edit / grunt work):",
-    "cli":   "Right now (CLI / scripting / pair-prog):",
+    "hard":  "🧠 Right now (hard task / multi-file refactor):",
+    "quick": "⚡️ Right now (quick edit / grunt work):",
+    "cli":   "💻 Right now (CLI / scripting / pair-prog):",
 }
 
 def _print_tier(key, picks, args, print_c):
@@ -530,12 +530,12 @@ def _print_tier(key, picks, args, print_c):
 
 
 def display_recommendations(recs, args, print_c):
-    print_c("\n  ═══ Recommendation ═══", "\033[1;35m", args.no_color)
+    print_c("\n  🎯 ═══ Smart Recommendations ═══", "\033[1;35m", args.no_color)
 
     waste_reduction = recs.get("waste_reduction") or []
     if waste_reduction:
         top = waste_reduction[0]
-        print_c("\n  → Reduce waste most effectively:", "\033[1;33m", args.no_color)
+        print_c("\n  ♻️  Reduce waste most effectively:", "\033[1;33m", args.no_color)
         if args.no_color:
             print(f"      {top['name']}    {top['headroom_pct']:.1f}% left")
         else:
@@ -548,19 +548,19 @@ def display_recommendations(recs, args, print_c):
 
     waste = recs.get("waste_watch") or []
     if waste:
-        print_c("\n  ⚠ WASTE WATCH (use these soon or lose them)", "\033[1;33m", args.no_color)
+        print_c("\n  🔥 WASTE WATCH (use these soon or lose them)", "\033[1;31m", args.no_color)
         for c in waste[:5]:
             tag = "URGENT" if c["waste_severity"] == "urgent" else "slow"
             reset = c.get("reset_label") or "unknown"
             line = f"      • [{tag:<6}] {c['name']:<40} {c['headroom_pct']:5.1f}% left  ({reset})"
-            print_c(line, "\033[33m", args.no_color)
+            print_c(line, "\033[31m", args.no_color)
 
     for tier in ("hard", "quick", "cli"):
         _print_tier(tier, recs.get(tier) or [], args, print_c)
 
     skip = recs.get("skip_today") or []
     if skip:
-        print_c("\n  💡 Skip today (plenty of runway, save for later):", "\033[90m", args.no_color)
+        print_c("\n  💤 Skip today (plenty of runway, save for later):", "\033[90m", args.no_color)
         for c in skip[:3]:
             reset = c.get("reset_label") or "unknown"
             print_c(f"      • {c['name']:<40} {c['headroom_pct']:5.1f}% left  ({reset})", "\033[90m", args.no_color)

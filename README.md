@@ -110,6 +110,13 @@ limitlens-menubar
 ```
 It will add a bulb icon to your tray and notify you if your preferred AI quotas run critically low.
 
+### Restarting the Menubar App
+If you update LimitLens or need to manually restart the background process, you can do so with:
+```sh
+pkill -f "limitlens-menubar"
+nohup limitlens-menubar &>/dev/null &
+```
+
 ---
 
 ## 📟 iTerm2 Widget

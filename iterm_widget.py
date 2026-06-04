@@ -112,6 +112,12 @@ async def main(connection):
                     data = json.loads(proc.stdout)
                     
                     recs = data.get("recommendations", {})
+                    def _emoji(pct):
+                        if pct is None: return "⚪"
+                        if pct >= 50: return "🟢"
+                        if pct >= 15: return "🟡"
+                        return "🔴"
+
                     candidates = recs.get("hard", [])
                     
                     display_items = []
@@ -136,12 +142,12 @@ async def main(connection):
                         else:
                             display_name = full_name.replace("codex-", "")
                             
-                        display_items.append(f"{display_name}:{pct:.0f}%")
+                        display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
                     
                     if display_items:
                         state["status"] = "💡 " + " | ".join(display_items)
                     else:
-                        state["status"] = "🤖 LimitLens: No quotas available"
+                        state["status"] = "🤖 No quotas available"
                 else:
                     state["status"] = "🤖 LimitLens: Err"
             except Exception as e:

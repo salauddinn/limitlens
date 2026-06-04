@@ -48,7 +48,7 @@ def bar(pct, width=20, no_color=False):
     color = ""
     reset = ""
     if not no_color:
-        color = "\033[32m" if pct < 60 else "\033[33m" if pct < 85 else "\033[31m"
+        color = "\033[32m" if pct < 50 else "\033[33m" if pct < 85 else "\033[31m"
         reset = "\033[0m"
     return f"{color}{'█' * used}{'░' * left}{reset}"
 
