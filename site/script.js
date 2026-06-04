@@ -141,35 +141,48 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- macOS Menubar Interactive Demo ---
-  const macTrigger = document.getElementById('mac-menubar-trigger');
-  const macDropdown = document.getElementById('mac-dropdown-menu');
-  
-  if (macTrigger && macDropdown) {
-    macTrigger.addEventListener('click', (e) => {
+  // Use querySelectorAll so every instance on the page works (avoids duplicate-ID issues)
+  document.querySelectorAll('.mac-menubar-trigger').forEach(trigger => {
+    // Each trigger's sibling dropdown lives inside the same .mac-desktop-screen
+    const screen = trigger.closest('.mac-desktop-screen');
+    if (!screen) return;
+    const dropdown = screen.querySelector('.mac-dropdown-menu');
+    if (!dropdown) return;
+
+    trigger.addEventListener('click', (e) => {
       e.stopPropagation();
-      macTrigger.classList.toggle('active');
-      macDropdown.classList.toggle('open');
-      const isExpanded = macTrigger.classList.contains('active');
-      macTrigger.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-    });
-
-    // Close menu when clicking clickable items
-    macDropdown.querySelectorAll('.clickable').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        macTrigger.classList.remove('active');
-        macDropdown.classList.remove('open');
-        macTrigger.setAttribute('aria-expanded', 'false');
+      const isOpen = dropdown.classList.contains('open');
+      // Close any other open dropdowns first
+      document.querySelectorAll('.mac-dropdown-menu.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.mac-menubar-trigger.active').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-expanded', 'false');
       });
-    });
-
-    // Light dismiss when clicking anywhere else inside the document
-    document.addEventListener('click', (e) => {
-      if (!macTrigger.contains(e.target) && !macDropdown.contains(e.target)) {
-        macTrigger.classList.remove('active');
-        macDropdown.classList.remove('open');
-        macTrigger.setAttribute('aria-expanded', 'false');
+      if (!isOpen) {
+        dropdown.classList.add('open');
+        trigger.classList.add('active');
+        trigger.setAttribute('aria-expanded', 'true');
       }
     });
-  }
+
+    dropdown.querySelectorAll('.clickable').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.remove('open');
+        trigger.classList.remove('active');
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  });
+
+  // Global light-dismiss for all mac dropdowns
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.mac-desktop-screen')) {
+      document.querySelectorAll('.mac-dropdown-menu.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.mac-menubar-trigger.active').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
 });
