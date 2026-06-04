@@ -9,10 +9,12 @@ desktop notifications when quotas run critically low.
 """
 import json
 import subprocess  # nosec B404
-import threading
 import sys
+import threading
 import time
+
 import rumps
+
 
 class LimitLensApp(rumps.App):
     def __init__(self):
@@ -23,7 +25,8 @@ class LimitLensApp(rumps.App):
         self._pending_menu_items = None
         self._notified_set = set()
         self._has_loaded_once = False
-        self._max_title_items = 3
+        # Keep the macOS menubar compact. Full details live in the dropdown.
+        self._max_title_items = 2
 
     @rumps.timer(300)  # Refresh every 5 minutes
     def refresh(self, _=None):
@@ -55,166 +58,377 @@ class LimitLensApp(rumps.App):
         script = 'on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\n end run'
         subprocess.Popen(["osascript", "-e", script, message, title])  # nosec B603 B607
 
+    @staticmethod
+    def _safe_float(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _emoji(pct):
+        if pct is None:
+            return "⚪"
+        if pct >= 50:
+            return "🟢"
+        if pct >= 15:
+            return "🟡"
+        return "🔴"
+
+    @staticmethod
+    def _bar(pct, width=10):
+        if pct is None:
+            return "─" * width
+        pct = max(0.0, min(100.0, float(pct)))
+        filled = int((pct / 100.0) * width + 0.5)
+        if pct > 0 and filled == 0:
+            filled = 1
+        return "█" * filled + "░" * (width - filled)
+
+    @staticmethod
+    def _compact(text, max_len=18):
+        text = str(text or "")
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 1] + "…"
+
+    @staticmethod
+    def _format_number(value):
+        if value is None:
+            return "?"
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        abs_value = abs(value)
+        if abs_value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.1f}B"
+        if abs_value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}M"
+        if abs_value >= 10_000:
+            return f"{value / 1_000:.1f}K"
+        if value.is_integer():
+            return f"{int(value)}"
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+
+    @classmethod
+    def _format_amount(cls, value, unit=None):
+        unit = str(unit or "").strip()
+        if value is None:
+            return "?"
+        if unit.lower() in ("$", "usd"):
+            try:
+                return f"${float(value):.2f}"
+            except (TypeError, ValueError):
+                return f"${value}"
+        return cls._format_number(value)
+
+    @classmethod
+    def _format_ratio(cls, remaining, total, unit=None):
+        unit = str(unit or "").strip()
+        if unit.lower() in ("%", "% left"):
+            return "?" if remaining is None else f"{cls._format_number(remaining)}% left"
+        left = cls._format_amount(remaining, unit)
+        right = cls._format_amount(total, unit)
+        suffix = "" if unit.lower() in ("", "$", "usd") else f" {unit}"
+        if total is None:
+            return f"{left}{suffix}"
+        return f"{left}/{right}{suffix}"
+
+    @classmethod
+    def _row(cls, section, name, label, pct_left, remaining=None, total=None, unit=None,
+             status=None, used=None, pct_used=None, notify_id=None, notify_label=None):
+        pct_left = cls._safe_float(pct_left)
+        pct_used = cls._safe_float(pct_used)
+        if pct_used is None and pct_left is not None:
+            pct_used = max(0.0, 100.0 - pct_left)
+        return {
+            "section": section,
+            "name": name,
+            "label": label,
+            "pct_left": pct_left,
+            "pct_used": pct_used,
+            "remaining": remaining,
+            "total": total,
+            "unit": unit,
+            "status": status,
+            "used": used,
+            "notify_id": notify_id,
+            "notify_label": notify_label or f"{section} {label}",
+        }
+
     def _format_title(self, display_items):
         visible = display_items[:self._max_title_items]
         extra = len(display_items) - len(visible)
         suffix = f" +{extra}" if extra > 0 else ""
-        return "💡 " + " | ".join(visible) + suffix
+        return "💡 " + " · ".join(visible) + suffix
+
+    def _recommendation_title_items(self, data, rows):
+        recs = (data.get("recommendations") or {}).get("hard") or []
+        candidates = [r for r in recs if self._safe_float(r.get("headroom_pct")) is not None]
+        fresh = [r for r in candidates if not r.get("stale")]
+        source = fresh or candidates
+
+        items = []
+        for item in source:
+            pct = self._safe_float(item.get("headroom_pct"))
+            name = item.get("name") or item.get("tool") or "quota"
+            if " (" in name:
+                name = name.split(" (", 1)[0]
+            if " → " in name:
+                profile, model = name.split(" → ", 1)
+                profile = profile.split(":", 1)[-1]
+                name = f"{profile} {model.split()[0]}"
+            name = name.replace("codex-", "").strip()
+            name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
+            items.append(f"{self._emoji(pct)} {self._compact(name, 12)} {pct:.0f}%")
+
+        if items:
+            return items
+
+        sortable_rows = [r for r in rows if r.get("pct_left") is not None]
+        sortable_rows.sort(key=lambda r: r["pct_left"], reverse=True)
+        return [
+            f"{self._emoji(row['pct_left'])} {self._compact(row['name'], 12)} {row['pct_left']:.0f}%"
+            for row in sortable_rows
+        ]
+
+    def _format_recommendation_row(self, item):
+        pct = self._safe_float(item.get("headroom_pct"))
+        if pct is None:
+            return None
+        name = item.get("name") or item.get("tool") or "quota"
+        if " (" in name:
+            name = name.split(" (", 1)[0]
+        if " → " in name:
+            profile, model = name.split(" → ", 1)
+            profile = profile.split(":", 1)[-1]
+            name = f"{profile} / {model}"
+        name = name.replace("codex-", "").strip()
+        name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
+        note = item.get("note") or item.get("reset_label") or item.get("command") or ""
+        note = f"  · {self._compact(note, 22)}" if note else ""
+        return f"{self._emoji(pct)} {self._compact(name, 22):<22} {pct:5.1f}%  {self._bar(pct)}{note}"
+
+    def _format_usage_row(self, row):
+        pct = row.get("pct_left")
+        pct_used = row.get("pct_used")
+        status = row.get("status")
+        left = "  n/a" if pct is None else f"{pct:5.1f}%"
+        if pct_used is not None:
+            used = f"{pct_used:5.1f}%"
+        elif row.get("used") is not None:
+            used = f"{self._format_number(row['used'])} used"
+        else:
+            used = "   n/a"
+        ratio = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
+        status_suffix = f"  [{status}]" if status and status != "running" else ""
+        return (
+            f"{self._emoji(pct)} {self._compact(row['section'], 10):<10} "
+            f"{self._compact(row['name'], 13):<13} "
+            f"{self._compact(row['label'], 18):<18} "
+            f"{left:>6}  {used:>7}  {self._bar(pct)}  {ratio}{status_suffix}"
+        )
+
+    def _collect_rows(self, data, check_low_quota):
+        rows = []
+
+        # Custom configured tools (for example manual Kilo Code quotas)
+        custom = data.get("custom") or {}
+        for tool in custom.get("tools", []):
+            tool_name = tool.get("name") or tool.get("id") or "Custom"
+            for tier in tool.get("tiers", []):
+                if tier.get("visible", True) is False:
+                    continue
+                label = tier.get("label", tool_name)
+                pct = self._safe_float(tier.get("pct_left"))
+                rows.append(self._row(
+                    "Custom", tool_name, label, pct,
+                    remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit"),
+                    used=tier.get("used"), pct_used=tier.get("pct_used"), status=tool.get("status"),
+                    notify_id=f"custom-{tool.get('id', tool_name)}-{label}", notify_label=tool_name,
+                ))
+                check_low_quota(f"custom-{tool.get('id', tool_name)}-{label}", tool_name, pct)
+
+        # AgentRouter / Kilo Code API quotas
+        agentrouter = data.get("agentrouter") or {}
+        if agentrouter and "error" not in agentrouter:
+            ar_name = agentrouter.get("display_name") or agentrouter.get("username") or agentrouter.get("group") or "Kilo Code"
+            for tier in agentrouter.get("tiers", []):
+                if tier.get("visible", True) is False:
+                    continue
+                label = tier.get("label", "quota")
+                pct = self._safe_float(tier.get("pct_left"))
+                rows.append(self._row(
+                    "Kilo", ar_name, label, pct,
+                    remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit") or agentrouter.get("unit"),
+                    used=tier.get("used"), pct_used=tier.get("pct_used"),
+                    notify_id=f"agentrouter-{label}", notify_label=f"Kilo Code {label}",
+                ))
+                check_low_quota(f"agentrouter-{label}", f"Kilo Code {label}", pct)
+
+        # Codex
+        codex = data.get("codex") or {}
+        for acc in codex.get("accounts", []):
+            if "error" in acc:
+                continue
+            acc_name = acc.get("name", "Codex")
+            for lim in acc.get("limits", []):
+                label = lim.get("label", "limit")
+                pct = self._safe_float(lim.get("left_percent"))
+                rows.append(self._row(
+                    "Codex", acc_name, label, pct,
+                    remaining=lim.get("remaining"), total=lim.get("total"), unit=lim.get("unit"),
+                    notify_id=f"codex-{acc_name}-{label}", notify_label=f"Codex ({acc_name}) {label}",
+                ))
+                check_low_quota(f"codex-{acc_name}-{label}", f"Codex ({acc_name}) {label}", pct)
+
+        # Amp
+        amp = data.get("amp") or {}
+        for tier in amp.get("tiers", []):
+            if tier.get("visible", True) is False:
+                continue
+            label = tier.get("label", "Amp")
+            pct = self._safe_float(tier.get("pct_left"))
+            rows.append(self._row(
+                "Amp", "Amp", label, pct,
+                remaining=tier.get("remaining"), total=tier.get("total"), unit="$",
+                used=tier.get("used"), pct_used=tier.get("pct_used"),
+                notify_id=f"amp-{label}", notify_label=label,
+            ))
+            remaining = tier.get("remaining")
+            detail = f"(${remaining:.2f} remaining)" if isinstance(remaining, (int, float)) else ""
+            check_low_quota(f"amp-{label}", label, pct, detail)
+
+        # Antigravity
+        ag = data.get("antigravity") or {}
+        for prof in ag.get("profiles", []):
+            prof_name = prof.get("name", "default")
+            status = prof.get("status", "running")
+            for model in prof.get("models", []):
+                if model.get("visible", True) is False:
+                    continue
+                label = model.get("label", "model")
+                pct = self._safe_float(model.get("pct_left"))
+                rows.append(self._row(
+                    "Antigrav", prof_name, label, pct,
+                    remaining=pct, total=100, unit="% left", status=status,
+                    notify_id=f"ag-{prof_name}-{label}", notify_label=f"Antigravity ({prof_name}) {label}",
+                ))
+                if status == "running":
+                    check_low_quota(f"ag-{prof_name}-{label}", f"Antigravity ({prof_name}) {label}", pct)
+
+        # OpenCode / credits
+        op_data = data.get("opencode") or {}
+        for lim in op_data.get("credit_limits", []):
+            name = lim.get("name", "credits")
+            pct = self._safe_float(lim.get("pct_left"))
+            unit = lim.get("unit") or "credits"
+            rows.append(self._row(
+                "OpenCode", "OpenCode", name, pct,
+                remaining=lim.get("remaining"), total=lim.get("total"), unit=unit,
+                used=lim.get("used"), pct_used=lim.get("pct_used"),
+                notify_id=f"opencode-{name}", notify_label=f"OpenCode ({name})",
+            ))
+            rem = lim.get("remaining")
+            unit_sym = "$" if str(unit).lower() in ("usd", "$") else ""
+            detail = f"({unit_sym}{rem:.2f} remaining)" if isinstance(rem, (int, float)) else ""
+            check_low_quota(f"opencode-{name}", f"OpenCode ({name})", pct, detail)
+
+        # Pioneer
+        pioneer = data.get("pioneer") or {}
+        for tier in pioneer.get("tiers", []):
+            if tier.get("visible", True) is False:
+                continue
+            label = tier.get("label", "Pioneer")
+            pct = self._safe_float(tier.get("pct_left"))
+            rows.append(self._row(
+                "Pioneer", "Pioneer", label, pct,
+                remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit") or pioneer.get("unit"),
+                used=tier.get("used"), pct_used=tier.get("pct_used"),
+                notify_id=f"pioneer-{label}", notify_label=label,
+            ))
+            check_low_quota(f"pioneer-{label}", label, pct)
+
+        # Cursor
+        cursor = data.get("cursor") or {}
+        for tier in cursor.get("tiers", []):
+            label = tier.get("label", "Cursor")
+            pct = self._safe_float(tier.get("pct_left"))
+            rows.append(self._row(
+                "Cursor", "Cursor", label, pct,
+                remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit"),
+                used=tier.get("used"), pct_used=tier.get("pct_used"),
+                notify_id=f"cursor-{label}", notify_label=f"Cursor {label}",
+            ))
+            check_low_quota(f"cursor-{label}", f"Cursor {label}", pct)
+
+        return rows
+
+    def _build_menu_items(self, data, rows):
+        menu_items = []
+
+        def add_header(title):
+            if menu_items:
+                menu_items.append(rumps.separator)
+            menu_items.append(f"[{title}]")
+
+        recs = (data.get("recommendations") or {}).get("hard") or []
+        fresh_recs = [r for r in recs if not r.get("stale")]
+        rec_source = fresh_recs or recs
+        formatted_recs = [self._format_recommendation_row(r) for r in rec_source[:2]]
+        formatted_recs = [r for r in formatted_recs if r]
+        if formatted_recs:
+            add_header("Best available")
+            menu_items.extend(formatted_recs)
+
+        if rows:
+            add_header("Usage overview")
+            menu_items.append("Status Tool       Account       Quota/Model         Left     Used   Bar         Remaining/Total")
+            rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
+            for row in rows:
+                menu_items.append(self._format_usage_row(row))
+
+        return menu_items
 
     def fetch_data(self):
         if self._is_fetching:
             return
         self._is_fetching = True
-        
+
         def worker():
             try:
                 cmd = [sys.executable, "-m", "limitlens", "--json"]
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)  # nosec B603
-                
+
                 if proc.returncode == 0:
                     data = json.loads(proc.stdout)
-                    
-                    def _emoji(pct):
-                        if pct is None: return "⚪"
-                        if pct >= 50: return "🟢"
-                        if pct >= 15: return "🟡"
-                        return "🔴"
-
-                    recs = data.get("recommendations", {})
-                    candidates = recs.get("hard", [])
-                    
-                    display_items = []
-                    for item in candidates:
-                        tool = item.get("tool", "")
-                        pct = item.get("headroom_pct", 0)
-                        
-                        if tool == "antigravity" and pct < 20:
-                            continue
-                        if tool != "antigravity" and pct < 10:
-                            continue
-                            
-                        full_name = item.get("name", "Unknown")
-                        if " (" in full_name:
-                            full_name = full_name.split(" (")[0]
-                            
-                        if " → " in full_name:
-                            prof, model = full_name.split(" → ", 1)
-                            prof = prof.split(":", 1)[-1]
-                            display_name = f"{prof}:{model.split()[0]}"
-                        else:
-                            display_name = full_name.replace("codex-", "")
-                            
-                        display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
-                    
-                    if display_items:
-                        self._pending_title = self._format_title(display_items)
-                    else:
-                        self._pending_title = "🤖 No quotas available"
-
-                    menu_items = []
                     active_keys = set()
-                    
                     suppress_notifications = not self._has_loaded_once
 
                     def check_low_quota(id_str, label, pct, details=""):
-                        if pct is None: return
+                        pct = self._safe_float(pct)
+                        if pct is None:
+                            return
                         active_keys.add(id_str)
                         if pct < 10.0:
                             if not suppress_notifications and id_str not in self._notified_set:
-                                self.notify("LimitLens Quota Warning", f"{label} is running low ({pct:.1f}% left). {details}".strip())
+                                self.notify(
+                                    "LimitLens Quota Warning",
+                                    f"{label} is running low ({pct:.1f}% left). {details}".strip(),
+                                )
                                 self._notified_set.add(id_str)
-                        elif pct >= 15.0:
-                            if id_str in self._notified_set:
-                                self._notified_set.remove(id_str)
+                        elif pct >= 15.0 and id_str in self._notified_set:
+                            self._notified_set.remove(id_str)
 
-                    def add_header(title):
-                        if menu_items:
-                            menu_items.append(rumps.separator)
-                        menu_items.append(f"[{title}]")
-                    
-                    # Codex
-                    codex = data.get("codex") or {}
-                    has_codex = False
-                    for acc in codex.get("accounts", []):
-                        if "error" in acc: continue
-                        acc_name = acc.get("name", "Codex")
-                        for lim in acc.get("limits", []):
-                            pct = float(lim.get("left_percent")) if lim.get("left_percent") is not None else None
-                            if pct is not None:
-                                if not has_codex: add_header("Codex"); has_codex = True
-                                label = lim.get("label", "limit")
-                                menu_items.append(f"{_emoji(pct)} {acc_name} - {label}: {pct:.0f}% left")
-                                check_low_quota(f"codex-{acc_name}-{label}", f"Codex ({acc_name}) {label}", pct)
+                    rows = self._collect_rows(data, check_low_quota)
+                    self._notified_set.intersection_update(active_keys)
 
-                    # Amp
-                    amp = data.get("amp") or {}
-                    has_amp = False
-                    for tier in amp.get("tiers", []):
-                        pct = float(tier.get("pct_left")) if tier.get("pct_left") is not None else None
-                        if pct is not None:
-                            if not has_amp: add_header("Amp"); has_amp = True
-                            label = tier.get("label", "Amp")
-                            rem, tot = tier.get("remaining"), tier.get("total")
-                            menu_items.append(f"{_emoji(pct)} {label}: {pct:.1f}% left (${rem:.2f}/${tot:.2f})")
-                            check_low_quota(f"amp-{label}", label, pct, f"(${rem:.2f} remaining)")
-
-                    # Antigravity
-                    ag = data.get("antigravity") or {}
-                    has_ag = False
-                    for prof in ag.get("profiles", []):
-                        prof_name = prof.get("name", "default")
-                        status = prof.get("status", "running")
-                        status_suffix = f" [{status}]" if status != "running" else ""
-                        for m in prof.get("models", []):
-                            pct = float(m.get("pct_left")) if m.get("pct_left") is not None else None
-                            if pct is not None:
-                                if not has_ag: add_header("Antigravity"); has_ag = True
-                                label = m.get("label", "model")
-                                menu_items.append(f"{_emoji(pct)} {prof_name} - {label}: {pct:.0f}% left{status_suffix}")
-                                if status == "running":
-                                    check_low_quota(f"ag-{prof_name}-{label}", f"Antigravity ({prof_name}) {label}", pct)
-
-                    # OpenCode / Credits
-                    op_data = data.get("opencode") or {}
-                    has_op = False
-                    for lim in op_data.get("credit_limits", []):
-                        pct = float(lim.get("pct_left")) if lim.get("pct_left") is not None else None
-                        if pct is not None:
-                            if not has_op: add_header("OpenCode"); has_op = True
-                            name = lim.get("name", "credits")
-                            rem, tot = lim.get("remaining"), lim.get("total")
-                            unit = lim.get("unit") or "credits"
-                            unit_sym = "$" if unit.lower() in ("usd", "$") else ""
-                            unit_suf = "" if unit_sym else f" {unit}"
-                            menu_items.append(f"{_emoji(pct)} {name}: {pct:.1f}% left ({unit_sym}{rem:.2f}/{unit_sym}{tot:.2f}{unit_suf})")
-                            check_low_quota(f"opencode-{name}", f"OpenCode ({name})", pct, f"({unit_sym}{rem:.2f} remaining)")
-
-                    # Pioneer
-                    pioneer = data.get("pioneer") or {}
-                    has_pio = False
-                    for tier in pioneer.get("tiers", []):
-                        pct = float(tier.get("pct_left")) if tier.get("pct_left") is not None else None
-                        if pct is not None:
-                            if not has_pio: add_header("Pioneer"); has_pio = True
-                            label = tier.get("label", "Pioneer")
-                            menu_items.append(f"{_emoji(pct)} {label}: {pct:.1f}% left")
-                            check_low_quota(f"pioneer-{label}", label, pct)
-
-                    # Cursor
-                    cursor = data.get("cursor") or {}
-                    has_cursor = False
-                    for tier in cursor.get("tiers", []):
-                        pct = float(tier.get("pct_left")) if tier.get("pct_left") is not None else None
-                        used = tier.get("used", 0)
-                        label = tier.get("label", "Cursor")
-                        if not has_cursor: add_header("Cursor"); has_cursor = True
-                        if pct is not None:
-                            menu_items.append(f"{_emoji(pct)} {label}: {pct:.1f}% left")
-                            check_low_quota(f"cursor-{label}", f"Cursor {label}", pct)
-                        else:
-                            menu_items.append(f"⚪ {label}: {int(used)} used (Unlimited)")
-
-                    self._pending_menu_items = menu_items
+                    title_items = self._recommendation_title_items(data, rows)
+                    self._pending_title = self._format_title(title_items) if title_items else "🤖 No quotas available"
+                    self._pending_menu_items = self._build_menu_items(data, rows)
                     self._has_loaded_once = True
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
@@ -229,6 +443,7 @@ class LimitLensApp(rumps.App):
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
+
 def main():
     app = LimitLensApp()
     # Fetch once before starting the AppKit loop so the UI does not remain
@@ -240,6 +455,6 @@ def main():
     app.check_updates(None)
     app.run()
 
+
 if __name__ == "__main__":
     main()
-
