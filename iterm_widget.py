@@ -100,7 +100,7 @@ async def main(connection):
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
         return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
 
-    # Icons for each real LimitLens-tracked tool (consistent across menubar + iTerm)
+    # Icons for known LimitLens tools (consistent across menubar + iTerm)
     TOOL_ICONS = {
         "antigravity":  "🪐",   # Antigravity
         "codex":        "⚡",   # OpenAI Codex
@@ -110,17 +110,53 @@ async def main(connection):
         "commandcode":  "🖥️",  # Command Code
         "copilot":      "✈️",  # GitHub Copilot
         "cursor":       "🖱️",  # Cursor IDE
-        "custom":       "🔧",   # Custom configured tools
     }
 
+    # Keyword → icon for smart custom tool matching
+    CUSTOM_KEYWORDS = [
+        ("claude",      "🧠"),
+        ("anthropic",   "🧠"),
+        ("gpt",         "🌀"),
+        ("openai",      "🌀"),
+        ("gemini",      "💎"),
+        ("google",      "💎"),
+        ("mistral",     "🌪️"),
+        ("llama",       "🦙"),
+        ("ollama",      "🦙"),
+        ("groq",        "⚙️"),
+        ("perplexity",  "🔍"),
+        ("cohere",      "🔵"),
+        ("deepseek",    "🐋"),
+        ("qwen",        "🌸"),
+        ("local",       "🏠"),
+        ("code",        "💻"),
+        ("chat",        "💬"),
+        ("agent",       "🤖"),
+        ("api",         "🔌"),
+    ]
+
+    # Fallback pool — deterministic per tool name so same tool = same icon always
+    _FALLBACK_POOL = ["🟣", "🟤", "🔺", "🔸", "🔹", "⭐", "🎯", "🧩", "🪩", "🎲"]
+
     def _tool_icon(tool_key, name):
-        """Return a unique icon for the tool, falling back to a generic one."""
+        """Return a unique icon: known tool → fixed icon, custom → keyword match
+        or deterministic pool pick based on name hash."""
         key = (tool_key or "").lower()
         name_lower = (name or "").lower()
+
+        # 1. Known LimitLens tools
         for k, icon in TOOL_ICONS.items():
             if k in key or k in name_lower:
                 return icon
-        return "🔷"
+
+        # 2. Custom tool — try keyword match on the name
+        for keyword, icon in CUSTOM_KEYWORDS:
+            if keyword in name_lower:
+                return icon
+
+        # 3. Deterministic fallback: same name always gets same icon
+        idx = hash(name_lower) % len(_FALLBACK_POOL)
+        return _FALLBACK_POOL[idx]
 
     def _bar(pct):
         """Mini 3-char fill bar: ███ / ██░ / █░░ / ░░░"""

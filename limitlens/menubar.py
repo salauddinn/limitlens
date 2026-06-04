@@ -67,7 +67,7 @@ class LimitLensApp(rumps.App):
         except (TypeError, ValueError):
             return None
 
-    # Icons for each real LimitLens-tracked tool (consistent across menubar + iTerm)
+    # Icons for known LimitLens tools (consistent across menubar + iTerm)
     TOOL_ICONS = {
         "antigravity": "🪐", "antigrav": "🪐",   # Antigravity
         "codex":        "⚡",                      # OpenAI Codex
@@ -77,8 +77,54 @@ class LimitLensApp(rumps.App):
         "commandcode":  "🖥️",                     # Command Code
         "copilot":      "✈️",                     # GitHub Copilot
         "cursor":       "🖱️",                     # Cursor IDE
-        "custom":       "🔧",                      # Custom configured tools
     }
+
+    # Keyword → icon for smart custom tool name matching
+    CUSTOM_KEYWORDS = [
+        ("claude",      "🧠"),
+        ("anthropic",   "🧠"),
+        ("gpt",         "🌀"),
+        ("openai",      "🌀"),
+        ("gemini",      "💎"),
+        ("google",      "💎"),
+        ("mistral",     "🌪️"),
+        ("llama",       "🦙"),
+        ("ollama",      "🦙"),
+        ("groq",        "⚙️"),
+        ("perplexity",  "🔍"),
+        ("cohere",      "🔵"),
+        ("deepseek",    "🐋"),
+        ("qwen",        "🌸"),
+        ("local",       "🏠"),
+        ("code",        "💻"),
+        ("chat",        "💬"),
+        ("agent",       "🤖"),
+        ("api",         "🔌"),
+    ]
+
+    # Fallback pool — deterministic per tool name so same tool = same icon always
+    _FALLBACK_POOL = ["🟣", "🟤", "🔺", "🔸", "🔹", "⭐", "🎯", "🧩", "🪩", "🎲"]
+
+    @classmethod
+    def _tool_icon(cls, tool_key="", name="", section=""):
+        """Return a unique emoji: known tool → fixed icon, custom → keyword
+        match on name, or deterministic pool pick based on name hash."""
+        # 1. Known LimitLens tools — match on tool_key, name, or section
+        for source in (tool_key, name, section):
+            key = (source or "").lower()
+            for k, icon in cls.TOOL_ICONS.items():
+                if k in key:
+                    return icon
+
+        # 2. Custom tool — try keyword match on the name
+        name_lower = (name or "").lower()
+        for keyword, icon in cls.CUSTOM_KEYWORDS:
+            if keyword in name_lower:
+                return icon
+
+        # 3. Deterministic fallback: same name always gets same icon
+        idx = hash(name_lower) % len(cls._FALLBACK_POOL)
+        return cls._FALLBACK_POOL[idx]
 
     @staticmethod
     def _emoji(pct):
@@ -89,16 +135,6 @@ class LimitLensApp(rumps.App):
         if pct >= 15:
             return "🟡"
         return "🔴"
-
-    @classmethod
-    def _tool_icon(cls, tool_key="", name="", section=""):
-        """Return a unique emoji for the tool, falling back to a colored health dot."""
-        for source in (tool_key, name, section):
-            key = (source or "").lower()
-            for k, icon in cls.TOOL_ICONS.items():
-                if k in key:
-                    return icon
-        return "🔷"
 
     @staticmethod
     def _bar(pct, width=10):
