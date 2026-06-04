@@ -155,18 +155,30 @@ async def main(connection):
             
             await asyncio.sleep(900)
 
-    # Start the background polling task
-    asyncio.create_task(poll_status())
-
     @iterm2.StatusBarRPC
     async def coro(knobs, session_id=iterm2.Reference("id")):
         # Return instantly to prevent iTerm2 from timing out
         return state["status"]
 
-    try:
-        await component.async_register(connection, coro)
-        print("Registration successful for com.limitlens.status")
-    except Exception as e:
-        print(f"Registration failed: {e}")
+    # Retry registration with backoff — handles DUPLICATE_SERVER_ORIGINATED_RPC
+    # which occurs when a previous (crashed) script instance left a stale
+    # registration that iTerm2 hasn't cleaned up yet.
+    max_attempts = 10
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await component.async_register(connection, coro)
+            print("Registration successful for com.limitlens.status")
+            break
+        except Exception as e:
+            if "DUPLICATE" in str(e) and attempt < max_attempts:
+                delay = min(2 ** attempt, 300)
+                print(f"Registration attempt {attempt} got: {e} — retrying in {delay}s")
+                await asyncio.sleep(delay)
+            else:
+                print(f"Registration failed: {e}")
+                return
+
+    # Start the background polling task only after successful registration
+    asyncio.create_task(poll_status())
 
 iterm2.run_forever(main, retry=True)

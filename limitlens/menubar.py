@@ -21,6 +21,8 @@ class LimitLensApp(rumps.App):
         self._pending_title = None
         self._pending_menu_items = None
         self._notified_set = set()
+        self._has_loaded_once = False
+        self._max_title_items = 3
 
     @rumps.timer(300)  # Refresh every 5 minutes
     def refresh(self, _=None):
@@ -51,6 +53,12 @@ class LimitLensApp(rumps.App):
     def notify(self, title, message):
         script = 'on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\n end run'
         subprocess.Popen(["osascript", "-e", script, message, title])  # nosec B603 B607
+
+    def _format_title(self, display_items):
+        visible = display_items[:self._max_title_items]
+        extra = len(display_items) - len(visible)
+        suffix = f" +{extra}" if extra > 0 else ""
+        return "💡 " + " | ".join(visible) + suffix
 
     def fetch_data(self):
         if self._is_fetching:
@@ -98,18 +106,20 @@ class LimitLensApp(rumps.App):
                         display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
                     
                     if display_items:
-                        self._pending_title = "💡 " + " | ".join(display_items)
+                        self._pending_title = self._format_title(display_items)
                     else:
                         self._pending_title = "🤖 No quotas available"
 
                     menu_items = []
                     active_keys = set()
                     
+                    suppress_notifications = not self._has_loaded_once
+
                     def check_low_quota(id_str, label, pct, details=""):
                         if pct is None: return
                         active_keys.add(id_str)
                         if pct < 10.0:
-                            if id_str not in self._notified_set:
+                            if not suppress_notifications and id_str not in self._notified_set:
                                 self.notify("LimitLens Quota Warning", f"{label} is running low ({pct:.1f}% left). {details}".strip())
                                 self._notified_set.add(id_str)
                         elif pct >= 15.0:
@@ -204,6 +214,7 @@ class LimitLensApp(rumps.App):
                             menu_items.append(f"⚪ {label}: {int(used)} used (Unlimited)")
 
                     self._pending_menu_items = menu_items
+                    self._has_loaded_once = True
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
                     self._pending_title = f"🤖 Err: {err_msg[:20]}"

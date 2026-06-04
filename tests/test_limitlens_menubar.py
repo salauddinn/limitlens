@@ -165,6 +165,7 @@ def test_fetch_data_success_with_quotas(app):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
+        app._has_loaded_once = True
         
         app.fetch_data()
         
@@ -203,6 +204,39 @@ def test_fetch_data_success_with_quotas(app):
         
         mock_notify.assert_not_called()
         assert "codex-Acc1-Reqs" not in app._notified_set
+
+def test_fetch_data_suppresses_initial_low_quota_notification(app):
+    mock_data = {
+        "recommendations": {"hard": []},
+        "codex": {
+            "accounts": [
+                {"name": "Acc1", "limits": [{"label": "Reqs", "left_percent": 5.0}]}
+            ]
+        },
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps(mock_data)
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc), \
+         patch.object(app, 'notify') as mock_notify:
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
+
+        app.fetch_data()
+        mock_notify.assert_not_called()
+        assert app._has_loaded_once
+
+        app.fetch_data()
+        mock_notify.assert_called_once_with(
+            "LimitLens Quota Warning",
+            "Codex (Acc1) Reqs is running low (5.0% left).",
+        )
+
 
 def test_fetch_data_subprocess_error(app):
     mock_proc = MagicMock()
