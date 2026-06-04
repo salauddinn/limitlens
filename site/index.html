@@ -315,28 +315,25 @@
       <div class="live-demo-grid">
         <!-- macOS Menubar Interactive -->
         <div class="live-demo-card">
-          <div class="live-demo-label">🍎 macOS Menubar — click the icon to open</div>
+          <div class="live-demo-label">🍎 macOS Menubar — click the percentages to open</div>
           <div class="mac-showcase-container">
             <div class="mac-desktop-screen">
               <div class="mac-menubar">
                 <div class="mac-menubar-left">
                   <span class="mac-apple-logo"></span>
-                  <span class="mac-menu-item">LimitLens</span>
+                  <span class="mac-menu-item">Finder</span>
+                  <span class="mac-menu-item" style="opacity:0.6;font-weight:400">File</span>
+                  <span class="mac-menu-item" style="opacity:0.6;font-weight:400">Edit</span>
                 </div>
                 <div class="mac-menubar-right">
-                  <span class="mac-status-pill"><span class="mac-emoji">🪐</span> <span class="mac-pill-text">100%</span></span>
-                  <span class="mac-status-pill"><span class="mac-emoji">🔸</span> <span class="mac-pill-text">97% +3</span></span>
                   <span class="mac-mic-indicator" title="Microphone in use"><svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3m0 16a6 6 0 0 1-6-6h2a4 4 0 0 0 8 0h2a6 6 0 0 1-6 6v2h3v2H9v-2h3v-2Z"/></svg></span>
                   <span class="mac-sys-icon" title="Battery"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M17 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3 8h-4v-2h4v2m4-5H1v8h22V8h-4Z"/></svg></span>
                   <span class="mac-sys-icon" title="Wi-Fi"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M12 21a2 2 0 1 1-2-2 2 2 0 0 1 2 2Zm7.07-7.07a10 10 0 0 0-14.14 0l1.41 1.41a8 8 0 0 1 11.32 0ZM22 9a14 14 0 0 0-20 0l1.41 1.41a12 12 0 0 1 17.18 0Z"/></svg></span>
-                  <div class="mac-menubar-trigger" id="mac-menubar-trigger" role="button" aria-haspopup="true" aria-expanded="false" tabindex="0">
-                    <svg class="mac-trigger-icon" viewBox="0 0 24 24" width="15" height="15">
-                      <rect x="2" y="5" width="20" height="4.5" rx="2.25" fill="none" stroke="currentColor" stroke-width="1.8"/>
-                      <circle cx="16" cy="7.25" r="2.25" fill="currentColor"/>
-                      <rect x="2" y="14.5" width="20" height="4.5" rx="2.25" fill="none" stroke="currentColor" stroke-width="1.8"/>
-                      <circle cx="8" cy="16.75" r="2.25" fill="currentColor"/>
-                    </svg>
-                    <span class="mac-trigger-dot yellow"></span>
+                  <!-- Whole pill area is the trigger -->
+                  <div class="mac-menubar-trigger" role="button" aria-haspopup="true" aria-expanded="false" tabindex="0" style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;">
+                    <span class="mac-status-pill" style="pointer-events:none"><span class="mac-emoji">🪐</span> <span class="mac-pill-text">100%</span></span>
+                    <span class="mac-status-pill" style="pointer-events:none"><span class="mac-emoji">🔸</span> <span class="mac-pill-text">97% +3</span></span>
+                    <span class="mac-trigger-dot yellow" style="position:static;margin-left:2px"></span>
                   </div>
                   <span class="mac-time">Thu Jun 4 &nbsp;3:22 PM</span>
                 </div>
