@@ -170,10 +170,10 @@ def test_fetch_data_success_with_quotas(app):
         app.fetch_data()
         
         assert app._pending_title.startswith("💡 ")
-        assert "ag-prof" in app._pending_title
-        assert "ag2" in app._pending_title
+        assert "🟡25%" in app._pending_title
+        assert "🔴10%" in app._pending_title
         assert "+3" in app._pending_title
-        assert "bar" not in app._pending_title  # only the top 2 live in the menubar
+        assert "ag-prof" not in app._pending_title  # title stays tiny; details are in dropdown
         
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)

@@ -181,9 +181,7 @@ class LimitLensApp(rumps.App):
                 profile, model = name.split(" → ", 1)
                 profile = profile.split(":", 1)[-1]
                 name = f"{profile} {model.split()[0]}"
-            name = name.replace("codex-", "").strip()
-            name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
-            items.append(f"{self._emoji(pct)} {self._compact(name, 12)} {pct:.0f}%")
+            items.append(f"{self._emoji(pct)}{pct:.0f}%")
 
         if items:
             return items
@@ -191,7 +189,7 @@ class LimitLensApp(rumps.App):
         sortable_rows = [r for r in rows if r.get("pct_left") is not None]
         sortable_rows.sort(key=lambda r: r["pct_left"], reverse=True)
         return [
-            f"{self._emoji(row['pct_left'])} {self._compact(row['name'], 12)} {row['pct_left']:.0f}%"
+            f"{self._emoji(row['pct_left'])}{row['pct_left']:.0f}%"
             for row in sortable_rows
         ]
 
