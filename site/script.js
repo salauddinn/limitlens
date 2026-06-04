@@ -139,4 +139,37 @@ document.addEventListener('DOMContentLoaded', () => {
       revealObserver.observe(el);
     });
   }
+
+  // --- macOS Menubar Interactive Demo ---
+  const macTrigger = document.getElementById('mac-menubar-trigger');
+  const macDropdown = document.getElementById('mac-dropdown-menu');
+  
+  if (macTrigger && macDropdown) {
+    macTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      macTrigger.classList.toggle('active');
+      macDropdown.classList.toggle('open');
+      const isExpanded = macTrigger.classList.contains('active');
+      macTrigger.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    });
+
+    // Close menu when clicking clickable items
+    macDropdown.querySelectorAll('.clickable').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        macTrigger.classList.remove('active');
+        macDropdown.classList.remove('open');
+        macTrigger.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+    // Light dismiss when clicking anywhere else inside the document
+    document.addEventListener('click', (e) => {
+      if (!macTrigger.contains(e.target) && !macDropdown.contains(e.target)) {
+        macTrigger.classList.remove('active');
+        macDropdown.classList.remove('open');
+        macTrigger.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
 });
