@@ -26,7 +26,7 @@ def app():
     return LimitLensApp()
 
 def test_init(app):
-    assert app.title == "💡 AI: Loading..."
+    assert app.title == "⏳ Loading..."
     assert app.menu == ["Refresh Now", mock_rumps.separator, "Quit"]
     assert not app._is_fetching
     assert app._pending_title is None
@@ -94,7 +94,7 @@ def test_fetch_data_success_empty(app):
         
         app.fetch_data()
         
-        assert app._pending_title == "🤖 No quotas available"
+        assert app._pending_title == "⚪ No quota"
         assert app._pending_menu_items == []
         assert not app._is_fetching
 
@@ -169,9 +169,8 @@ def test_fetch_data_success_with_quotas(app):
         
         app.fetch_data()
         
-        assert app._pending_title.startswith("💡 ")
-        assert "🟡25%" in app._pending_title
-        assert "🔴10%" in app._pending_title
+        assert "🪐25%" in app._pending_title
+        assert "🪐10%" in app._pending_title
         assert "+3" in app._pending_title
         assert "ag-prof" not in app._pending_title  # title stays tiny; details are in dropdown
         
@@ -253,7 +252,7 @@ def test_fetch_data_subprocess_error(app):
         mock_thread.side_effect = mock_thread_init
         
         app.fetch_data()
-        assert app._pending_title == "🤖 Err: last error line"
+        assert app._pending_title == "⚠️ last error line"
 
 def test_fetch_data_subprocess_timeout(app):
     with patch("threading.Thread") as mock_thread, \
@@ -265,7 +264,7 @@ def test_fetch_data_subprocess_timeout(app):
         mock_thread.side_effect = mock_thread_init
         
         app.fetch_data()
-        assert app._pending_title == "🤖 Timeout"
+        assert app._pending_title == "⚠️ Timeout"
 
 def test_fetch_data_subprocess_exception(app):
     with patch("threading.Thread") as mock_thread, \
@@ -277,7 +276,7 @@ def test_fetch_data_subprocess_exception(app):
         mock_thread.side_effect = mock_thread_init
         
         app.fetch_data()
-        assert app._pending_title == "🤖 Err: some bad error"
+        assert app._pending_title == "⚠️ some bad error"
 
 def test_main():
     with patch("limitlens.menubar.LimitLensApp") as mock_app_cls:

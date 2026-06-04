@@ -19,7 +19,7 @@ async def main(connection):
         short_description="LimitLens Widget",
         detailed_description="Shows the best AI tool to avoid quota waste",
         knobs=[],
-        exemplar="🪐███99  ⚡██░67  🧠█░░30",
+        exemplar="🪐███99  ⚡██░67  🔥█░░30",
         update_cadence=900.0,
         identifier="com.limitlens.status"
     )
@@ -100,20 +100,17 @@ async def main(connection):
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
         return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
 
-    # Map tool identifiers → unique icons for instant visual differentiation
+    # Icons for each real LimitLens-tracked tool (consistent across menubar + iTerm)
     TOOL_ICONS = {
-        "antigravity":  "🪐",
-        "codex":        "⚡",
-        "claude":       "🧠",
-        "gemini":       "💎",
-        "gpt":          "🤖",
-        "cursor":       "🖱️",
-        "copilot":      "✈️",
-        "mistral":      "🌪️",
-        "llama":        "🦙",
-        "groq":         "⚙️",
-        "perplexity":   "🔍",
-        "cohere":       "🔵",
+        "antigravity":  "🪐",   # Antigravity
+        "codex":        "⚡",   # OpenAI Codex
+        "amp":          "🔥",   # Amp
+        "pioneer":      "🧭",   # Pioneer
+        "agentrouter":  "🔶",   # Kilo Code / AgentRouter
+        "commandcode":  "🖥️",  # Command Code
+        "copilot":      "✈️",  # GitHub Copilot
+        "cursor":       "🖱️",  # Cursor IDE
+        "custom":       "🔧",   # Custom configured tools
     }
 
     def _tool_icon(tool_key, name):

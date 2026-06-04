@@ -18,7 +18,7 @@ import rumps
 
 class LimitLensApp(rumps.App):
     def __init__(self):
-        super(LimitLensApp, self).__init__("💡 AI: Loading...")
+        super(LimitLensApp, self).__init__("⏳ Loading...")
         self.menu = ["Refresh Now", rumps.separator, "Quit"]
         self._is_fetching = False
         self._pending_title = None
@@ -67,6 +67,19 @@ class LimitLensApp(rumps.App):
         except (TypeError, ValueError):
             return None
 
+    # Icons for each real LimitLens-tracked tool (consistent across menubar + iTerm)
+    TOOL_ICONS = {
+        "antigravity": "🪐", "antigrav": "🪐",   # Antigravity
+        "codex":        "⚡",                      # OpenAI Codex
+        "amp":          "🔥",                      # Amp
+        "pioneer":      "🧭",                      # Pioneer
+        "agentrouter":  "🔶",  "kilo": "🔶",      # Kilo Code / AgentRouter
+        "commandcode":  "🖥️",                     # Command Code
+        "copilot":      "✈️",                     # GitHub Copilot
+        "cursor":       "🖱️",                     # Cursor IDE
+        "custom":       "🔧",                      # Custom configured tools
+    }
+
     @staticmethod
     def _emoji(pct):
         if pct is None:
@@ -76,6 +89,16 @@ class LimitLensApp(rumps.App):
         if pct >= 15:
             return "🟡"
         return "🔴"
+
+    @classmethod
+    def _tool_icon(cls, tool_key="", name="", section=""):
+        """Return a unique emoji for the tool, falling back to a colored health dot."""
+        for source in (tool_key, name, section):
+            key = (source or "").lower()
+            for k, icon in cls.TOOL_ICONS.items():
+                if k in key:
+                    return icon
+        return "🔷"
 
     @staticmethod
     def _bar(pct, width=10):
@@ -163,7 +186,7 @@ class LimitLensApp(rumps.App):
         visible = display_items[:self._max_title_items]
         extra = len(display_items) - len(visible)
         suffix = f" +{extra}" if extra > 0 else ""
-        return "💡 " + " · ".join(visible) + suffix
+        return " · ".join(visible) + suffix
 
     def _recommendation_title_items(self, data, rows):
         recs = (data.get("recommendations") or {}).get("hard") or []
@@ -174,14 +197,10 @@ class LimitLensApp(rumps.App):
         items = []
         for item in source:
             pct = self._safe_float(item.get("headroom_pct"))
+            tool = item.get("tool") or ""
             name = item.get("name") or item.get("tool") or "quota"
-            if " (" in name:
-                name = name.split(" (", 1)[0]
-            if " → " in name:
-                profile, model = name.split(" → ", 1)
-                profile = profile.split(":", 1)[-1]
-                name = f"{profile} {model.split()[0]}"
-            items.append(f"{self._emoji(pct)}{pct:.0f}%")
+            icon = self._tool_icon(tool, name)
+            items.append(f"{icon}{pct:.0f}%")
 
         if items:
             return items
@@ -189,7 +208,7 @@ class LimitLensApp(rumps.App):
         sortable_rows = [r for r in rows if r.get("pct_left") is not None]
         sortable_rows.sort(key=lambda r: r["pct_left"], reverse=True)
         return [
-            f"{self._emoji(row['pct_left'])}{row['pct_left']:.0f}%"
+            f"{self._tool_icon(section=row['section'])}{row['pct_left']:.0f}%"
             for row in sortable_rows
         ]
 
@@ -208,7 +227,7 @@ class LimitLensApp(rumps.App):
         name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
         note = item.get("note") or item.get("reset_label") or item.get("command") or ""
         note = f"  · {self._compact(note, 22)}" if note else ""
-        return f"{self._emoji(pct)} {self._compact(name, 22):<22} {pct:5.1f}%  {self._bar(pct)}{note}"
+        return f"{self._tool_icon(item.get('tool', ''), name)}{self._emoji(pct)} {self._compact(name, 22):<22} {pct:5.1f}%  {self._bar(pct)}{note}"
 
     def _format_usage_row(self, row):
         pct = row.get("pct_left")
@@ -224,7 +243,7 @@ class LimitLensApp(rumps.App):
         ratio = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
         status_suffix = f"  [{status}]" if status and status != "running" else ""
         return (
-            f"{self._emoji(pct)} {self._compact(row['section'], 10):<10} "
+            f"{self._tool_icon(section=row['section'])}{self._emoji(pct)} {self._compact(row['section'], 10):<10} "
             f"{self._compact(row['name'], 13):<13} "
             f"{self._compact(row['label'], 18):<18} "
             f"{left:>6}  {used:>7}  {self._bar(pct)}  {ratio}{status_suffix}"
@@ -425,16 +444,16 @@ class LimitLensApp(rumps.App):
                     self._notified_set.intersection_update(active_keys)
 
                     title_items = self._recommendation_title_items(data, rows)
-                    self._pending_title = self._format_title(title_items) if title_items else "🤖 No quotas available"
+                    self._pending_title = self._format_title(title_items) if title_items else "⚪ No quota"
                     self._pending_menu_items = self._build_menu_items(data, rows)
                     self._has_loaded_once = True
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
-                    self._pending_title = f"🤖 Err: {err_msg[:20]}"
+                    self._pending_title = f"⚠️ {err_msg[:20]}"
             except subprocess.TimeoutExpired:
-                self._pending_title = "🤖 Timeout"
+                self._pending_title = "⚠️ Timeout"
             except Exception as e:
-                self._pending_title = f"🤖 Err: {str(e)[:15]}"
+                self._pending_title = f"⚠️ {str(e)[:15]}"
             finally:
                 self._is_fetching = False
 
