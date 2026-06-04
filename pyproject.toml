@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "limitlens"
-version = "1.1.0"
-description = "Unified quota checker for AI coding tools (Codex, Amp, OpenCode, Antigravity)"
+version = "1.2.0"
+description = "Unified quota checker for AI coding tools (Codex, Amp, OpenCode, Antigravity, Cursor, Pi, Pioneer, AgentRouter, Command Code)"
 readme = "README.md"
 authors = [
     { name = "Salauddin", email = "salauddinn@users.noreply.github.com" }

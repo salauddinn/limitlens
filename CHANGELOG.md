@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-06-04
+
+### Added
+- Add native macOS menubar app with low-quota desktop notifications, refresh, and quit actions
+- Add compact iTerm2 status widget with resilient registration/retry behavior
+- Add provider support for Cursor, Pi local session usage, Pioneer, AgentRouter/Kilo Code, Command Code, and custom quota tools
+- Add config-driven provider enable/disable controls and richer example configuration
+- Add local usage tracking with JSON import/export and dynamic waste reporting from snapshots
+- Add automated install/uninstall scripts and documentation for data storage/privacy
+- Add smart tool icons, traffic-light quota indicators, and compact menubar/widget summaries
+
+### Improved
+- Redesign README with updated screenshots and clearer install/privacy guidance
+- Improve smart recommendations with actionable/expiring slots and all-candidate metadata
+- Improve menubar dropdown with a rich usage overview and best-available recommendations
+- Improve provider robustness across Amp, Antigravity, Codex, AgentRouter, Command Code, and Pioneer
+- Expand test coverage across providers, CLI, recommendations, usage tracking, and menubar behavior
+
+### Fixed
+- Fix menubar startup, refresh, disabled menu item, and Quit callback behavior
+- Fix iTerm widget reliability and Python path detection
+- Fix provider edge cases including auth fallbacks, header handling, cache behavior, and stale recommendations
+- Remove unused imports and clean up lint/whitespace issues
+
 ## [1.1.0] - 2026-05-31
 
 ### Added
