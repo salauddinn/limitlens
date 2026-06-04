@@ -237,13 +237,38 @@ class LimitLensApp(rumps.App):
         return " · ".join(visible) + suffix
 
     def _recommendation_title_items(self, data, rows):
-        recs = (data.get("recommendations") or {}).get("hard") or []
-        candidates = [r for r in recs if self._safe_float(r.get("headroom_pct")) is not None]
-        fresh = [r for r in candidates if not r.get("stale")]
-        source = fresh or candidates
+        recs = data.get("recommendations") or {}
+        hard_recs = recs.get("hard") or []
+        waste_recs = recs.get("waste_watch") or []
+        
+        seen_names = set()
+        selected = []
+        
+        def add_item(item):
+            name = item.get("name")
+            pct = self._safe_float(item.get("headroom_pct"))
+            if pct is not None and not item.get("stale"):
+                if name and name not in seen_names:
+                    seen_names.add(name)
+                    selected.append(item)
+                    return True
+            return False
+
+        # 1. Action slot (Top hard recommendation)
+        if hard_recs:
+            add_item(hard_recs[0])
+            
+        # 2. Expiring slot (Urgent waste)
+        for w in waste_recs:
+            if add_item(w):
+                break
+                
+        # 3. Fill remaining with all other valid items for +N count
+        for h in hard_recs:
+            add_item(h)
 
         items = []
-        for item in source:
+        for item in selected:
             pct = self._safe_float(item.get("headroom_pct"))
             tool = item.get("tool") or ""
             name = item.get("name") or item.get("tool") or "quota"

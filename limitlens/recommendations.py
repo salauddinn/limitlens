@@ -500,6 +500,7 @@ def compute_recommendations(result, parse_to_utc, fmt_reset):
         "waste_reduction": _pick_waste_reduction(cands),
         "waste_watch": _waste_watch(cands),
         "skip_today": _skip_today(cands),
+        "all_candidates": cands,
     }
 
 

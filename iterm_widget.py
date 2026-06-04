@@ -175,23 +175,54 @@ async def main(connection):
         data = json.loads(proc.stdout)
         recs = data.get("recommendations", {})
 
-        display_items = []
-        for item in recs.get("hard", []):
+        def format_item(item):
             tool = item.get("tool", "")
             pct = item.get("headroom_pct", 0)
-
-            if tool == "antigravity" and pct < 20:
-                continue
-            if tool != "antigravity" and pct < 10:
-                continue
-
             full_name = item.get("name", "Unknown")
             if " (" in full_name:
                 full_name = full_name.split(" (")[0]
-
             icon = _tool_icon(tool, full_name)
-            # Compact: icon + bar + percent, e.g.  🪐███99  ⚡██░67  🧠░░░12
-            display_items.append(f"{icon}{_bar(pct)}{pct:.0f}")
+            return f"{icon}{_bar(pct)}{pct:.0f}"
+
+        hard_recs = recs.get("hard", [])
+        waste_recs = recs.get("waste_watch", [])
+        all_cands = recs.get("all_candidates", [])
+
+        seen_names = set()
+        selected = []
+        
+        def add_item(item):
+            name = item.get("name")
+            if name and name not in seen_names:
+                seen_names.add(name)
+                selected.append(item)
+                return True
+            return False
+
+        # 1. Action slot (Top recommendation)
+        if hard_recs:
+            add_item(hard_recs[0])
+            
+        # 2. Expiring slot (Urgent waste)
+        for w in waste_recs:
+            if add_item(w):
+                break
+                
+        # 3. Danger slot (Lowest headroom under 20%)
+        if all_cands:
+            all_cands.sort(key=lambda c: c.get("headroom_pct", 100))
+            for c in all_cands:
+                if c.get("headroom_pct", 100) < 20:
+                    if add_item(c):
+                        break
+                        
+        # 4. Fill remaining up to 3 slots with next best tasks
+        for h in hard_recs:
+            if len(selected) >= 3:
+                break
+            add_item(h)
+
+        display_items = [format_item(item) for item in selected]
 
         if display_items:
             visible = display_items[:4]
