@@ -190,7 +190,7 @@ async def main(connection):
 
         seen_names = set()
         selected = []
-        
+
         def add_item(item):
             name = item.get("name")
             if name and name not in seen_names:
@@ -202,20 +202,19 @@ async def main(connection):
         # 1. Action slot (Top recommendation)
         if hard_recs:
             add_item(hard_recs[0])
-            
+
         # 2. Expiring slot (Urgent waste)
         for w in waste_recs:
             if add_item(w):
                 break
-                
+
         # 3. Danger slot (Lowest headroom under 20%)
         if all_cands:
-            all_cands.sort(key=lambda c: c.get("headroom_pct", 100))
-            for c in all_cands:
+            for c in sorted(all_cands, key=lambda c: c.get("headroom_pct", 100)):
                 if c.get("headroom_pct", 100) < 20:
                     if add_item(c):
                         break
-                        
+
         # 4. Fill remaining up to 3 slots with next best tasks
         for h in hard_recs:
             if len(selected) >= 3:
@@ -225,10 +224,7 @@ async def main(connection):
         display_items = [format_item(item) for item in selected]
 
         if display_items:
-            visible = display_items[:4]
-            extra = len(display_items) - len(visible)
-            suffix = f" +{extra}" if extra > 0 else ""
-            return "  ".join(visible) + suffix
+            return "  ".join(display_items)
         return "⚪ No quota"
 
     async def refresh_state_once(loop):
