@@ -240,10 +240,10 @@ class LimitLensApp(rumps.App):
         recs = data.get("recommendations") or {}
         hard_recs = recs.get("hard") or []
         waste_recs = recs.get("waste_watch") or []
-        
+
         seen_names = set()
         selected = []
-        
+
         def add_item(item):
             name = item.get("name")
             pct = self._safe_float(item.get("headroom_pct"))
@@ -257,12 +257,12 @@ class LimitLensApp(rumps.App):
         # 1. Action slot (Top hard recommendation)
         if hard_recs:
             add_item(hard_recs[0])
-            
+
         # 2. Expiring slot (Urgent waste)
         for w in waste_recs:
             if add_item(w):
                 break
-                
+
         # 3. Fill remaining with all other valid items for +N count
         for h in hard_recs:
             add_item(h)

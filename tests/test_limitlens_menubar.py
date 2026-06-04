@@ -59,7 +59,7 @@ def test_check_updates(app):
     app.menu.add.reset_mock()
     
     app.check_updates(None)
-    # The 'No active quotas found' logic is in _refresh_sync, 
+    # The 'No active quotas found' logic is in _refresh_sync,
     # check_updates simply loops pending_menu_items. Since it's empty, it won't add it directly here.
     # We just ensure it clears and adds the basic items.
     app.menu.clear.assert_called_once()
