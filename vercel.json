@@ -1,7 +1,5 @@
 {
-  "cleanUrls": true,
-  "rewrites": [
-    { "source": "/assets/(.*)", "destination": "/assets/$1" },
-    { "source": "/(.*)", "destination": "/site/$1" }
-  ]
+  "buildCommand": "cp -r assets site/assets",
+  "outputDirectory": "site",
+  "installCommand": "echo 'no install needed'"
 }
