@@ -109,14 +109,20 @@ def test_record_snapshot(mock_open_fn, mock_makedirs):
     }
     waste_tracker.record_snapshot(result)
     mock_makedirs.assert_called_once()
-    mock_open_fn.assert_called_once()
-    
-    # Test empty snapshot
+    # record_snapshot opens the snapshot file to write AND may open the .pruned
+    # temp file during pruning — assert at least one call happened and the
+    # main snapshots.jsonl write was among them.
+    assert mock_open_fn.call_count >= 1
+    opened_paths = [str(c.args[0]) for c in mock_open_fn.call_args_list]
+    assert any("snapshots.jsonl" in p and not p.endswith(".pruned") for p in opened_paths)
+
+    # Test empty snapshot — nothing should be written
     mock_makedirs.reset_mock()
     mock_open_fn.reset_mock()
     waste_tracker.record_snapshot({})
     mock_makedirs.assert_not_called()
     mock_open_fn.assert_not_called()
+
 
 
 @patch("limitlens.waste_tracker.os.makedirs", side_effect=OSError("Permission denied"))
