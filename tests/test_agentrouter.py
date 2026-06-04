@@ -90,26 +90,26 @@ class TestAgentRouterProvider(unittest.TestCase):
 
         self.assertEqual(data["tiers"][0]["remaining"], 75.0)
 
-    @patch("limitlens.providers.agentrouter.urllib.request.urlopen")
+    @patch("limitlens.providers.agentrouter._open_no_redirect")
     @patch("limitlens.providers.agentrouter.load_limitlens_config", return_value={"agentrouter": {}})
     @patch.dict(os.environ, {"AGENTROUTER_COOKIE": "test-cookie", "AGENTROUTER_NEW_API_USER": "145176"})
-    def test_live_request_uses_env_auth(self, mock_config, mock_urlopen):
+    def test_live_request_uses_env_auth(self, mock_config, mock_open):
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps({"data": {"quota": 100, "used_quota": 1}, "success": True}).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
+        mock_open.return_value.__enter__.return_value = mock_resp
 
         data = get_agentrouter_data(self.args)
 
-        req = mock_urlopen.call_args[0][0]
+        req = mock_open.call_args[0][0]
         self.assertEqual(req.headers["Cookie"], "test-cookie")
         self.assertEqual(req.headers["New-api-user"], "145176")
         self.assertEqual(data["tiers"][0]["remaining"], 99.0)
 
-    @patch("limitlens.providers.agentrouter.urllib.request.urlopen")
+    @patch("limitlens.providers.agentrouter._open_no_redirect")
     @patch("limitlens.providers.agentrouter.load_limitlens_config", return_value={"agentrouter": {}})
     @patch.dict(os.environ, {"AGENTROUTER_COOKIE": "test-cookie"})
-    def test_network_error(self, mock_config, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+    def test_network_error(self, mock_config, mock_open):
+        mock_open.side_effect = urllib.error.URLError("Connection refused")
 
         data = get_agentrouter_data(self.args)
 

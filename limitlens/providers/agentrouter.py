@@ -3,6 +3,7 @@
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from limitlens.core import (
@@ -119,6 +120,23 @@ def parse_agentrouter_quota(payload, args, cfg=None):
     return info
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
+
+def _validated_web_url(url):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("URL must use http or https")
+    return url
+
+
+def _open_no_redirect(req, timeout=10):
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    return opener.open(req, timeout=timeout)
+
+
 def _auth_headers_from_env():
     headers = {}
     authorization = os.environ.get("AGENTROUTER_AUTHORIZATION")
@@ -150,6 +168,12 @@ def get_agentrouter_data(args, config=None):
         return {"error": "AGENTROUTER_API_TOKEN or AGENTROUTER_COOKIE not set"}
 
     url = os.environ.get("AGENTROUTER_QUOTA_URL") or cfg.get("quota_url") or DEFAULT_QUOTA_URL
+    try:
+        url = _validated_web_url(url)
+    except ValueError as e:
+        if manual:
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+        return {"error": str(e)}
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json, text/plain, */*")
     req.add_header("Cache-Control", "no-store")
@@ -158,7 +182,7 @@ def get_agentrouter_data(args, config=None):
         req.add_header(key, value)
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+        with _open_no_redirect(req, timeout=10) as resp:
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if manual:

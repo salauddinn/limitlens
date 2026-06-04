@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-06-04
+
+### Fixed
+- Prevent `limitlens-menubar` from crashing at import time on non-macOS systems without `rumps`
+- Fix Windows-safe SQLite read-only URI construction for local database providers
+- Close Cursor SQLite connections on all exception paths
+- Invoke snapshot retention pruning and restrict cache file permissions for local usage/waste data
+- Replace padded menubar dropdown tables with delimiter-based rows that render correctly in proportional macOS menu fonts
+- Harden JSONL parsing against non-object malformed records
+- Fall back to manual provider data when Pioneer or Command Code APIs return invalid JSON
+- Block unexpected redirects and validate web URL schemes before sending provider auth headers
+- Align internal package version and dev dependency bounds
+
 ## [1.2.0] - 2026-06-04
 
 ### Added

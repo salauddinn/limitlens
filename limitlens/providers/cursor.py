@@ -3,6 +3,7 @@ import os
 import platform
 import sqlite3
 import urllib.request
+from pathlib import Path
 
 from limitlens.core import bar, print_c, section
 
@@ -12,6 +13,10 @@ def _number(value, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _sqlite_ro_uri(path):
+    return f"{Path(path).resolve().as_uri()}?mode=ro"
 
 
 def get_cursor_token(sys_name):
@@ -25,18 +30,19 @@ def get_cursor_token(sys_name):
 
     for path in paths:
         if os.path.exists(path):
+            conn = None
             try:
-                import pathlib
-                uri = f"{pathlib.Path(path).as_uri()}?mode=ro"
-                conn = sqlite3.connect(uri, uri=True)
+                conn = sqlite3.connect(_sqlite_ro_uri(path), uri=True)
                 cursor = conn.cursor()
                 cursor.execute("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'")
                 row = cursor.fetchone()
-                conn.close()
                 if row:
                     return row[0]
-            except (sqlite3.Error, OSError):
+            except (sqlite3.Error, OSError, ValueError):
                 continue
+            finally:
+                if conn is not None:
+                    conn.close()
     return None
 
 

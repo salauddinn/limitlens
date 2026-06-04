@@ -3,6 +3,7 @@
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from limitlens.core import (
@@ -23,6 +24,23 @@ def _float(value, default=0.0):
         return float(value)
     except (ValueError, TypeError):
         return default
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
+
+def _validated_web_url(url):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("URL must use http or https")
+    return url
+
+
+def _open_no_redirect(req, timeout=10):
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    return opener.open(req, timeout=timeout)
 
 
 def _has_config_balance(cfg):
@@ -151,6 +169,12 @@ def get_pioneer_data(args, config=None):
         url = f"https://api.pioneer.ai/billing/team/{team_id}/full-status"
     else:
         url = "https://api.pioneer.ai/billing/billing-status"
+    try:
+        url = _validated_web_url(url)
+    except ValueError as e:
+        if _has_config_balance(cfg):
+            return parse_pioneer_billing(cfg, args)
+        return {"error": str(e)}
     req = urllib.request.Request(url, method="GET")
     req.add_header("accept", "*/*")
     req.add_header("authorization", f"Bearer {token}")
@@ -160,7 +184,7 @@ def get_pioneer_data(args, config=None):
     req.add_header("referer", "https://agent.pioneer.ai/")
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+        with _open_no_redirect(req, timeout=10) as resp:
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if _has_config_balance(cfg):
@@ -174,6 +198,8 @@ def get_pioneer_data(args, config=None):
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
+        if _has_config_balance(cfg):
+            return parse_pioneer_billing(cfg, args)
         return {"error": "Invalid JSON response from Pioneer API"}
 
     if not parsed:

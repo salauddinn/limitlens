@@ -13,7 +13,36 @@ import sys
 import threading
 import time
 
-import rumps
+_RUMPS_AVAILABLE = True
+try:
+    import rumps
+except ImportError:  # pragma: no cover - exercised only on non-macOS without mac extras
+    _RUMPS_AVAILABLE = False
+
+    class _UnavailableRumps:
+        separator = "---"
+
+        class App:
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("limitlens-menubar requires macOS and the 'rumps' package")
+
+        class MenuItem:
+            def __init__(self, title, callback=None):
+                self.title = title
+                self.callback = callback
+
+            def __str__(self):
+                return self.title
+
+        @staticmethod
+        def timer(_interval):
+            return lambda func: func
+
+        @staticmethod
+        def quit_application():
+            return None
+
+    rumps = _UnavailableRumps()
 
 
 class LimitLensApp(rumps.App):
@@ -299,27 +328,28 @@ class LimitLensApp(rumps.App):
         name = name.replace("codex-", "").strip()
         name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
         note = item.get("note") or item.get("reset_label") or item.get("command") or ""
-        note = f"  · {self._compact(note, 22)}" if note else ""
-        return f"{self._tool_icon(item.get('tool', ''), name)}{self._emoji(pct)} {self._compact(name, 22):<22} {pct:5.1f}%  {self._bar(pct)}{note}"
+        note = f" · {self._compact(note, 22)}" if note else ""
+        return f"{self._tool_icon(item.get('tool', ''), name)} {self._emoji(pct)} {self._compact(name, 28)} · {pct:.1f}% · {self._bar(pct)}{note}"
 
     def _format_usage_row(self, row):
         pct = row.get("pct_left")
         pct_used = row.get("pct_used")
         status = row.get("status")
-        left = "  n/a" if pct is None else f"{pct:5.1f}%"
+        left = "n/a" if pct is None else f"{pct:.1f}% left"
         if pct_used is not None:
-            used = f"{pct_used:5.1f}%"
+            used = f"{pct_used:.1f}% used"
         elif row.get("used") is not None:
             used = f"{self._format_number(row['used'])} used"
         else:
-            used = "   n/a"
+            used = "used n/a"
         ratio = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
-        status_suffix = f"  [{status}]" if status and status != "running" else ""
+        status_suffix = f" · {status}" if status and status != "running" else ""
+        name = self._compact(row["name"], 18)
+        label = self._compact(row["label"], 24)
+        section = self._compact(row["section"], 12)
         return (
-            f"{self._tool_icon(section=row['section'])}{self._emoji(pct)} {self._compact(row['section'], 10):<10} "
-            f"{self._compact(row['name'], 13):<13} "
-            f"{self._compact(row['label'], 18):<18} "
-            f"{left:>6}  {used:>7}  {self._bar(pct)}  {ratio}{status_suffix}"
+            f"{self._tool_icon(section=row['section'])} {self._emoji(pct)} {section} · {name} · {label} · "
+            f"{left} · {used} · {self._bar(pct)} · {ratio}{status_suffix}"
         )
 
     def _collect_rows(self, data, check_low_quota):
@@ -476,7 +506,6 @@ class LimitLensApp(rumps.App):
 
         if rows:
             add_header("Usage overview")
-            menu_items.append("Status Tool       Account       Quota/Model         Left     Used   Bar         Remaining/Total")
             rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
             for row in rows:
                 menu_items.append(self._format_usage_row(row))
@@ -535,6 +564,10 @@ class LimitLensApp(rumps.App):
 
 
 def main():
+    if sys.platform != "darwin" or not _RUMPS_AVAILABLE:
+        print("limitlens-menubar requires macOS and the optional [mac] dependencies.", file=sys.stderr)
+        return 1
+
     app = LimitLensApp()
     # Fetch once before starting the AppKit loop so the UI does not remain
     # stuck at "Loading..." if the first timer tick is delayed.
@@ -544,6 +577,7 @@ def main():
         time.sleep(0.05)
     app.check_updates(None)
     app.run()
+    return 0
 
 
 if __name__ == "__main__":

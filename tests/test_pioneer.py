@@ -217,13 +217,13 @@ def test_get_pioneer_data_no_token(mock_cfg):
 
 
 @patch("limitlens.providers.pioneer.load_limitlens_config")
-@patch("urllib.request.urlopen")
+@patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
-def test_get_pioneer_data_success(mock_urlopen, mock_cfg):
+def test_get_pioneer_data_success(mock_open, mock_cfg):
     mock_cfg.return_value = {}
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
-    mock_urlopen.return_value.__enter__.return_value = cm
+    mock_open.return_value.__enter__.return_value = cm
     
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs(redact=False))
@@ -246,13 +246,13 @@ def test_get_pioneer_data_success(mock_urlopen, mock_cfg):
 
 
 @patch("limitlens.providers.pioneer.load_limitlens_config")
-@patch("urllib.request.urlopen")
+@patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token", "PIONEER_TEAM_ID": "team_1"}, clear=True)
-def test_get_pioneer_data_team_id(mock_urlopen, mock_cfg):
+def test_get_pioneer_data_team_id(mock_open, mock_cfg):
     mock_cfg.return_value = {}
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
-    mock_urlopen.return_value.__enter__.return_value = cm
+    mock_open.return_value.__enter__.return_value = cm
     
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs(redact=False))
@@ -260,39 +260,39 @@ def test_get_pioneer_data_team_id(mock_urlopen, mock_cfg):
 
 
 @patch("limitlens.providers.pioneer.load_limitlens_config")
-@patch("urllib.request.urlopen")
+@patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
-def test_get_pioneer_data_urlopen_error(mock_urlopen, mock_cfg):
+def test_get_pioneer_data_urlopen_error(mock_open, mock_cfg):
     mock_cfg.return_value = {}
-    mock_urlopen.side_effect = urllib.error.URLError("test error")
+    mock_open.side_effect = urllib.error.URLError("test error")
     res = get_pioneer_data(DummyArgs())
     assert "API request failed" in res["error"]
 
-    mock_urlopen.side_effect = Exception("general error")
+    mock_open.side_effect = Exception("general error")
     res = get_pioneer_data(DummyArgs())
     assert "Request failed" in res["error"]
 
 
 @patch("limitlens.providers.pioneer.load_limitlens_config")
-@patch("urllib.request.urlopen")
+@patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
-def test_get_pioneer_data_fallback_config(mock_urlopen, mock_cfg):
+def test_get_pioneer_data_fallback_config(mock_open, mock_cfg):
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "fallback", "remaining": 10, "total": 100, "used": 90}]}}
     
-    mock_urlopen.side_effect = urllib.error.URLError("error")
+    mock_open.side_effect = urllib.error.URLError("error")
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
         assert res["tiers"][0]["label"] == "fallback"
 
-    mock_urlopen.side_effect = Exception("error")
+    mock_open.side_effect = Exception("error")
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
         assert res["tiers"][0]["label"] == "fallback"
 
     cm = MagicMock()
     cm.read.return_value = json.dumps(None).encode("utf-8")
-    mock_urlopen.return_value.__enter__.return_value = cm
-    mock_urlopen.side_effect = None
+    mock_open.return_value.__enter__.return_value = cm
+    mock_open.side_effect = None
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
         assert res["tiers"][0]["label"] == "fallback"

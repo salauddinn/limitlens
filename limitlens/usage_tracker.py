@@ -24,10 +24,14 @@ def _load_imported_data():
 
 def _save_imported_data(data):
     try:
-        os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), mode=0o700, exist_ok=True)
         tmp_path = IMPORTED_USAGE_PATH + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
         os.replace(tmp_path, IMPORTED_USAGE_PATH)
     except OSError:
         pass

@@ -213,6 +213,10 @@ def model_parent_label(provider, model, parents):
             return str(value)
     return None
 
+def _sqlite_ro_immutable_uri(path):
+    return f"{Path(path).resolve().as_uri()}?mode=ro&immutable=1"
+
+
 def get_opencode_usage(config):
     cfg = config.get("opencode", {})
     if not cfg.get("enabled", True):
@@ -232,7 +236,7 @@ def get_opencode_usage(config):
     min_since_ms = min(millis_from_dt(w["since"]) for w in windows.values())
 
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
+        conn = sqlite3.connect(_sqlite_ro_immutable_uri(db_path), uri=True)
         try:
             rows = conn.execute(
                 """
@@ -252,6 +256,8 @@ def get_opencode_usage(config):
         try:
             data = json.loads(data_text)
         except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict):
             continue
         if data.get("role") != "assistant":
             continue
@@ -374,6 +380,8 @@ def get_copilot_cli_usage(config):
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(rec, dict):
+                continue
             ts = (
                 parse_otel_timestamp(rec.get("timeUnixNano"))
                 or parse_otel_timestamp(rec.get("startTimeUnixNano"))
@@ -478,6 +486,8 @@ def get_pi_usage(config):
                 try:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
+                    continue
+                if not isinstance(rec, dict):
                     continue
                 if rec.get("type") != "message":
                     continue

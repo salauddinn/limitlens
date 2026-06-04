@@ -183,11 +183,10 @@ def test_fetch_data_success_with_quotas(app):
         assert "ag-prof:model" in menu_text
         assert "25.0%" in menu_text
         assert "[Usage overview]" in menu
-        assert "Status Tool" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5.0%" in menu_text
         assert "Amp" in menu_text and "Tier1" in menu_text and "$1.50/$10.00" in menu_text
         assert "Antigrav" in menu_text and "prof1" in menu_text and "m1" in menu_text and "20.0%" in menu_text
-        assert "Antigrav" in menu_text and "prof2" in menu_text and "m2" in menu_text and "[stopped]" in menu_text
+        assert "Antigrav" in menu_text and "prof2" in menu_text and "m2" in menu_text and "stopped" in menu_text
         assert "OpenCode" in menu_text and "Limit1" in menu_text and "$50.00/$100.00" in menu_text
         assert "OpenCode" in menu_text and "Limit2" in menu_text and "10/100 credits" in menu_text
         assert "Pioneer" in menu_text and "P1" in menu_text and "2.0%" in menu_text
@@ -282,10 +281,11 @@ def test_fetch_data_subprocess_exception(app):
         assert app._pending_title == "⚠️ some bad error"
 
 def test_main():
-    with patch("limitlens.menubar.LimitLensApp") as mock_app_cls:
+    with patch("limitlens.menubar.sys.platform", "darwin"), \
+         patch("limitlens.menubar.LimitLensApp") as mock_app_cls:
         mock_app = MagicMock()
         mock_app_cls.return_value = mock_app
-        
+
         limitlens.menubar.main()
         
         mock_app_cls.assert_called_once()

@@ -3,6 +3,7 @@
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section
@@ -73,6 +74,23 @@ def _auth_headers_from_env():
     return headers
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
+
+def _validated_web_url(url):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("URL must use http or https")
+    return url
+
+
+def _open_no_redirect(req, timeout=10):
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    return opener.open(req, timeout=timeout)
+
+
 def _manual_payload(cfg):
     manual = cfg.get("manual") if isinstance(cfg, dict) else None
     if isinstance(manual, dict):
@@ -95,6 +113,12 @@ def get_commandcode_data(args, config=None):
         return {"error": "COMMANDCODE_COOKIE or COMMANDCODE_AUTHORIZATION not set"}
 
     url = os.environ.get("COMMANDCODE_CREDITS_URL") or cfg.get("credits_url") or DEFAULT_CREDITS_URL
+    try:
+        url = _validated_web_url(url)
+    except ValueError as e:
+        if manual:
+            return parse_commandcode_credits(manual, args, cfg)
+        return {"error": str(e)}
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json, text/plain, */*")
     req.add_header("Cache-Control", "no-cache")
@@ -104,7 +128,7 @@ def get_commandcode_data(args, config=None):
         req.add_header(key, value)
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+        with _open_no_redirect(req, timeout=10) as resp:
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if manual:
@@ -118,6 +142,8 @@ def get_commandcode_data(args, config=None):
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
+        if manual:
+            return parse_commandcode_credits(manual, args, cfg)
         return {"error": "Invalid JSON response from Command Code API"}
 
     return parse_commandcode_credits(parsed, args, cfg)

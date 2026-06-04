@@ -600,11 +600,15 @@ def load_antigravity_cache():
 
 def save_antigravity_cache(cache):
     path = antigravity_cache_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     tmp_path = path + ".tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(cache, f, indent=2)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
         os.replace(tmp_path, path)
     except Exception:
         if os.path.exists(tmp_path):

@@ -84,6 +84,8 @@ def parse_session_tokens(session_file):
                     continue
                 try:
                     rec = json.loads(line)
+                    if not isinstance(rec, dict):
+                        continue
                     if rec.get("type") == "event_msg":
                         payload = rec.get("payload") or {}
                         if payload.get("type") == "token_count":
@@ -165,12 +167,16 @@ def parse_request_error_message(message):
         return invalid_request.group(1).replace('\\"', '"')
     return None
 
+def _sqlite_ro_immutable_uri(path):
+    return f"{Path(path).resolve().as_uri()}?mode=ro&immutable=1"
+
+
 def find_log_issue_in_sqlite(codex_home):
     db_path = os.path.join(codex_home, "logs_2.sqlite")
     if not os.path.exists(db_path):
         return None
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
+        conn = sqlite3.connect(_sqlite_ro_immutable_uri(db_path), uri=True)
         try:
             row = conn.execute(
                 """
@@ -239,6 +245,8 @@ def parse_limits(session_file):
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if not isinstance(rec, dict):
                 continue
 
             if "limit_5h" in rec:

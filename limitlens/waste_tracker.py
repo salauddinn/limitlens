@@ -27,6 +27,7 @@ SNAPSHOT_PATH = os.environ.get("LIMITLENS_SNAPSHOT_PATH") or os.path.expanduser(
 RESET_DETECT_PCT = 30   # pct_left jump that signals a reset event
 RESET_AT_MIN_DELTA_SEC = 60  # reset_at must shift forward by at least this much
 SNAPSHOT_PRUNE_DAYS = 90  # keep ~3 months of history
+SNAPSHOT_PRUNE_INTERVAL_HOURS = 24
 
 # Models considered effectively unlimited — exclude from waste tracking entirely.
 # (They reset frequently with huge headroom; "wasted" doesn't apply.)
@@ -126,15 +127,38 @@ def _flatten_snapshot(result):
     return rows
 
 
+def _prune_marker_path():
+    return f"{SNAPSHOT_PATH}.pruned"
+
+
+def _maybe_prune_old_snapshots():
+    """Run retention cleanup at most once per interval."""
+    marker = _prune_marker_path()
+    try:
+        now = datetime.now(timezone.utc).timestamp()
+        last = os.path.getmtime(marker) if os.path.exists(marker) else 0
+        if now - last < SNAPSHOT_PRUNE_INTERVAL_HOURS * 3600:
+            return
+        prune_old_snapshots()
+        os.makedirs(os.path.dirname(marker), mode=0o700, exist_ok=True)
+        with open(marker, "a", encoding="utf-8"):
+            pass
+        os.chmod(marker, 0o600)
+    except OSError:
+        pass
+
+
 def record_snapshot(result):
     """Append snapshot to JSONL. Silent on any failure — never break limitlens."""
     rows = _flatten_snapshot(result)
     if not rows:
         return
     try:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+        _maybe_prune_old_snapshots()
         with open(SNAPSHOT_PATH, "a", encoding="utf-8") as f:
             f.write("".join(json.dumps(row) + "\n" for row in rows))
+        os.chmod(SNAPSHOT_PATH, 0o600)
     except OSError:
         pass
 
@@ -159,6 +183,8 @@ def _load_snapshots(since=None):
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
                     continue
                 ts = _parse_ts(row.get("ts"))
                 if ts is None:
@@ -194,6 +220,10 @@ def prune_old_snapshots():
             for row in rows:
                 row.pop("_ts", None)
                 f.write(json.dumps(row) + "\n")
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
         os.replace(tmp_path, SNAPSHOT_PATH)
     except OSError:
         pass

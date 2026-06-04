@@ -85,12 +85,12 @@ class TestCommandCodeProvider(unittest.TestCase):
 
     @patch.dict("os.environ", {"COMMANDCODE_COOKIE": "session=redacted"}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
-    @patch("urllib.request.urlopen", return_value=FakeResponse({"credits": {"purchasedCredits": 2.5}}))
-    def test_get_credits_uses_env_cookie(self, mock_urlopen, mock_config):
+    @patch("limitlens.providers.commandcode._open_no_redirect", return_value=FakeResponse({"credits": {"purchasedCredits": 2.5}}))
+    def test_get_credits_uses_env_cookie(self, mock_open, mock_config):
         data = get_commandcode_data(self.args)
 
         self.assertAlmostEqual(data["available"], 2.5)
-        request = mock_urlopen.call_args[0][0]
+        request = mock_open.call_args[0][0]
         self.assertIn("Cookie", request.headers)
         self.assertEqual(request.headers["Cookie"], "session=redacted")
 
