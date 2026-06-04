@@ -140,7 +140,6 @@ def _maybe_prune_old_snapshots():
         if now - last < SNAPSHOT_PRUNE_INTERVAL_HOURS * 3600:
             return
         prune_old_snapshots()
-        os.makedirs(os.path.dirname(marker), mode=0o700, exist_ok=True)
         with open(marker, "a", encoding="utf-8"):
             pass
         os.chmod(marker, 0o600)

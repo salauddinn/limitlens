@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-06-04
+
+### Fixed
+- Avoid duplicate cache directory setup during snapshot pruning so CI and first-run snapshot recording remain stable
+
 ## [1.2.1] - 2026-06-04
 
 ### Fixed
