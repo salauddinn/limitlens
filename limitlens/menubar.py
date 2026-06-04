@@ -19,7 +19,15 @@ import rumps
 class LimitLensApp(rumps.App):
     def __init__(self):
         super(LimitLensApp, self).__init__("⏳ Loading...")
-        self.menu = ["Refresh Now", rumps.separator, "Quit"]
+
+        # Persistent items — stored on self so their callbacks are never lost
+        self._item_refresh = rumps.MenuItem("Refresh Now", callback=self._on_refresh)
+        self._item_quit    = rumps.MenuItem("Quit",         callback=self._on_quit)
+        self._sep_top      = rumps.separator
+        self._sep_bot      = rumps.separator
+
+        self.menu = [self._item_refresh, self._sep_top, self._item_quit]
+
         self._is_fetching = False
         self._pending_title = None
         self._pending_menu_items = None
@@ -32,12 +40,10 @@ class LimitLensApp(rumps.App):
     def refresh(self, _=None):
         self.fetch_data()
 
-    @rumps.clicked("Refresh Now")
-    def on_refresh(self, _):
+    def _on_refresh(self, _):
         self.fetch_data()
 
-    @rumps.clicked("Quit")
-    def on_quit(self, _):
+    def _on_quit(self, _):
         rumps.quit_application()
 
     @rumps.timer(1)
@@ -46,16 +52,18 @@ class LimitLensApp(rumps.App):
             self.title = self._pending_title
             self._pending_title = None
         if self._pending_menu_items is not None:
+            # Rebuild only the dynamic middle section.
+            # Never clear persistent items — that breaks their click handlers.
             self.menu.clear()
-            self.menu.add("Refresh Now")
-            self.menu.add(rumps.separator)
+            self.menu.add(self._item_refresh)
+            self.menu.add(self._sep_top)
             if self._pending_menu_items:
                 for item in self._pending_menu_items:
                     self.menu.add(item)
             else:
-                self.menu.add("No active quotas found")
-            self.menu.add(rumps.separator)
-            self.menu.add("Quit")
+                self.menu.add(rumps.MenuItem("No active quotas found"))
+            self.menu.add(self._sep_bot)
+            self.menu.add(self._item_quit)
             self._pending_menu_items = None
 
     def notify(self, title, message):
