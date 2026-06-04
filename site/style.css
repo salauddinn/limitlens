@@ -20,7 +20,7 @@
   
   --text-primary: hsl(0, 0%, 96%);
   --text-secondary: hsl(224, 15%, 70%);
-  --text-muted: hsl(224, 12%, 50%);
+  --text-muted: hsl(224, 12%, 60%);
   
   --gradient-primary: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
   --gradient-dark: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
@@ -182,7 +182,17 @@ p {
   height: 3px;
   background-color: var(--text-primary);
   border-radius: 3px;
-  transition: 0.3s;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.menu-toggle.active span:nth-child(1) {
+  transform: translateY(8px) rotate(45deg);
+}
+.menu-toggle.active span:nth-child(2) {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+.menu-toggle.active span:nth-child(3) {
+  transform: translateY(-8px) rotate(-45deg);
 }
 
 /* Background Radial Orbs */
@@ -756,7 +766,7 @@ p {
     font-size: 2.2rem;
   }
   .nav-links {
-    display: none;
+    display: flex;
     position: absolute;
     top: var(--nav-height);
     left: 0;
@@ -764,11 +774,21 @@ p {
     flex-direction: column;
     background-color: var(--bg-secondary);
     border-bottom: 1px solid var(--border-glass);
-    padding: 2rem;
     gap: 1.5rem;
+    
+    /* Smooth transition */
+    max-height: 0;
+    opacity: 0;
+    padding: 0 2rem;
+    overflow: hidden;
+    pointer-events: none;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.3s ease;
   }
   .nav-links.active {
-    display: flex;
+    max-height: 350px;
+    opacity: 1;
+    padding: 2rem;
+    pointer-events: auto;
   }
   .menu-toggle {
     display: flex;
@@ -783,5 +803,40 @@ p {
   .footer-bottom {
     flex-direction: column;
     text-align: center;
+  }
+}
+
+/* Scroll-driven Reveal Animations (Progressive Enhancement) */
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .reveal-on-scroll {
+      animation: fadeInUp ease-out both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 50%;
+    }
+  }
+
+  /* Fallback for browsers without native scroll-timeline support */
+  @supports not ((animation-timeline: view()) and (animation-range: entry)) {
+    .reveal-on-scroll {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .reveal-on-scroll.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
