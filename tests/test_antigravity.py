@@ -154,7 +154,7 @@ class TestAntigravityStatus(unittest.TestCase):
 
         with patch("builtins.open", mock_open):
             config_dir = ag_mod.get_config_dir_for_pid(99999, "Linux")
-            self.assertEqual(config_dir, "/home/testuser/agy-work-profile/.gemini/antigravity-cli")
+            self.assertEqual(config_dir.replace("\\", "/"), "/home/testuser/agy-work-profile/.gemini/antigravity-cli")
 
     @patch("subprocess.run")
     @patch("limitlens.providers.antigravity.get_config_dir_for_pid")
@@ -181,6 +181,7 @@ class TestAntigravityStatus(unittest.TestCase):
         self.assertEqual(active["agy-personal"]["ports"], [62125])
         self.assertEqual(active["agy-work"]["ports"], [62126])
 
+    @patch("sys.platform", "darwin")
     @patch("limitlens.providers.antigravity.discover_active_cli_profiles")
     @patch("limitlens.providers.antigravity.get_antigravity_named_profiles")
     @patch("limitlens.providers.antigravity.load_antigravity_cache")
@@ -463,6 +464,7 @@ class TestMoreAntigravity(unittest.TestCase):
 
 
 class TestMoreAntigravityExtra(unittest.TestCase):
+    @patch("sys.platform", "darwin")
     @patch("limitlens.providers.antigravity.as_completed")
     def test_get_antigravity_data_no_profiles_fix(self, mock_as_completed):
         # We test the "if not data: return {'error': 'no profiles found'}" branch

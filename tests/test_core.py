@@ -34,7 +34,7 @@ class TestRedaction(unittest.TestCase):
 
     def test_redact_path_home(self):
         home = os.path.expanduser("~")
-        self.assertEqual(redact_path(os.path.join(home, "foo")), "~/foo")
+        self.assertEqual(redact_path(os.path.join(home, "foo")), os.path.join("~", "foo"))
 
     def test_redact_path_codex(self):
         self.assertEqual(
