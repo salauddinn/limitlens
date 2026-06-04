@@ -181,13 +181,13 @@ class TestAntigravityStatus(unittest.TestCase):
         self.assertEqual(active["agy-personal"]["ports"], [62125])
         self.assertEqual(active["agy-work"]["ports"], [62126])
 
-    @patch("sys.platform", "darwin")
+    @patch("limitlens.providers.antigravity.platform.system", return_value="Darwin")
     @patch("limitlens.providers.antigravity.discover_active_cli_profiles")
     @patch("limitlens.providers.antigravity.get_antigravity_named_profiles")
     @patch("limitlens.providers.antigravity.load_antigravity_cache")
     @patch("limitlens.providers.antigravity._fetch_single_profile")
     @patch("limitlens.providers.antigravity.try_save_antigravity_cache")
-    def test_get_antigravity_data_multiple_profiles(self, mock_save_cache, mock_fetch, mock_load_cache, mock_named_profs, mock_discover_cli):
+    def test_get_antigravity_data_multiple_profiles(self, mock_save_cache, mock_fetch, mock_load_cache, mock_named_profs, mock_discover_cli, mock_platform):
         # 1 active CLI, 1 cached stale CLI, 1 IDE profile
         mock_named_profs.return_value = (["work-ide"], None)
         
@@ -464,9 +464,11 @@ class TestMoreAntigravity(unittest.TestCase):
 
 
 class TestMoreAntigravityExtra(unittest.TestCase):
-    @patch("sys.platform", "darwin")
+    @patch("limitlens.providers.antigravity.platform.system", return_value="Darwin")
+    @patch("limitlens.providers.antigravity.get_antigravity_named_profiles", return_value=([], None))
+    @patch("limitlens.providers.antigravity.discover_active_cli_profiles", return_value={})
     @patch("limitlens.providers.antigravity.as_completed")
-    def test_get_antigravity_data_no_profiles_fix(self, mock_as_completed):
+    def test_get_antigravity_data_no_profiles_fix(self, mock_as_completed, mock_cli, mock_named, mock_platform):
         # We test the "if not data: return {'error': 'no profiles found'}" branch
         mock_as_completed.return_value = []
         res = ag_mod.get_antigravity_data(MagicMock())
