@@ -24,6 +24,8 @@ Each candidate has:
 
 from datetime import datetime, timezone
 import re
+from .core import parse_to_utc
+from .providers.observed import compact_reco_name
 
 # ── Classification ──────────────────────────────────────────────────────────
 
@@ -514,15 +516,17 @@ TIER_HEADERS = {
 
 def _print_tier(key, picks, args, print_c):
     header = TIER_HEADERS[key]
-    print_c(f"\n  → {header}", "\033[1;36m", args.no_color)
+    print_c(f"\n  ➜ {header}", "\033[1;36m", args.no_color)
     if not picks:
         print_c("      (no usable option)", "\033[33m", args.no_color)
         return
     top = picks[0]
+    name = compact_reco_name(top['name'])
+    pct = top['headroom_pct']
     if args.no_color:
-        print(f"      {top['name']}    {top['headroom_pct']:.1f}% left")
+        print(f"      {name:<32} {pct:5.1f}% left")
     else:
-        print(f"      \033[1;32m{top['name']}\033[0m    \033[1m{top['headroom_pct']:.1f}% left\033[0m")
+        print(f"      \033[1;32m{name:<32}\033[0m \033[1m{pct:5.1f}% left\033[0m")
     print_c(f"      cmd:   {top['command']}", "\033[90m", args.no_color)
     if top.get("note"):
         print_c(f"      why:   {top['note']}", "\033[90m", args.no_color)
@@ -537,10 +541,12 @@ def display_recommendations(recs, args, print_c):
     if waste_reduction:
         top = waste_reduction[0]
         print_c("\n  ♻️  Reduce waste most effectively:", "\033[1;33m", args.no_color)
+        name = compact_reco_name(top['name'])
+        pct = top['headroom_pct']
         if args.no_color:
-            print(f"      {top['name']}    {top['headroom_pct']:.1f}% left")
+            print(f"      {name:<32} {pct:5.1f}% left")
         else:
-            print(f"      \033[1;33m{top['name']}\033[0m    \033[1m{top['headroom_pct']:.1f}% left\033[0m")
+            print(f"      \033[1;33m{name:<32}\033[0m \033[1m{pct:5.1f}% left\033[0m")
         print_c(f"      cmd:   {top['command']}", "\033[90m", args.no_color)
         if top.get("note"):
             print_c(f"      why:   {top['note']}", "\033[90m", args.no_color)
@@ -553,7 +559,8 @@ def display_recommendations(recs, args, print_c):
         for c in waste[:5]:
             tag = "URGENT" if c["waste_severity"] == "urgent" else "slow"
             reset = c.get("reset_label") or "unknown"
-            line = f"      • [{tag:<6}] {c['name']:<40} {c['headroom_pct']:5.1f}% left  ({reset})"
+            name = compact_reco_name(c['name'])
+            line = f"      • [{tag:<6}] {name:<32} {c['headroom_pct']:5.1f}% left  ({reset})"
             print_c(line, "\033[31m", args.no_color)
 
     for tier in ("hard", "quick", "cli"):

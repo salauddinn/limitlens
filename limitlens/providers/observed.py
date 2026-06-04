@@ -692,21 +692,30 @@ def compact_reco_name(name):
     return name
 
 def display_at_glance(result, recs, args):
-    print_c("\n  At a glance", "\033[1;35m", getattr(args, 'no_color', False))
+    no_color = getattr(args, 'no_color', False)
+    print_c("\n  ✨ At a glance", "\033[1;35m", no_color)
+    print_c("  " + "─" * 48, "\033[90m", no_color)
     labels = (
-        ("hard", "hard task"),
+        ("hard",  "hard task "),
         ("quick", "quick edit"),
-        ("cli", "cli"),
+        ("cli",   "cli       "),
     )
     for key, label in labels:
         picks = recs.get(key) or []
         if not picks:
-            print_c(f"    {label:<10} no usable option", "\033[33m", getattr(args, 'no_color', False))
+            print_c(f"  {label}  ――  no usable option", "\033[33m", no_color)
             continue
         top = picks[0]
-        reset = f" · {top['reset_label']}" if top.get("reset_label") else ""
-        line = f"    {label:<10} {compact_reco_name(top['name'])} · {top['headroom_pct']:.0f}% left{reset}"
-        print_c(line, "\033[32m", getattr(args, 'no_color', False))
+        reset = f"  ·  {top['reset_label']}" if top.get("reset_label") else ""
+        name = compact_reco_name(top['name'])
+        pct  = top['headroom_pct']
+        pct_str = f"{pct:.0f}% left"
+        if not no_color:
+            pct_color = "\033[32m" if pct >= 50 else "\033[33m" if pct >= 20 else "\033[31m"
+            tag_color = "\033[1;35m"
+            print(f"  \033[90m{label.strip():<10}\033[0m  {tag_color}{name:<26}\033[0m  {pct_color}{pct_str:<9}\033[0m{reset}")
+        else:
+            print(f"  {label.strip():<10}  {name:<26}  {pct_str:<9}{reset}")
 
     usage_sources = result.get("opencode") or {}
     top_usage = []

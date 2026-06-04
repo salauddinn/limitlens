@@ -253,20 +253,19 @@ def _main():
             print(json.dumps(payload, indent=2))
             return
 
-        print_c("\n  AI Tools Status", "\033[1m", args.no_color)
         if args.watch:
-            print_c(
-                f"  watching every {args.interval:g}s  updated {format_timestamp(datetime.now().astimezone())}",
-                "\033[90m",
-                args.no_color,
-            )
-        print("  " + "─" * 52)
+            ts = format_timestamp(datetime.now().astimezone())
+            print_c(f"\n  AI Tools Status  ·  {ts}", "\033[1m", args.no_color)
+            print_c(f"  live · refreshing every {args.interval:g}s", "\033[90m", args.no_color)
+        else:
+            print_c("\n  AI Tools Status", "\033[1m", args.no_color)
 
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
         if any(k in result for k in ("codex", "amp", "antigravity", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
-            print_c("\n  Quota Left", "\033[1m", args.no_color)
+            print()
+            print_c("  ═══ Quota Left ═══", "\033[1;36m", args.no_color)
 
         if "codex" in result:
             display_codex_text(result["codex"], args)
@@ -289,11 +288,11 @@ def _main():
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
 
-        print("\n  " + "─" * 52)
+        # Removed bottom border
         if args.watch:
-            print_c("  Press Ctrl+C to stop live updates", "\033[90m", args.no_color)
+            print_c("  ⟲  Press Ctrl+C to stop", "\033[90m", args.no_color)
         else:
-            print_c(f"  Tip: use --watch for live {tool_label} updates", "\033[90m", args.no_color)
+            print_c(f"  💡 Tip: use --watch for live {tool_label} updates", "\033[90m", args.no_color)
         print()
 
     if args.watch:
