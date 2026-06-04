@@ -51,5 +51,8 @@ limitlens-menubar = "limitlens.menubar:main"
 include = ["limitlens*"]
 exclude = ["tests*", "assets*"]
 
+[tool.setuptools.package-data]
+limitlens = ["assets/*.png"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

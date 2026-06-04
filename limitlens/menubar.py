@@ -47,7 +47,17 @@ except ImportError:  # pragma: no cover - exercised only on non-macOS without ma
 
 class LimitLensApp(rumps.App):
     def __init__(self):
-        super(LimitLensApp, self).__init__("⏳ Loading...")
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(base_dir, "assets", "iconTemplate.png")
+        if not os.path.exists(icon_path):
+            icon_path = None
+
+        super(LimitLensApp, self).__init__(
+            "⏳ Loading...",
+            icon=icon_path,
+            template=True if icon_path else None
+        )
 
         # Persistent items — stored on self so their callbacks are never lost
         self._item_refresh = rumps.MenuItem("Refresh Now", callback=self._on_refresh)
