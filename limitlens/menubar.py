@@ -11,6 +11,7 @@ import json
 import subprocess  # nosec B404
 import threading
 import sys
+import time
 import rumps
 
 class LimitLensApp(rumps.App):
@@ -230,8 +231,13 @@ class LimitLensApp(rumps.App):
 
 def main():
     app = LimitLensApp()
-    # Fetch data immediately before starting the loop
+    # Fetch once before starting the AppKit loop so the UI does not remain
+    # stuck at "Loading..." if the first timer tick is delayed.
     app.fetch_data()
+    deadline = time.monotonic() + 16
+    while app._is_fetching is True and time.monotonic() < deadline:
+        time.sleep(0.05)
+    app.check_updates(None)
     app.run()
 
 if __name__ == "__main__":

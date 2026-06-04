@@ -287,4 +287,5 @@ def test_main():
         
         mock_app_cls.assert_called_once()
         mock_app.fetch_data.assert_called_once()
+        mock_app.check_updates.assert_called_once_with(None)
         mock_app.run.assert_called_once()

@@ -95,64 +95,71 @@ async def main(connection):
             
         if limitlens_bin:
             cmd = [limitlens_bin, "--json"]
-            return subprocess.run(cmd, capture_output=True, text=True)
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
-        return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR)
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
+
+    def status_from_proc(proc):
+        if proc is None:
+            return "🤖 Err: Set USER_LIMITLENS_DIR in widget script"
+        if proc.returncode != 0:
+            err = (proc.stderr or "").strip().split("\n")[-1]
+            return f"🤖 Err: {err[:20]}" if err else "🤖 LimitLens: Err"
+
+        data = json.loads(proc.stdout)
+        recs = data.get("recommendations", {})
+
+        def _emoji(pct):
+            if pct is None: return "⚪"
+            if pct >= 50: return "🟢"
+            if pct >= 15: return "🟡"
+            return "🔴"
+
+        display_items = []
+        for item in recs.get("hard", []):
+            tool = item.get("tool", "")
+            pct = item.get("headroom_pct", 0)
+            
+            if tool == "antigravity" and pct < 20:
+                continue
+            if tool != "antigravity" and pct < 10:
+                continue
+                
+            full_name = item.get("name", "Unknown")
+            # Strip bottleneck info like " (weekly)"
+            if " (" in full_name:
+                full_name = full_name.split(" (")[0]
+                
+            if " → " in full_name:
+                prof, model = full_name.split(" → ", 1)
+                prof = prof.split(":", 1)[-1]
+                display_name = f"{prof}:{model.split()[0]}"
+            else:
+                display_name = full_name.replace("codex-", "")
+                
+            display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
+        
+        if display_items:
+            visible = display_items[:3]
+            extra = len(display_items) - len(visible)
+            suffix = f" +{extra}" if extra > 0 else ""
+            return "💡 " + " | ".join(visible) + suffix
+        return "🤖 No quotas available"
+
+    async def refresh_state_once(loop):
+        try:
+            proc = await loop.run_in_executor(None, fetch_status_sync)
+            state["status"] = status_from_proc(proc)
+        except subprocess.TimeoutExpired:
+            state["status"] = "🤖 LimitLens: Timeout"
+        except Exception as e:
+            state["status"] = f"🤖 Err: {e}"
 
     async def poll_status():
         loop = asyncio.get_running_loop()
         while True:
-            try:
-                proc = await loop.run_in_executor(None, fetch_status_sync)
-                
-                if proc is None:
-                    state["status"] = "🤖 Err: Set USER_LIMITLENS_DIR in widget script"
-                elif proc.returncode == 0:
-                    data = json.loads(proc.stdout)
-                    
-                    recs = data.get("recommendations", {})
-                    def _emoji(pct):
-                        if pct is None: return "⚪"
-                        if pct >= 50: return "🟢"
-                        if pct >= 15: return "🟡"
-                        return "🔴"
-
-                    candidates = recs.get("hard", [])
-                    
-                    display_items = []
-                    for item in candidates:
-                        tool = item.get("tool", "")
-                        pct = item.get("headroom_pct", 0)
-                        
-                        if tool == "antigravity" and pct < 20:
-                            continue
-                        if tool != "antigravity" and pct < 10:
-                            continue
-                            
-                        full_name = item.get("name", "Unknown")
-                        # Strip bottleneck info like " (weekly)"
-                        if " (" in full_name:
-                            full_name = full_name.split(" (")[0]
-                            
-                        if " → " in full_name:
-                            prof, model = full_name.split(" → ", 1)
-                            prof = prof.split(":", 1)[-1]
-                            display_name = f"{prof}:{model.split()[0]}"
-                        else:
-                            display_name = full_name.replace("codex-", "")
-                            
-                        display_items.append(f"{_emoji(pct)}{display_name}:{pct:.0f}%")
-                    
-                    if display_items:
-                        state["status"] = "💡 " + " | ".join(display_items)
-                    else:
-                        state["status"] = "🤖 No quotas available"
-                else:
-                    state["status"] = "🤖 LimitLens: Err"
-            except Exception as e:
-                state["status"] = f"🤖 Err: {e}"
-            
+            await refresh_state_once(loop)
             await asyncio.sleep(900)
 
     @iterm2.StatusBarRPC
@@ -160,23 +167,21 @@ async def main(connection):
         # Return instantly to prevent iTerm2 from timing out
         return state["status"]
 
-    # Retry registration with backoff — handles DUPLICATE_SERVER_ORIGINATED_RPC
-    # which occurs when a previous (crashed) script instance left a stale
-    # registration that iTerm2 hasn't cleaned up yet.
-    max_attempts = 10
-    for attempt in range(1, max_attempts + 1):
+    # Retry registration forever with backoff. iTerm2 can leave a stale
+    # DUPLICATE_SERVER_ORIGINATED_RPC registration around after a crash/restart;
+    # returning here makes macOS show "Script Failed", so keep the script alive
+    # until iTerm2 accepts the registration.
+    attempt = 0
+    while True:
         try:
             await component.async_register(connection, coro)
             print("Registration successful for com.limitlens.status")
             break
         except Exception as e:
-            if "DUPLICATE" in str(e) and attempt < max_attempts:
-                delay = min(2 ** attempt, 300)
-                print(f"Registration attempt {attempt} got: {e} — retrying in {delay}s")
-                await asyncio.sleep(delay)
-            else:
-                print(f"Registration failed: {e}")
-                return
+            attempt += 1
+            delay = min(2 ** min(attempt, 8), 300)
+            print(f"Registration attempt {attempt} failed: {e} — retrying in {delay}s")
+            await asyncio.sleep(delay)
 
     # Start the background polling task only after successful registration
     asyncio.create_task(poll_status())
