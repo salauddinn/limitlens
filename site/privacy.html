@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — LimitLens</title>
+
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="LimitLens Privacy Policy. Learn how LimitLens handles your data — spoiler: everything stays on your machine.">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Privacy Policy — LimitLens">
+  <meta property="og:description" content="LimitLens is a 100% local-first tool. No data leaves your machine. Read our full privacy policy.">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/limitlens_logo.png">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    /* Privacy-page-specific styles */
+    .privacy-page {
+      padding-top: calc(var(--nav-height) + 4rem);
+      padding-bottom: 6rem;
+      min-height: 100vh;
+    }
+    .privacy-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .privacy-content h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .privacy-content .effective-date {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 3rem;
+      display: block;
+    }
+    .privacy-content h2 {
+      font-size: 1.5rem;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--text-primary);
+      background: none;
+      -webkit-background-clip: unset;
+      -webkit-text-fill-color: unset;
+    }
+    .privacy-content p,
+    .privacy-content li {
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      line-height: 1.8;
+      margin-bottom: 1rem;
+    }
+    .privacy-content ul {
+      list-style: none;
+      padding-left: 0;
+      margin-bottom: 1.5rem;
+    }
+    .privacy-content li {
+      padding-left: 1.5rem;
+      position: relative;
+      margin-bottom: 0.5rem;
+    }
+    .privacy-content li::before {
+      content: "✦";
+      position: absolute;
+      left: 0;
+      color: var(--accent-cyan);
+      font-size: 0.75rem;
+      top: 0.3rem;
+    }
+    .privacy-content strong {
+      color: var(--text-primary);
+    }
+    .privacy-content a {
+      color: var(--accent-cyan);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .privacy-content a:hover {
+      opacity: 0.8;
+    }
+    .privacy-highlight {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .privacy-highlight p {
+      margin-bottom: 0;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+      transition: color 0.2s ease;
+    }
+    .back-link:hover {
+      color: var(--accent-cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Orbs -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+
+  <!-- Navigation -->
+  <nav class="navbar" id="navbar">
+    <div class="container">
+      <a href="/" class="nav-logo">
+        <img src="assets/limitlens_logo.png" alt="LimitLens Logo">
+        <span>LimitLens</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="/#features">Features</a></li>
+        <li><a href="/#demo">Live Demo</a></li>
+        <li><a href="/#integrations">Integrations</a></li>
+        <li><a href="/#compare">Why Us</a></li>
+        <li><a href="/#install" class="nav-btn">Install Now</a></li>
+      </ul>
+      <div class="menu-toggle" id="menu-toggle" aria-label="Toggle Menu" role="button" tabindex="0">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Privacy Policy Content -->
+  <section class="privacy-page">
+    <div class="container">
+      <div class="privacy-content">
+
+        <a href="/" class="back-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Back to Home
+        </a>
+
+        <h1>Privacy Policy</h1>
+        <span class="effective-date">Effective Date: June 4, 2026</span>
+
+        <div class="privacy-highlight">
+          <p><strong>TL;DR —</strong> LimitLens is a 100% local-first tool. It never transmits your data to any external server. Your API keys, session tokens, usage data, and configuration files never leave your machine.</p>
+        </div>
+
+        <h2>1. What LimitLens Does</h2>
+        <p>LimitLens is an open-source command-line utility and desktop companion that reads locally stored configuration files, SQLite databases, and session data from AI coding tools installed on your computer. It aggregates quota usage information and displays it in your terminal, macOS menu bar, or iTerm2 status bar.</p>
+
+        <h2>2. Data We Collect</h2>
+        <p><strong>None.</strong> LimitLens does not collect, store, or transmit any personal data whatsoever. Specifically:</p>
+        <ul>
+          <li>No analytics or telemetry is sent anywhere</li>
+          <li>No crash reports are uploaded</li>
+          <li>No API keys or tokens are transmitted off-device</li>
+          <li>No usage statistics leave your machine</li>
+          <li>No cookies or tracking pixels are used on this website</li>
+        </ul>
+
+        <h2>3. Data LimitLens Reads Locally</h2>
+        <p>To provide quota monitoring, LimitLens reads the following data from your local filesystem. This data is <strong>never</strong> sent to any remote server:</p>
+        <ul>
+          <li><strong>Configuration files</strong> — JSON config files from tools like Cursor, Codex, Amp, and others to determine subscription tiers and usage limits</li>
+          <li><strong>Local SQLite databases</strong> — Rate-limit and session databases maintained by AI coding tools on your machine</li>
+          <li><strong>Session tokens (read-only)</strong> — Used solely to calculate remaining quota headroom; never stored, copied, or transmitted</li>
+          <li><strong>File paths &amp; email addresses</strong> — Detected in configs but <strong>actively redacted</strong> from all CLI output to protect your privacy</li>
+        </ul>
+
+        <h2>4. Data Storage</h2>
+        <p>LimitLens stores a minimal local cache in <code>~/.limitlens/</code> on your machine. This cache contains only:</p>
+        <ul>
+          <li>Aggregated quota percentages (no raw tokens or keys)</li>
+          <li>Timestamp of last scan</li>
+          <li>User preferences (display format, enabled providers)</li>
+        </ul>
+        <p>You can delete this directory at any time to completely remove all LimitLens data from your system.</p>
+
+        <h2>5. Third-Party Services</h2>
+        <p>LimitLens itself makes <strong>zero network requests</strong>. It does not depend on or communicate with any third-party APIs, cloud services, or analytics platforms.</p>
+        <p>This website is hosted on <a href="https://vercel.com" target="_blank" rel="noopener">Vercel</a>, which may collect standard web server logs (IP address, user agent, referrer) as part of normal HTTP serving. Please review <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel's Privacy Policy</a> for details on their data practices.</p>
+
+        <h2>6. Open Source Transparency</h2>
+        <p>LimitLens is fully open-source under the <a href="https://github.com/salauddinn/limitlens/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>. You can audit every line of code to verify these privacy claims. We believe transparency is the strongest privacy guarantee.</p>
+
+        <h2>7. Children's Privacy</h2>
+        <p>LimitLens does not collect any data from anyone, including children under the age of 13. Since no data is collected, no special provisions are necessary under COPPA or similar regulations.</p>
+
+        <h2>8. Changes to This Policy</h2>
+        <p>If we update this privacy policy, changes will be reflected on this page with an updated effective date. Since LimitLens collects no data, meaningful changes to this policy are unlikely.</p>
+
+        <h2>9. Contact</h2>
+        <p>If you have questions about this privacy policy or LimitLens's data practices, please <a href="https://github.com/salauddinn/limitlens/issues" target="_blank" rel="noopener">open an issue on GitHub</a> or reach out to the maintainer via the repository.</p>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="border-top: none; padding-top: 0;">
+        <p>&copy; 2026 LimitLens. Released under the MIT License.</p>
+        <div class="footer-bottom-links">
+          <a href="/">Home</a>
+          <span style="color: var(--text-muted);">|</span>
+          <a href="privacy.html">Privacy Policy</a>
+          <span style="color: var(--text-muted);">|</span>
+          <a href="https://github.com/salauddinn/limitlens" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Mobile menu toggle script -->
+  <script>
+    const menuToggle = document.getElementById('menu-toggle');
+    const navLinks = document.getElementById('nav-links');
+    if (menuToggle && navLinks) {
+      menuToggle.addEventListener('click', () => navLinks.classList.toggle('active'));
+    }
+  </script>
+</body>
+</html>
