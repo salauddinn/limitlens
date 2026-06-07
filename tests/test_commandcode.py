@@ -62,6 +62,32 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("purchased", output)
         self.assertIn("4.3507 credits", output)
 
+    def test_parse_merlin_status_response(self):
+        data = parse_commandcode_credits({
+            "status": "success",
+            "data": {
+                "user": {
+                    "type": "FREE",
+                    "userPlan": "FREE",
+                    "used": 2,
+                    "limit": 102,
+                    "cappedFeatures": {
+                        "merlin": {"used": 2, "limit": 102, "resetsAt": 1778630399999}
+                    },
+                    "dailyUsage": {"cost": 0.0003375},
+                    "monthlyUsage": {"cost": 0.001401},
+                }
+            }
+        }, self.args)
+
+        self.assertAlmostEqual(data["available"], 100.0)
+        self.assertEqual(data["unit_label"], "uses")
+        self.assertEqual(data["tiers"][0]["label"], "merlin")
+        self.assertEqual(data["tiers"][0]["unit"], "uses")
+        self.assertEqual(data["plan"], "FREE")
+        self.assertIn("daily_usage", data)
+        self.assertIsNotNone(data["tiers"][0]["reset_time"])
+
     def test_display_nonzero_credit_types(self):
         data = parse_commandcode_credits({
             "credits": {
@@ -93,6 +119,22 @@ class TestCommandCodeProvider(unittest.TestCase):
         request = mock_open.call_args[0][0]
         self.assertIn("Cookie", request.headers)
         self.assertEqual(request.headers["Cookie"], "session=redacted")
+
+    @patch.dict("os.environ", {"COMMANDCODE_AUTHORIZATION": "Bearer redacted", "COMMANDCODE_CREDITS_URL": "https://uam.getmerlin.in/status"}, clear=True)
+    @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
+    @patch("limitlens.providers.commandcode._open_no_redirect", return_value=FakeResponse({
+        "status": "success",
+        "data": {"user": {"used": 1, "limit": 10, "cappedFeatures": {"merlin": {"used": 1, "limit": 10}}}}
+    }))
+    def test_get_merlin_status_uses_merlin_headers(self, mock_open, mock_config):
+        data = get_commandcode_data(self.args)
+
+        self.assertAlmostEqual(data["available"], 9.0)
+        request = mock_open.call_args[0][0]
+        self.assertEqual(request.headers["Origin"], "https://api.commandcode.ai")
+        self.assertEqual(request.headers["Referer"], "https://api.commandcode.ai/")
+        self.assertIn("X-merlin-version", request.headers)
+        self.assertIn("X-request-timestamp", request.headers)
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})

@@ -1,15 +1,23 @@
-"""Command Code provider — reads credit balance from the web billing API."""
+"""Command Code provider — reads quota/credit balance from billing APIs."""
 
 import json
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section
 
 
 DEFAULT_CREDITS_URL = "https://api.commandcode.ai/internal/billing/credits"
+MERLIN_STATUS_HOST = "uam.getmerlin.in"
+DEFAULT_MERLIN_ORIGIN = "https://api.commandcode.ai"
+DEFAULT_MERLIN_VERSION = "extension-7.5.24"
+DEFAULT_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+)
 
 
 def _number(value, default=0.0):
@@ -19,10 +27,74 @@ def _number(value, default=0.0):
         return default
 
 
+def _millis_to_iso(value):
+    try:
+        if value is None:
+            return None
+        return datetime.fromtimestamp(float(value) / 1000.0).astimezone().isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _merlin_request_timestamp():
+    now = datetime.now().astimezone()
+    offset = now.strftime("%z")
+    offset = f"{offset[:3]}:{offset[3:]}" if len(offset) == 5 else offset
+    zone = now.tzinfo.tzname(now) if now.tzinfo else "local"
+    return f"{now.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3]}{offset}[{zone}]"
+
+
+def _is_merlin_status_payload(payload):
+    if not isinstance(payload, dict):
+        return False
+    user = ((payload.get("data") or {}).get("user") or {})
+    return bool(user) and ("cappedFeatures" in user or "dailyUsage" in user or "monthlyUsage" in user)
+
+
+def _parse_merlin_status(payload, cfg=None):
+    cfg = cfg or {}
+    user = ((payload.get("data") or {}).get("user") or {})
+    if not isinstance(user, dict):
+        return {"error": "Unexpected response format"}
+
+    capped = user.get("cappedFeatures") or {}
+    primary = capped.get("merlin") if isinstance(capped, dict) else None
+    if not isinstance(primary, dict):
+        primary = {}
+
+    limit = max(_number(primary.get("limit"), _number(user.get("limit"), 0.0)), 0.0)
+    used = max(_number(primary.get("used"), _number(user.get("used"), 0.0)), 0.0)
+    available = max(0.0, limit - used)
+    pct_left = (available / limit * 100.0) if limit > 0 else 0.0
+    reset_at = _millis_to_iso(primary.get("resetsAt") or (user.get("dailyUsage") or {}).get("resetsAt"))
+
+    return {
+        "name": cfg.get("name") or "Command Code",
+        "command": cfg.get("command") or "cmd",
+        "plan": user.get("userPlan") or user.get("type"),
+        "available": available,
+        "unit_label": "uses",
+        "tiers": [{
+            "label": "merlin",
+            "remaining": available,
+            "total": limit,
+            "used": used,
+            "pct_left": pct_left,
+            "pct_used": 100.0 - pct_left,
+            "unit": "uses",
+            "reset_time": reset_at,
+        }],
+        "daily_usage": user.get("dailyUsage") if isinstance(user.get("dailyUsage"), dict) else None,
+        "monthly_usage": user.get("monthlyUsage") if isinstance(user.get("monthlyUsage"), dict) else None,
+    }
+
+
 def parse_commandcode_credits(payload, args=None, cfg=None):
     cfg = cfg or {}
     if not isinstance(payload, dict):
         return {"error": "Unexpected response format"}
+    if _is_merlin_status_payload(payload):
+        return _parse_merlin_status(payload, cfg)
 
     data = payload.get("credits", payload)
     if not isinstance(data, dict):
@@ -55,6 +127,7 @@ def parse_commandcode_credits(payload, args=None, cfg=None):
         "command": cfg.get("command") or "cmd",
         "credits": credits,
         "available": available,
+        "unit_label": "credits",
         "tiers": tiers,
     }
 
@@ -84,6 +157,13 @@ def _validated_web_url(url):
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("URL must use http or https")
     return url
+
+
+def _is_merlin_status_url(url):
+    try:
+        return urllib.parse.urlparse(url).netloc.lower() == MERLIN_STATUS_HOST
+    except Exception:
+        return False
 
 
 def _open_no_redirect(req, timeout=10):
@@ -122,8 +202,17 @@ def get_commandcode_data(args, config=None):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json, text/plain, */*")
     req.add_header("Cache-Control", "no-cache")
-    req.add_header("Origin", "https://commandcode.ai")
-    req.add_header("Referer", "https://commandcode.ai/")
+    if _is_merlin_status_url(url):
+        req.add_header("Accept-Language", os.environ.get("COMMANDCODE_ACCEPT_LANGUAGE") or "en-US,en;q=0.7")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Origin", os.environ.get("COMMANDCODE_ORIGIN") or DEFAULT_MERLIN_ORIGIN)
+        req.add_header("Referer", os.environ.get("COMMANDCODE_REFERER") or f"{DEFAULT_MERLIN_ORIGIN}/")
+        req.add_header("User-Agent", os.environ.get("COMMANDCODE_USER_AGENT") or DEFAULT_BROWSER_UA)
+        req.add_header("X-Merlin-Version", os.environ.get("COMMANDCODE_MERLIN_VERSION") or DEFAULT_MERLIN_VERSION)
+        req.add_header("X-Request-Timestamp", os.environ.get("COMMANDCODE_REQUEST_TIMESTAMP") or _merlin_request_timestamp())
+    else:
+        req.add_header("Origin", "https://commandcode.ai")
+        req.add_header("Referer", "https://commandcode.ai/")
     for key, value in headers.items():
         req.add_header(key, value)
 
@@ -165,8 +254,13 @@ def display_commandcode_text(data, args):
     for tier in visible_tiers:
         pct_left = tier.get("pct_left", 0.0)
         pct_used = tier.get("pct_used", 0.0)
+        unit = tier.get("unit") or data.get("unit_label") or "credits"
+        label = str(tier.get("label") or unit)[:16]
         b = bar(pct_used, no_color=getattr(args, 'no_color', False))
-        print(f"    credits          {b}  {pct_left:5.1f}% left  {tier['remaining']:.4f}/{tier['total']:.4f} credits")
+        print(f"    {label:<16} {b}  {pct_left:5.1f}% left  {tier['remaining']:.4f}/{tier['total']:.4f} {unit}")
+
+    if data.get("plan"):
+        print_c(f"    plan             {data['plan']}", "\033[90m", getattr(args, 'no_color', False))
 
     credits = data.get("credits") or {}
     for key, label in (
@@ -180,3 +274,10 @@ def display_commandcode_text(data, args):
             print_c(f"    {label:<16} {value:.4f} credits", "\033[90m", getattr(args, 'no_color', False))
     if credits.get("below_threshold"):
         print_c(f"    threshold        below {credits.get('threshold', 0.0):.4f}", "\033[33m", getattr(args, 'no_color', False))
+
+    daily_usage = data.get("daily_usage") or {}
+    monthly_usage = data.get("monthly_usage") or {}
+    if daily_usage.get("cost"):
+        print_c(f"    daily cost       ${_number(daily_usage.get('cost')):.6f}", "\033[90m", getattr(args, 'no_color', False))
+    if monthly_usage.get("cost"):
+        print_c(f"    monthly cost     ${_number(monthly_usage.get('cost')):.6f}", "\033[90m", getattr(args, 'no_color', False))
