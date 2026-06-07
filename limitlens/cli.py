@@ -232,14 +232,20 @@ def _main():
         # gateway totals as the reset baseline.
         if is_agentrouter_enabled(config):
             import limitlens.providers.agentrouter as ar
+            import sys
             ar_data = ar.get_agentrouter_data(args, config, apply_reset_offset=False)
-            if "error" not in ar_data and ar_data.get("tiers"):
-                tier = ar_data["tiers"][0]
-                extra_data["agentrouter_offset"] = {
-                    "used": tier["used"],
-                    "request_count": ar_data.get("request_count", 0),
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
+            if "error" in ar_data or not ar_data.get("tiers"):
+                print_c("  ⚠ failed to capture AgentRouter/Kilo reset baseline", "\033[31m", args.no_color)
+                if "error" in ar_data:
+                    print_c(f"    Details: {ar_data['error']}", "\033[90m", args.no_color)
+                sys.exit(1)
+            
+            tier = ar_data["tiers"][0]
+            extra_data["agentrouter_offset"] = {
+                "used": tier["used"],
+                "request_count": ar_data.get("request_count", 0),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
         # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
         from .config import limitlens_config_path

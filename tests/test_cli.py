@@ -655,6 +655,42 @@ class TestCLI(unittest.TestCase):
         finally:
             os.remove(config_path)
 
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_fails_loudly_on_agentrouter_error(self, mock_config, mock_agentrouter):
+        mock_agentrouter.return_value = {"error": "Connection timed out"}
+        
+        test_args = ["limitlens", "--reset-spend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+        
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline", buf.getvalue())
+        self.assertIn("Connection timed out", buf.getvalue())
+
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_fails_loudly_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter):
+        mock_agentrouter.return_value = {"tiers": []}
+        
+        test_args = ["limitlens", "--reset-spend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+        
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline", buf.getvalue())
 
 
 if __name__ == "__main__":

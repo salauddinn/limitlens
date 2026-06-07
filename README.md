@@ -96,8 +96,10 @@ limitlens --tool codex  # Filter output to a specific tool
 limitlens --watch    # Keep alive and refresh every 5 seconds
 limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report (% of quota wasted over 7 days)
-limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo)
+limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
 ```
+
+> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 
 > **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
 
