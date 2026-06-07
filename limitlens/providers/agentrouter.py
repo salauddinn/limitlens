@@ -118,7 +118,8 @@ def parse_agentrouter_quota(payload, args, cfg=None, apply_reset_offset=True):
         return {"error": "Unexpected response format"}
 
     quota = max(0.0, _number(data.get("quota"), 0.0))
-    used = max(0.0, _number(data.get("used_quota"), 0.0))
+    raw_used = max(0.0, _number(data.get("used_quota"), 0.0))
+    used = raw_used
     request_count = max(0, _int(data.get("request_count"), 0))
 
     # Apply spend reset offset if available.
@@ -128,28 +129,23 @@ def parse_agentrouter_quota(payload, args, cfg=None, apply_reset_offset=True):
             if os.path.exists(SPEND_RESETS_PATH):
                 with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
                     resets = json.load(f)
+                if not isinstance(resets, dict):
+                    resets = {}
                 
                 ar_offset = resets.get("agentrouter_offset", {})
                 if ar_offset:
                     offset_used = _number(ar_offset.get("used"), 0.0)
                     offset_reqs = _int(ar_offset.get("request_count"), 0)
                     
-                    if used < offset_used or request_count < offset_reqs:
-                        del resets["agentrouter_offset"]
-                        try:
-                            with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:
-                                json.dump(resets, f, indent=2)
-                        except Exception:
-                            pass
-                    else:
+                    if used >= offset_used and request_count >= offset_reqs:
                         used -= offset_used
                         request_count -= offset_reqs
         except Exception:
             pass
 
-    remaining = max(0.0, quota - used) if quota > 0 else 0.0
+    remaining = max(0.0, quota - raw_used) if quota > 0 else 0.0
     pct_left = max(0.0, (remaining / quota * 100.0)) if quota > 0 else 0.0
-    pct_used = (used / quota * 100.0) if quota > 0 else 0.0
+    pct_used = (raw_used / quota * 100.0) if quota > 0 else 0.0
 
     unit = str(data.get("unit") or cfg.get("unit_label") or "units")
     display_name = _redact_name(data.get("display_name"), args)

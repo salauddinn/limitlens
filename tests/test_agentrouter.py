@@ -192,7 +192,7 @@ class TestAgentRouterProvider(unittest.TestCase):
 
         self.assertIn("Connection refused", data["error"])
     @patch("limitlens.providers.agentrouter.load_display_config", return_value={"auto_hide_enabled": False})
-    def test_parse_agentrouter_clears_offset_on_rollover(self, mock_display):
+    def test_parse_agentrouter_ignores_outdated_offset_on_rollover(self, mock_display):
         payload = {
             "data": {
                 "quota": 200,
@@ -215,7 +215,7 @@ class TestAgentRouterProvider(unittest.TestCase):
                 
                 with open(reset_path, "r", encoding="utf-8") as f:
                     updated_resets = json.load(f)
-                self.assertNotIn("agentrouter_offset", updated_resets)
+                self.assertIn("agentrouter_offset", updated_resets)
         finally:
             os.remove(reset_path)
 

@@ -22,6 +22,8 @@ def get_spend_reset_time(tool_name):
     try:
         with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
+            if not isinstance(data, dict):
+                data = {}
             ts = data.get(tool_name)
             if ts:
                 return datetime.fromisoformat(ts)
@@ -36,6 +38,8 @@ def mark_spend_reset(tool_name=None, extra_data=None):
             try:
                 with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                if not isinstance(data, dict):
+                    data = {}
             except (json.JSONDecodeError, OSError):
                 pass
         
@@ -53,9 +57,13 @@ def mark_spend_reset(tool_name=None, extra_data=None):
                 else:
                     data[k] = v
                 
-        os.makedirs(os.path.dirname(SPEND_RESETS_PATH), mode=0o700, exist_ok=True)
-        with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:
+        import tempfile
+        dir_path = os.path.dirname(SPEND_RESETS_PATH)
+        os.makedirs(dir_path, mode=0o700, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="spend_resets_", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f)
+        os.replace(tmp_path, SPEND_RESETS_PATH)
         return True
     except OSError:
         return False

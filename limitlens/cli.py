@@ -249,12 +249,15 @@ def _main():
         # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
         from .config import limitlens_config_path
         import os
+        import tempfile
         config_path = limitlens_config_path()
         config_updated = False
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     user_config = json.load(f)
+                if not isinstance(user_config, dict):
+                    user_config = {}
                 
                 if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
                     tools_cfg = user_config["custom_tools"]["tools"]
@@ -266,16 +269,37 @@ def _main():
 
                     for tool_data in tools_list:
                         if isinstance(tool_data, dict):
-                            if "used" in tool_data and tool_data["used"] > 0:
+                            used_val = tool_data.get("used", 0)
+                            if isinstance(used_val, (int, float)) and used_val > 0:
                                 tool_data["used"] = 0
                                 config_updated = True
-                            if "request_count" in tool_data and tool_data["request_count"] > 0:
+                            elif isinstance(used_val, str):
+                                try:
+                                    if float(used_val) > 0:
+                                        tool_data["used"] = 0
+                                        config_updated = True
+                                except ValueError:
+                                    pass
+
+                            req_val = tool_data.get("request_count", 0)
+                            if isinstance(req_val, (int, float)) and req_val > 0:
                                 tool_data["request_count"] = 0
                                 config_updated = True
+                            elif isinstance(req_val, str):
+                                try:
+                                    if float(req_val) > 0:
+                                        tool_data["request_count"] = 0
+                                        config_updated = True
+                                except ValueError:
+                                    pass
                 
                 if config_updated:
-                    with open(config_path, "w", encoding="utf-8") as f:
+                    dir_path = os.path.dirname(config_path)
+                    os.makedirs(dir_path, exist_ok=True)
+                    fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
                         json.dump(user_config, f, indent=2)
+                    os.replace(tmp_path, config_path)
                     print_c("  ✓ custom tools usage reset in config.json", "\033[32m", args.no_color)
             except (json.JSONDecodeError, OSError):
                 print_c(f"  ⚠ failed to update custom tools in {config_path}", "\033[31m", args.no_color)
@@ -358,8 +382,6 @@ def _main():
             display_amp_text(result["amp"], args)
         if "antigravity" in result:
             display_antigravity_text(result["antigravity"], args)
-        if "pi" in result and "opencode" not in result:
-            display_pi_text(result["pi"], args)
         if "pioneer" in result:
             display_pioneer_text(result["pioneer"], args)
         if "agentrouter" in result:
@@ -370,8 +392,11 @@ def _main():
             display_custom_text(result["custom"], args)
         if "cursor" in result:
             display_cursor_text(result["cursor"], args)
+
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
+        elif "pi" in result:
+            display_pi_text(result["pi"], args)
 
         # Removed bottom border
         if args.watch:
