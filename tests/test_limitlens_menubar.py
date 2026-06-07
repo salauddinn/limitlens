@@ -34,11 +34,11 @@ def test_init(app):
 def test_refresh_and_on_refresh(app):
     with patch.object(app, 'fetch_data') as mock_fetch:
         app.refresh()
-        mock_fetch.assert_called_once()
+        mock_fetch.assert_called_once_with()
         
         mock_fetch.reset_mock()
         app._on_refresh(None)
-        mock_fetch.assert_called_once()
+        mock_fetch.assert_called_once_with(sync_codex=True)
 
 def test_check_updates(app):
     app._pending_title = "New Title"

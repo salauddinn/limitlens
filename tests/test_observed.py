@@ -2,7 +2,8 @@ import json
 import sqlite3
 import tempfile
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from unittest.mock import patch
 
 import pytest
 from limitlens.providers.observed import (
@@ -191,6 +192,25 @@ def test_get_opencode_usage(opencode_db):
     assert get_opencode_usage({"opencode": {"enabled": False}}) == {"disabled": True}
     # missing db
     assert "error" in get_opencode_usage({"opencode": {"db_path": "/nonexistent/db.sqlite"}})
+
+def test_get_opencode_usage_with_reset(opencode_db):
+    config = {
+        "opencode": {
+            "enabled": True,
+            "db_path": opencode_db,
+            "providers": ["openai"]
+        }
+    }
+    
+    future_reset = datetime.now(timezone.utc) + timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=future_reset):
+        usage = get_opencode_usage(config)
+        assert len(usage["windows"][0]["models"]) == 0
+        
+    past_reset = datetime.now(timezone.utc) - timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=past_reset):
+        usage = get_opencode_usage(config)
+        assert len(usage["windows"][0]["models"]) == 1
 
 @pytest.fixture
 def copilot_otel():

@@ -16,9 +16,64 @@ from limitlens.core import (
 
 # ── Observed usage helpers ──────────────────────────────────────────────────
 
-def usage_window_start(days):
+SPEND_RESETS_PATH = os.environ.get("LIMITLENS_SPEND_RESETS_PATH") or os.path.expanduser("~/.cache/limitlens/spend_resets.json")
+
+def get_spend_reset_time(tool_name):
+    try:
+        with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if not isinstance(data, dict):
+                data = {}
+            ts = data.get(tool_name)
+            if ts:
+                return datetime.fromisoformat(ts)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+def mark_spend_reset(tool_name=None, extra_data=None):
+    try:
+        data = {}
+        if os.path.exists(SPEND_RESETS_PATH):
+            try:
+                with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    data = {}
+            except (json.JSONDecodeError, OSError):
+                pass
+        
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if tool_name:
+            data[tool_name] = now_iso
+        else:
+            for t in ["opencode", "pi", "copilot_cli"]:
+                data[t] = now_iso
+                
+        if extra_data:
+            for k, v in extra_data.items():
+                if v is None:
+                    data.pop(k, None)
+                else:
+                    data[k] = v
+                
+        import tempfile
+        dir_path = os.path.dirname(SPEND_RESETS_PATH)
+        os.makedirs(dir_path, mode=0o700, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="spend_resets_", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, SPEND_RESETS_PATH)
+        return True
+    except OSError:
+        return False
+
+def usage_window_start(days, reset_time=None):
     now = datetime.now(timezone.utc)
-    return now - timedelta(days=days)
+    since_days = now - timedelta(days=days)
+    if reset_time and reset_time > since_days:
+        return reset_time
+    return since_days
 
 def millis_from_dt(dt):
     return int(dt.timestamp() * 1000)
@@ -229,8 +284,9 @@ def get_opencode_usage(config):
     ignored_models = cfg.get("ignored_models") or []
     model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("opencode")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
     min_since_ms = min(millis_from_dt(w["since"]) for w in windows.values())
@@ -364,8 +420,9 @@ def get_copilot_cli_usage(config):
         }
 
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("copilot_cli")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
 
@@ -459,8 +516,9 @@ def get_pi_usage(config):
     ignored_models = cfg.get("ignored_models") or []
     model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("pi")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
     min_since_ts = min(win["since"].timestamp() for win in windows.values())
@@ -692,21 +750,30 @@ def compact_reco_name(name):
     return name
 
 def display_at_glance(result, recs, args):
-    print_c("\n  At a glance", "\033[1;35m", getattr(args, 'no_color', False))
+    no_color = getattr(args, 'no_color', False)
+    print_c("\n  ✨ At a glance", "\033[1;35m", no_color)
+    print_c("  " + "─" * 48, "\033[90m", no_color)
     labels = (
-        ("hard", "hard task"),
+        ("hard",  "hard task "),
         ("quick", "quick edit"),
-        ("cli", "cli"),
+        ("cli",   "cli       "),
     )
     for key, label in labels:
         picks = recs.get(key) or []
         if not picks:
-            print_c(f"    {label:<10} no usable option", "\033[33m", getattr(args, 'no_color', False))
+            print_c(f"  {label}  ――  no usable option", "\033[33m", no_color)
             continue
         top = picks[0]
-        reset = f" · {top['reset_label']}" if top.get("reset_label") else ""
-        line = f"    {label:<10} {compact_reco_name(top['name'])} · {top['headroom_pct']:.0f}% left{reset}"
-        print_c(line, "\033[32m", getattr(args, 'no_color', False))
+        reset = f"  ·  {top['reset_label']}" if top.get("reset_label") else ""
+        name = compact_reco_name(top['name'])
+        pct  = top['headroom_pct']
+        pct_str = f"{pct:.0f}% left"
+        if not no_color:
+            pct_color = "\033[32m" if pct >= 50 else "\033[33m" if pct >= 20 else "\033[31m"
+            tag_color = "\033[1;35m"
+            print(f"  \033[90m{label.strip():<10}\033[0m  {tag_color}{name:<26}\033[0m  {pct_color}{pct_str:<9}\033[0m{reset}")
+        else:
+            print(f"  {label.strip():<10}  {name:<26}  {pct_str:<9}{reset}")
 
     usage_sources = result.get("opencode") or {}
     top_usage = []

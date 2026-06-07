@@ -3,7 +3,9 @@
 
 import io
 import json
+import os
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -283,6 +285,68 @@ class TestCLI(unittest.TestCase):
         # Verify success message was printed
         self.assertTrue(any("waste history cleared" in str(call) for call in mock_print.mock_calls))
 
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_uses_raw_agentrouter_totals_and_rewrites_custom_config(
+        self, mock_config, mock_agentrouter, mock_mark_reset
+    ):
+        mock_agentrouter.return_value = {"tiers": [{"used": 120}], "request_count": 12}
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump({
+                "custom_tools": {
+                    "tools": {
+                        "kilo": {"used": 8, "request_count": 3},
+                        "other": {"used": 0, "request_count": 0},
+                    }
+                }
+            }, f)
+            config_path = f.name
+
+        try:
+            test_args = ["limitlens", "--reset-spend"]
+            with patch.object(sys, "argv", test_args), \
+                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 redirect_stdout(io.StringIO()):
+                main()
+
+            mock_agentrouter.assert_called_once()
+            self.assertFalse(mock_agentrouter.call_args.kwargs["apply_reset_offset"])
+
+            extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+            self.assertEqual(extra_data["agentrouter_offset"]["used"], 120)
+            self.assertEqual(extra_data["agentrouter_offset"]["request_count"], 12)
+            self.assertIn("timestamp", extra_data["agentrouter_offset"])
+
+            with open(config_path, encoding="utf-8") as f:
+                updated = json.load(f)
+            self.assertEqual(updated["custom_tools"]["tools"]["kilo"]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["kilo"]["request_count"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["other"]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["other"]["request_count"], 0)
+        finally:
+            os.remove(config_path)
+
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "vertex"}}},
+    })
+    def test_reset_spend_skips_agentrouter_when_kilo_provider_is_not_agentrouter(
+        self, mock_config, mock_agentrouter, mock_mark_reset
+    ):
+        test_args = ["limitlens", "--reset-spend"]
+        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+            main()
+
+        mock_agentrouter.assert_not_called()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertEqual(extra_data, {})
 
     @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("argparse.ArgumentParser.error")
@@ -312,8 +376,12 @@ class TestCLI(unittest.TestCase):
         for tool in ["agentrouter", "commandcode"]:
             test_args = ["limitlens", "--json", "--tool", tool, "--no-record"]
             buf = io.StringIO()
+            config = dict(TEST_CONFIG)
+            if tool == "agentrouter":
+                config = dict(TEST_CONFIG)
+                config["agentrouter"] = {"enabled": True, "provider": "agentrouter"}
             with patch.object(sys, "argv", test_args), \
-                 patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+                 patch("limitlens.cli.load_limitlens_config", return_value=config), \
                  redirect_stdout(buf):
                 main()
             payload = json.loads(buf.getvalue())
@@ -334,6 +402,37 @@ class TestCLI(unittest.TestCase):
             main()
         mock_refresh_all.assert_called_once()
         self.assertTrue(any("syncing codex accounts" in str(c) for c in mock_print.mock_calls))
+
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.providers.codex.refresh_all_accounts")
+    @patch("limitlens.cli.print_c")
+    def test_refresh_codex_refreshes_and_exits(self, mock_print, mock_refresh_all, mock_codex):
+        mock_refresh_all.return_value = {
+            "default": {"ok": True, "error": None},
+            "work": {"ok": False, "error": "timeout"},
+        }
+        test_args = ["limitlens", "--refresh-codex"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(io.StringIO()):
+            main()
+        mock_refresh_all.assert_called_once()
+        # Should not perform a status fetch when refreshing and exiting.
+        mock_codex.assert_not_called()
+        self.assertTrue(any("default refreshed" in str(c) for c in mock_print.mock_calls))
+        self.assertTrue(any("work failed: timeout" in str(c) for c in mock_print.mock_calls))
+
+    @patch("limitlens.providers.codex.refresh_all_accounts", return_value={})
+    @patch("limitlens.cli.get_codex_data")
+    def test_refresh_codex_json(self, mock_codex, mock_refresh_all):
+        test_args = ["limitlens", "--refresh-codex", "--json"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(io.StringIO()) as buf:
+            main()
+        mock_refresh_all.assert_called_once()
+        mock_codex.assert_not_called()
+        self.assertEqual(json.loads(buf.getvalue()), {})
 
     @patch("limitlens.providers.codex.refresh_accounts")
     @patch("limitlens.cli.print_c")
@@ -449,7 +548,7 @@ class TestCLI(unittest.TestCase):
         test_config = {
             "codex": {"enabled": True}, "amp": {"enabled": True}, "antigravity": {"enabled": True},
             "opencode": {"enabled": True}, "pi": {"enabled": True}, "pioneer": {"enabled": True},
-            "agentrouter": {"enabled": True}, "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
+            "agentrouter": {"enabled": True, "provider": "agentrouter"}, "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
             "cursor": {"enabled": True}
         }
         test_args = ["limitlens", "--tool", "all", "--no-record"]
@@ -467,7 +566,7 @@ class TestCLI(unittest.TestCase):
         mock_d_cc.assert_called_once()
         mock_d_custom.assert_called_once()
         mock_d_oc.assert_called_once()
-        mock_d_pi.assert_called_once()
+        mock_d_pi.assert_not_called()
         mock_d_cursor.assert_called_once()
 
     @patch("limitlens.cli.time.sleep", side_effect=KeyboardInterrupt)
@@ -481,7 +580,7 @@ class TestCLI(unittest.TestCase):
              redirect_stdout(io.StringIO()):
             main()
         mock_sleep.assert_called_once_with(1.0)
-        self.assertTrue(any("watching every" in str(c) for c in mock_print.mock_calls))
+        self.assertTrue(any("refreshing every" in str(c) for c in mock_print.mock_calls))
         self.assertTrue(any("Press Ctrl+C to stop" in str(c) for c in mock_print.mock_calls))
         
     @patch("limitlens.cli.display_codex_text")
@@ -525,6 +624,93 @@ class TestCLI(unittest.TestCase):
             main()
         mock_exit.assert_called_once_with(1)
 
+
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "custom_tools": {"enabled": True},
+    })
+    def test_reset_spend_with_list_form_custom_tools(self, mock_config, mock_mark_reset):
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump({
+                "custom_tools": {
+                    "tools": [
+                        {"name": "t1", "used": 5, "request_count": 2},
+                        {"name": "t2", "used": 10, "request_count": 4}
+                    ]
+                }
+            }, f)
+            config_path = f.name
+            
+        try:
+            test_args = ["limitlens", "--reset-spend"]
+            with patch.object(sys, "argv", test_args), \
+                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 redirect_stdout(io.StringIO()):
+                main()
+                
+            with open(config_path, encoding="utf-8") as f:
+                updated = json.load(f)
+            self.assertEqual(updated["custom_tools"]["tools"][0]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"][1]["used"], 0)
+        finally:
+            os.remove(config_path)
+
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_error(self, mock_config, mock_agentrouter, mock_mark_reset):
+        mock_agentrouter.return_value = {"error": "Connection timed out"}
+        
+        test_args = ["limitlens", "--reset-spend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             redirect_stdout(buf):
+            main()
+        
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
+        self.assertIn("Connection timed out", buf.getvalue())
+        mock_mark_reset.assert_called_once()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertIsNone(extra_data["agentrouter_offset"])
+
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter, mock_mark_reset):
+        mock_agentrouter.return_value = {"tiers": []}
+        
+        test_args = ["limitlens", "--reset-spend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             redirect_stdout(buf):
+            main()
+        
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
+        mock_mark_reset.assert_called_once()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertIsNone(extra_data["agentrouter_offset"])
+
+    @patch("limitlens.cli.print_c")
+    @patch("limitlens.cli.display_pi_text")
+    @patch("limitlens.cli.get_pi_data")
+    def test_display_pi_only_when_opencode_disabled(self, mock_get_pi, mock_display_pi, mock_print):
+        mock_get_pi.return_value = {"pi_active": True}
+        test_config = {
+            "opencode": {"enabled": False},
+            "pi": {"enabled": True},
+        }
+        test_args = ["limitlens", "--tool", "all", "--no-record"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=test_config), \
+             redirect_stdout(io.StringIO()):
+            main()
+        mock_display_pi.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
+- Add `--reset-spend` for a non-destructive visual spend reset across observed usage providers
+
+### Changed
+- Menubar "Refresh Now" now forces a full Codex account sync (via `--sync-codex`) so manual refreshes pull fresh Codex data
+- Treat spend resets as timestamp cutoffs for Pi/OpenCode/Copilot CLI and as offset subtraction for Kilo Code when it is explicitly configured to use AgentRouter
+- Reset manual `custom_tools` usage counters in local config without deleting any underlying provider history
+
 ## [1.2.3] - 2026-06-04
 
 ### Fixed

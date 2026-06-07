@@ -9,7 +9,7 @@ import argparse
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .core import (
     print_c,
@@ -31,6 +31,8 @@ from .providers import (
     get_cursor_data, display_cursor_text,
 )
 from .providers.observed import display_at_glance
+from .providers.agentrouter import is_agentrouter_enabled
+
 def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, and Antigravity")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
@@ -42,6 +44,7 @@ def _main():
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
     parser.add_argument("--sync-codex", action="store_true", help="Refresh all Codex accounts before showing status")
+    parser.add_argument("--refresh-codex", action="store_true", help="Refresh all discovered Codex accounts and exit (no status output)")
     parser.add_argument("--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
     parser.add_argument("--no-recommend", action="store_true", help="Skip the recommendation block")
     parser.add_argument("--reco", action="store_true", help="Print only the recommendation block (skip full status)")
@@ -56,6 +59,7 @@ def _main():
     parser.add_argument("--record", action="store_true", help="Quietly record a snapshot for waste tracking, then exit")
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
+    parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
@@ -67,13 +71,32 @@ def _main():
         "opencode": "observed usage",
         "pi": "Pi usage",
         "pioneer": "Pioneer",
-        "agentrouter": "AgentRouter",
+        "agentrouter": "Kilo Code (AgentRouter)",
         "commandcode": "Command Code",
         "custom": "custom tool",
         "cursor": "Cursor",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
+
+    if args.refresh_codex:
+        from .providers.codex import refresh_all_accounts
+        if not args.json:
+            print_c("  ⟲  refreshing all codex accounts...", "\033[90m", args.no_color)
+        results = refresh_all_accounts(config)
+        if args.json:
+            print(json.dumps(results, indent=2))
+            return
+        if not results:
+            print_c("  ⚠ no codex accounts discovered", "\033[33m", args.no_color)
+            return
+        for name, res in results.items():
+            if res.get("ok"):
+                print_c(f"  ✓ {name} refreshed", "\033[32m", args.no_color)
+            else:
+                print_c(f"  ⚠ {name} failed: {res.get('error')}", "\033[31m", args.no_color)
+        return
+
     codex_refresh_attempts = {}
     codex_refresh_cooldown = 300.0
     sync_codex_pending = bool(args.sync_codex)
@@ -103,7 +126,7 @@ def _main():
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-            if args.tool == "agentrouter" or (args.tool == "all" and str(config.get("agentrouter", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
             if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
@@ -201,6 +224,92 @@ def _main():
             print_c(f"  ⚠ failed to delete {waste_tracker.SNAPSHOT_PATH}", "\033[31m", args.no_color)
         return
 
+    if args.reset_spend:
+        from .providers.observed import mark_spend_reset
+        extra_data = {}
+        
+        # If Kilo is configured to use AgentRouter locally, capture the raw
+        # gateway totals as the reset baseline.
+        if is_agentrouter_enabled(config):
+            import limitlens.providers.agentrouter as ar
+            ar_data = ar.get_agentrouter_data(args, config, apply_reset_offset=False)
+            if "error" in ar_data or not ar_data.get("tiers"):
+                print_c("  ⚠ failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", "\033[33m", args.no_color)
+                if "error" in ar_data:
+                    print_c(f"    Details: {ar_data['error']}", "\033[90m", args.no_color)
+                extra_data["agentrouter_offset"] = None
+            else:
+                tier = ar_data["tiers"][0]
+                extra_data["agentrouter_offset"] = {
+                    "used": tier["used"],
+                    "request_count": ar_data.get("request_count", 0),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+
+        # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
+        from .config import limitlens_config_path
+        import os
+        import tempfile
+        config_path = limitlens_config_path()
+        config_updated = False
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    user_config = json.load(f)
+                if not isinstance(user_config, dict):
+                    user_config = {}
+                
+                if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
+                    tools_cfg = user_config["custom_tools"]["tools"]
+                    tools_list = []
+                    if isinstance(tools_cfg, dict):
+                        tools_list = tools_cfg.values()
+                    elif isinstance(tools_cfg, list):
+                        tools_list = tools_cfg
+
+                    for tool_data in tools_list:
+                        if isinstance(tool_data, dict):
+                            used_val = tool_data.get("used", 0)
+                            if isinstance(used_val, (int, float)) and used_val > 0:
+                                tool_data["used"] = 0
+                                config_updated = True
+                            elif isinstance(used_val, str):
+                                try:
+                                    if float(used_val) > 0:
+                                        tool_data["used"] = 0
+                                        config_updated = True
+                                except ValueError:
+                                    pass
+
+                            req_val = tool_data.get("request_count", 0)
+                            if isinstance(req_val, (int, float)) and req_val > 0:
+                                tool_data["request_count"] = 0
+                                config_updated = True
+                            elif isinstance(req_val, str):
+                                try:
+                                    if float(req_val) > 0:
+                                        tool_data["request_count"] = 0
+                                        config_updated = True
+                                except ValueError:
+                                    pass
+                
+                if config_updated:
+                    dir_path = os.path.dirname(config_path)
+                    os.makedirs(dir_path, exist_ok=True)
+                    fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(user_config, f, indent=2)
+                    os.replace(tmp_path, config_path)
+                    print_c("  ✓ custom tools usage reset in config.json", "\033[32m", args.no_color)
+            except (json.JSONDecodeError, OSError):
+                print_c(f"  ⚠ failed to update custom tools in {config_path}", "\033[31m", args.no_color)
+
+        if mark_spend_reset(extra_data=extra_data):
+            print_c("  ✓ spend tracking reset. Future reports will only count spend from now on.", "\033[32m", args.no_color)
+        else:
+            print_c("  ⚠ failed to record spend reset", "\033[31m", args.no_color)
+        return
+
     if args.record:
         result = fetch_and_refresh()
         _record(result)
@@ -253,20 +362,19 @@ def _main():
             print(json.dumps(payload, indent=2))
             return
 
-        print_c("\n  AI Tools Status", "\033[1m", args.no_color)
         if args.watch:
-            print_c(
-                f"  watching every {args.interval:g}s  updated {format_timestamp(datetime.now().astimezone())}",
-                "\033[90m",
-                args.no_color,
-            )
-        print("  " + "─" * 52)
+            ts = format_timestamp(datetime.now().astimezone())
+            print_c(f"\n  AI Tools Status  ·  {ts}", "\033[1m", args.no_color)
+            print_c(f"  live · refreshing every {args.interval:g}s", "\033[90m", args.no_color)
+        else:
+            print_c("\n  AI Tools Status", "\033[1m", args.no_color)
 
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
         if any(k in result for k in ("codex", "amp", "antigravity", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
-            print_c("\n  Quota Left", "\033[1m", args.no_color)
+            print()
+            print_c("  ═══ Quota Left ═══", "\033[1;36m", args.no_color)
 
         if "codex" in result:
             display_codex_text(result["codex"], args)
@@ -274,8 +382,6 @@ def _main():
             display_amp_text(result["amp"], args)
         if "antigravity" in result:
             display_antigravity_text(result["antigravity"], args)
-        if "pi" in result:
-            display_pi_text(result["pi"], args)
         if "pioneer" in result:
             display_pioneer_text(result["pioneer"], args)
         if "agentrouter" in result:
@@ -286,14 +392,17 @@ def _main():
             display_custom_text(result["custom"], args)
         if "cursor" in result:
             display_cursor_text(result["cursor"], args)
+
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
+        elif "pi" in result:
+            display_pi_text(result["pi"], args)
 
-        print("\n  " + "─" * 52)
+        # Removed bottom border
         if args.watch:
-            print_c("  Press Ctrl+C to stop live updates", "\033[90m", args.no_color)
+            print_c("  ⟲  Press Ctrl+C to stop", "\033[90m", args.no_color)
         else:
-            print_c(f"  Tip: use --watch for live {tool_label} updates", "\033[90m", args.no_color)
+            print_c(f"  💡 Tip: use --watch for live {tool_label} updates", "\033[90m", args.no_color)
         print()
 
     if args.watch:

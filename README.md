@@ -81,7 +81,7 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
 | **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
-| **AgentRouter / Kilo Code** | Any OS | Reads AgentRouter quota via env-authenticated API or custom config |
+| **Kilo Code (AgentRouter provider)** | Any OS | Reads AgentRouter quota only when your local LimitLens config explicitly sets the Kilo provider/gateway to `agentrouter` |
 | **Command Code**| Any OS | Web billing queried using `COMMANDCODE_COOKIE` |
 
 ---
@@ -96,9 +96,12 @@ limitlens --tool codex  # Filter output to a specific tool
 limitlens --watch    # Keep alive and refresh every 5 seconds
 limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report (% of quota wasted over 7 days)
+limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
 ```
 
-> **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh.
+> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
+
+> **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
 
 ---
 
@@ -149,11 +152,16 @@ Create a config file at `~/.config/limitlens/config.json`. You can completely di
     "auto_hide_days": 1,
     "amp_usable_pct": 30.0
   },
+  "agentrouter": {
+    "enabled": true,
+    "provider": "agentrouter"
+  },
   "custom_tools": {
     "enabled": true,
     "tools": {
       "kilo": {
         "name": "Kilo Code",
+        "provider": "agentrouter",
         "total": 84917038,
         "used": 2582962
       }

@@ -21,6 +21,10 @@ from limitlens.core import (
 DEFAULT_QUOTA_URL = "https://agentrouter.org/api/user/self"
 
 
+def _enabled(value):
+    return str(value).lower() not in ("false", "0", "no", "off", "") if value is not None else False
+
+
 def _number(value, default=0.0):
     try:
         return float(value)
@@ -55,6 +59,43 @@ def _manual_payload(cfg):
     return None
 
 
+def _custom_kilo_provider(config):
+    custom = (config or {}).get("custom_tools", {}) if isinstance(config, dict) else {}
+    raw_tools = custom.get("tools") or {}
+    if isinstance(raw_tools, dict):
+        items = raw_tools.items()
+    elif isinstance(raw_tools, list):
+        items = [
+            (tool.get("id") or tool.get("name") or "", tool)
+            for tool in raw_tools
+            if isinstance(tool, dict)
+        ]
+    else:
+        items = []
+
+    for tool_id, tool in items:
+        if not isinstance(tool, dict):
+            continue
+        tool_id = str(tool_id).lower()
+        name = str(tool.get("name") or tool_id or "").lower()
+        if tool_id == "kilo" or "kilo" in name:
+            provider = tool.get("provider") or tool.get("gateway")
+            if provider:
+                return str(provider).strip().lower()
+    return None
+
+
+def is_agentrouter_enabled(config):
+    cfg = (config or {}).get("agentrouter") if isinstance(config, dict) else {}
+    if not isinstance(cfg, dict) or not _enabled(cfg.get("enabled", False)):
+        return False
+
+    configured_provider = cfg.get("provider") or cfg.get("gateway") or _custom_kilo_provider(config)
+    if not configured_provider:
+        return False
+    return str(configured_provider).strip().lower() == "agentrouter"
+
+
 def _redact_name(value, args):
     if not value:
         return value
@@ -64,7 +105,7 @@ def _redact_name(value, args):
     return value
 
 
-def parse_agentrouter_quota(payload, args, cfg=None):
+def parse_agentrouter_quota(payload, args, cfg=None, apply_reset_offset=True):
     cfg = cfg or {}
     if not isinstance(payload, dict):
         return {"error": "Unexpected response format"}
@@ -77,11 +118,34 @@ def parse_agentrouter_quota(payload, args, cfg=None):
         return {"error": "Unexpected response format"}
 
     quota = max(0.0, _number(data.get("quota"), 0.0))
-    used = max(0.0, _number(data.get("used_quota"), 0.0))
-    remaining = max(0.0, quota - used) if quota > 0 else 0.0
+    raw_used = max(0.0, _number(data.get("used_quota"), 0.0))
+    used = raw_used
     request_count = max(0, _int(data.get("request_count"), 0))
+
+    # Apply spend reset offset if available.
+    if apply_reset_offset:
+        try:
+            from .observed import SPEND_RESETS_PATH
+            if os.path.exists(SPEND_RESETS_PATH):
+                with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                    resets = json.load(f)
+                if not isinstance(resets, dict):
+                    resets = {}
+                
+                ar_offset = resets.get("agentrouter_offset", {})
+                if ar_offset:
+                    offset_used = _number(ar_offset.get("used"), 0.0)
+                    offset_reqs = _int(ar_offset.get("request_count"), 0)
+                    
+                    if used >= offset_used and request_count >= offset_reqs:
+                        used -= offset_used
+                        request_count -= offset_reqs
+        except Exception:
+            pass
+
+    remaining = max(0.0, quota - raw_used) if quota > 0 else 0.0
     pct_left = max(0.0, (remaining / quota * 100.0)) if quota > 0 else 0.0
-    pct_used = (used / quota * 100.0) if quota > 0 else 0.0
+    pct_used = (raw_used / quota * 100.0) if quota > 0 else 0.0
 
     unit = str(data.get("unit") or cfg.get("unit_label") or "units")
     display_name = _redact_name(data.get("display_name"), args)
@@ -101,7 +165,7 @@ def parse_agentrouter_quota(payload, args, cfg=None):
     if quota > 0 or used > 0:
         avg = used / request_count if request_count > 0 else 0.0
         info["tiers"].append({
-            "label": "AgentRouter quota",
+            "label": "Kilo quota",
             "remaining": remaining,
             "total": quota,
             "used": used,
@@ -160,16 +224,21 @@ def _auth_headers_from_env():
     return headers
 
 
-def get_agentrouter_data(args, config=None):
+def get_agentrouter_data(args, config=None, apply_reset_offset=True):
     if config is None:
         config = load_limitlens_config()
+    if not is_agentrouter_enabled(config):
+        return {
+            "disabled": True,
+            "reason": "Configure Kilo Code with provider/gateway 'agentrouter' in your local LimitLens config to enable this view.",
+        }
     cfg = config.get("agentrouter") or {}
     manual = _manual_payload(cfg)
     headers = _auth_headers_from_env()
 
     if not (headers.get("authorization") or headers.get("cookie")):
         if manual:
-            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg, apply_reset_offset=apply_reset_offset)
         return {"error": "AGENTROUTER_API_TOKEN or AGENTROUTER_COOKIE not set"}
 
     url = os.environ.get("AGENTROUTER_QUOTA_URL") or cfg.get("quota_url") or DEFAULT_QUOTA_URL
@@ -177,7 +246,7 @@ def get_agentrouter_data(args, config=None):
         url = _validated_web_url(url)
     except ValueError as e:
         if manual:
-            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg, apply_reset_offset=apply_reset_offset)
         return {"error": str(e)}
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json, text/plain, */*")
@@ -191,26 +260,35 @@ def get_agentrouter_data(args, config=None):
             body = resp.read().decode("utf-8")
     except urllib.error.URLError as e:
         if manual:
-            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg, apply_reset_offset=apply_reset_offset)
         return {"error": f"API request failed: {e}"}
     except Exception as e:
         if manual:
-            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg, apply_reset_offset=apply_reset_offset)
         return {"error": f"Request failed: {e}"}
 
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
         if manual:
-            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg)
+            return parse_agentrouter_quota({"data": manual, "success": True}, args, cfg, apply_reset_offset=apply_reset_offset)
         return {"error": "Invalid JSON response from AgentRouter API"}
 
-    return parse_agentrouter_quota(parsed, args, cfg)
+    return parse_agentrouter_quota(parsed, args, cfg, apply_reset_offset=apply_reset_offset)
 
 
 def display_agentrouter_text(data, args):
+    if data.get("disabled"):
+        section("Kilo Code (AgentRouter)", args)
+        print_c(
+            f"    disabled         {data.get('reason') or 'Not enabled in local config'}",
+            "\033[90m",
+            getattr(args, 'no_color', False),
+        )
+        return
+
     if "error" in data:
-        section("AgentRouter / Kilo Code", args)
+        section("Kilo Code (AgentRouter)", args)
         print_error(data["error"], args)
         return
 
@@ -223,7 +301,7 @@ def display_agentrouter_text(data, args):
     if not visible_tiers and not (getattr(args, "verbose", False) or getattr(args, "all", False)):
         return
 
-    section("AgentRouter / Kilo Code", args)
+    section("Kilo Code (AgentRouter)", args)
     identity = data.get("display_name") or data.get("username") or data.get("group") or "signed in"
     identity_line("kilo", identity, args)
 
