@@ -238,6 +238,33 @@ def _main():
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
 
+        # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
+        from .config import limitlens_config_path
+        import os
+        config_path = limitlens_config_path()
+        config_updated = False
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    user_config = json.load(f)
+                
+                if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
+                    for tool_key, tool_data in user_config["custom_tools"]["tools"].items():
+                        if isinstance(tool_data, dict):
+                            if "used" in tool_data and tool_data["used"] > 0:
+                                tool_data["used"] = 0
+                                config_updated = True
+                            if "request_count" in tool_data and tool_data["request_count"] > 0:
+                                tool_data["request_count"] = 0
+                                config_updated = True
+                
+                if config_updated:
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        json.dump(user_config, f, indent=2)
+                    print_c("  ✓ custom tools usage reset in config.json", "\033[32m", args.no_color)
+            except (json.JSONDecodeError, OSError):
+                print_c(f"  ⚠ failed to update custom tools in {config_path}", "\033[31m", args.no_color)
+
         if mark_spend_reset(extra_data=extra_data):
             print_c("  ✓ spend tracking reset. Future reports will only count spend from now on.", "\033[32m", args.no_color)
         else:
