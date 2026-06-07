@@ -42,6 +42,7 @@ def _main():
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
     parser.add_argument("--sync-codex", action="store_true", help="Refresh all Codex accounts before showing status")
+    parser.add_argument("--refresh-codex", action="store_true", help="Refresh all discovered Codex accounts and exit (no status output)")
     parser.add_argument("--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
     parser.add_argument("--no-recommend", action="store_true", help="Skip the recommendation block")
     parser.add_argument("--reco", action="store_true", help="Print only the recommendation block (skip full status)")
@@ -74,6 +75,25 @@ def _main():
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
+
+    if args.refresh_codex:
+        from .providers.codex import refresh_all_accounts
+        if not args.json:
+            print_c("  ⟲  refreshing all codex accounts...", "\033[90m", args.no_color)
+        results = refresh_all_accounts(config)
+        if args.json:
+            print(json.dumps(results, indent=2))
+            return
+        if not results:
+            print_c("  ⚠ no codex accounts discovered", "\033[33m", args.no_color)
+            return
+        for name, res in results.items():
+            if res.get("ok"):
+                print_c(f"  ✓ {name} refreshed", "\033[32m", args.no_color)
+            else:
+                print_c(f"  ⚠ {name} failed: {res.get('error')}", "\033[31m", args.no_color)
+        return
+
     codex_refresh_attempts = {}
     codex_refresh_cooldown = 300.0
     sync_codex_pending = bool(args.sync_codex)

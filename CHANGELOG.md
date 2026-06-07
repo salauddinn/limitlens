@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
+
+### Changed
+- Menubar "Refresh Now" now forces a full Codex account sync (via `--sync-codex`) so manual refreshes pull fresh Codex data
+
 ## [1.2.3] - 2026-06-04
 
 ### Fixed

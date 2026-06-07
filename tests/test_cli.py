@@ -335,6 +335,37 @@ class TestCLI(unittest.TestCase):
         mock_refresh_all.assert_called_once()
         self.assertTrue(any("syncing codex accounts" in str(c) for c in mock_print.mock_calls))
 
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.providers.codex.refresh_all_accounts")
+    @patch("limitlens.cli.print_c")
+    def test_refresh_codex_refreshes_and_exits(self, mock_print, mock_refresh_all, mock_codex):
+        mock_refresh_all.return_value = {
+            "default": {"ok": True, "error": None},
+            "work": {"ok": False, "error": "timeout"},
+        }
+        test_args = ["limitlens", "--refresh-codex"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(io.StringIO()):
+            main()
+        mock_refresh_all.assert_called_once()
+        # Should not perform a status fetch when refreshing and exiting.
+        mock_codex.assert_not_called()
+        self.assertTrue(any("default refreshed" in str(c) for c in mock_print.mock_calls))
+        self.assertTrue(any("work failed: timeout" in str(c) for c in mock_print.mock_calls))
+
+    @patch("limitlens.providers.codex.refresh_all_accounts", return_value={})
+    @patch("limitlens.cli.get_codex_data")
+    def test_refresh_codex_json(self, mock_codex, mock_refresh_all):
+        test_args = ["limitlens", "--refresh-codex", "--json"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(io.StringIO()) as buf:
+            main()
+        mock_refresh_all.assert_called_once()
+        mock_codex.assert_not_called()
+        self.assertEqual(json.loads(buf.getvalue()), {})
+
     @patch("limitlens.providers.codex.refresh_accounts")
     @patch("limitlens.cli.print_c")
     @patch("limitlens.cli.get_codex_data")
@@ -481,7 +512,7 @@ class TestCLI(unittest.TestCase):
              redirect_stdout(io.StringIO()):
             main()
         mock_sleep.assert_called_once_with(1.0)
-        self.assertTrue(any("watching every" in str(c) for c in mock_print.mock_calls))
+        self.assertTrue(any("refreshing every" in str(c) for c in mock_print.mock_calls))
         self.assertTrue(any("Press Ctrl+C to stop" in str(c) for c in mock_print.mock_calls))
         
     @patch("limitlens.cli.display_codex_text")

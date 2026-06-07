@@ -80,7 +80,8 @@ class LimitLensApp(rumps.App):
         self.fetch_data()
 
     def _on_refresh(self, _):
-        self.fetch_data()
+        # Manual refresh forces a full Codex account sync for fresh data.
+        self.fetch_data(sync_codex=True)
 
     def _on_quit(self, _):
         rumps.quit_application()
@@ -522,7 +523,7 @@ class LimitLensApp(rumps.App):
 
         return menu_items
 
-    def fetch_data(self):
+    def fetch_data(self, sync_codex=False):
         if self._is_fetching:
             return
         self._is_fetching = True
@@ -530,7 +531,12 @@ class LimitLensApp(rumps.App):
         def worker():
             try:
                 cmd = [sys.executable, "-m", "limitlens", "--json"]
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)  # nosec B603
+                timeout = 15
+                if sync_codex:
+                    # Forcing a Codex sync spawns codex exec per account, so allow more time.
+                    cmd.append("--sync-codex")
+                    timeout = 60
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)  # nosec B603
 
                 if proc.returncode == 0:
                     data = json.loads(proc.stdout)

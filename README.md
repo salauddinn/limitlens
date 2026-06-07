@@ -98,7 +98,7 @@ limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report (% of quota wasted over 7 days)
 ```
 
-> **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh.
+> **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
 
 ---
 
