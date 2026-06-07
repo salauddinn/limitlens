@@ -47,7 +47,11 @@ def mark_spend_reset(tool_name=None, extra_data=None):
                 data[t] = now_iso
                 
         if extra_data:
-            data.update(extra_data)
+            for k, v in extra_data.items():
+                if v is None:
+                    data.pop(k, None)
+                else:
+                    data[k] = v
                 
         os.makedirs(os.path.dirname(SPEND_RESETS_PATH), mode=0o700, exist_ok=True)
         with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:

@@ -566,7 +566,7 @@ class TestCLI(unittest.TestCase):
         mock_d_cc.assert_called_once()
         mock_d_custom.assert_called_once()
         mock_d_oc.assert_called_once()
-        mock_d_pi.assert_called_once()
+        mock_d_pi.assert_not_called()
         mock_d_cursor.assert_called_once()
 
     @patch("limitlens.cli.time.sleep", side_effect=KeyboardInterrupt)
@@ -655,42 +655,62 @@ class TestCLI(unittest.TestCase):
         finally:
             os.remove(config_path)
 
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
     @patch("limitlens.providers.agentrouter.get_agentrouter_data")
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "agentrouter": {"enabled": True},
         "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
     })
-    def test_reset_spend_fails_loudly_on_agentrouter_error(self, mock_config, mock_agentrouter):
+    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_error(self, mock_config, mock_agentrouter, mock_mark_reset):
         mock_agentrouter.return_value = {"error": "Connection timed out"}
         
         test_args = ["limitlens", "--reset-spend"]
         buf = io.StringIO()
         with patch.object(sys, "argv", test_args), \
              redirect_stdout(buf):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            main()
         
-        self.assertEqual(cm.exception.code, 1)
-        self.assertIn("failed to capture AgentRouter/Kilo reset baseline", buf.getvalue())
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
         self.assertIn("Connection timed out", buf.getvalue())
+        mock_mark_reset.assert_called_once()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertIsNone(extra_data["agentrouter_offset"])
 
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
     @patch("limitlens.providers.agentrouter.get_agentrouter_data")
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "agentrouter": {"enabled": True},
         "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
     })
-    def test_reset_spend_fails_loudly_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter):
+    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter, mock_mark_reset):
         mock_agentrouter.return_value = {"tiers": []}
         
         test_args = ["limitlens", "--reset-spend"]
         buf = io.StringIO()
         with patch.object(sys, "argv", test_args), \
              redirect_stdout(buf):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            main()
         
-        self.assertEqual(cm.exception.code, 1)
-        self.assertIn("failed to capture AgentRouter/Kilo reset baseline", buf.getvalue())
+        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
+        mock_mark_reset.assert_called_once()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertIsNone(extra_data["agentrouter_offset"])
+
+    @patch("limitlens.cli.print_c")
+    @patch("limitlens.cli.display_pi_text")
+    @patch("limitlens.cli.get_pi_data")
+    def test_display_pi_only_when_opencode_disabled(self, mock_get_pi, mock_display_pi, mock_print):
+        mock_get_pi.return_value = {"pi_active": True}
+        test_config = {
+            "opencode": {"enabled": False},
+            "pi": {"enabled": True},
+        }
+        test_args = ["limitlens", "--tool", "all", "--no-record"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=test_config), \
+             redirect_stdout(io.StringIO()):
+            main()
+        mock_display_pi.assert_called_once()
 
 
 if __name__ == "__main__":
