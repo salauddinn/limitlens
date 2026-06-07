@@ -34,7 +34,7 @@ from .providers.observed import display_at_glance
 from .providers.agentrouter import is_agentrouter_enabled
 
 def _main():
-    parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, and Antigravity")
+    parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")

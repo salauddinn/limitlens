@@ -250,6 +250,17 @@ def test_get_copilot_cli_usage(copilot_otel):
         assert models[0]["tokens"]["input"] == 50
         assert models[0]["tokens"]["output"] == 100
         
+    # test reset cutoff logic
+    future_reset = datetime.now(timezone.utc) + timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=future_reset):
+        usage_reset = get_copilot_cli_usage(config)
+        assert len(usage_reset["windows"][0]["models"]) == 0
+
+    past_reset = datetime.now(timezone.utc) - timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=past_reset):
+        usage_past = get_copilot_cli_usage(config)
+        assert len(usage_past["windows"][0]["models"]) > 0
+
     assert get_copilot_cli_usage({"copilot_cli": {"enabled": False}}) == {"disabled": True}
     assert "error" in get_copilot_cli_usage({"copilot_cli": {"otel_jsonl_path": "/nonexistent/path"}})
 
@@ -305,6 +316,17 @@ def test_get_pi_usage(pi_sessions):
     if models:
         assert models[0]["model"] == "claude-3"
         assert models[0]["tokens"]["input"] == 100
+
+    # test reset cutoff logic
+    future_reset = datetime.now(timezone.utc) + timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=future_reset):
+        usage_reset = get_pi_usage(config)
+        assert len(usage_reset["windows"][0]["models"]) == 0
+
+    past_reset = datetime.now(timezone.utc) - timedelta(days=1)
+    with patch("limitlens.providers.observed.get_spend_reset_time", return_value=past_reset):
+        usage_past = get_pi_usage(config)
+        assert len(usage_past["windows"][0]["models"]) > 0
 
     assert get_pi_usage({"pi": {"enabled": False}}) == {"disabled": True}
     assert "error" in get_pi_usage({"pi": {"sessions_dir": "/nonexistent/pi/dir"}})
