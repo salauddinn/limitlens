@@ -202,17 +202,17 @@ def get_commandcode_data(args, config=None):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json, text/plain, */*")
     req.add_header("Cache-Control", "no-cache")
+    req.add_header("User-Agent", os.environ.get("COMMANDCODE_USER_AGENT") or DEFAULT_BROWSER_UA)
     if _is_merlin_status_url(url):
         req.add_header("Accept-Language", os.environ.get("COMMANDCODE_ACCEPT_LANGUAGE") or "en-US,en;q=0.7")
         req.add_header("Content-Type", "application/json")
         req.add_header("Origin", os.environ.get("COMMANDCODE_ORIGIN") or DEFAULT_MERLIN_ORIGIN)
         req.add_header("Referer", os.environ.get("COMMANDCODE_REFERER") or f"{DEFAULT_MERLIN_ORIGIN}/")
-        req.add_header("User-Agent", os.environ.get("COMMANDCODE_USER_AGENT") or DEFAULT_BROWSER_UA)
         req.add_header("X-Merlin-Version", os.environ.get("COMMANDCODE_MERLIN_VERSION") or DEFAULT_MERLIN_VERSION)
         req.add_header("X-Request-Timestamp", os.environ.get("COMMANDCODE_REQUEST_TIMESTAMP") or _merlin_request_timestamp())
     else:
-        req.add_header("Origin", "https://commandcode.ai")
-        req.add_header("Referer", "https://commandcode.ai/")
+        req.add_header("Origin", os.environ.get("COMMANDCODE_ORIGIN") or "https://api.commandcode.ai")
+        req.add_header("Referer", os.environ.get("COMMANDCODE_REFERER") or "https://api.commandcode.ai/")
     for key, value in headers.items():
         req.add_header(key, value)
 

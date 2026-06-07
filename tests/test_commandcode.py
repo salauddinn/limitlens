@@ -119,6 +119,7 @@ class TestCommandCodeProvider(unittest.TestCase):
         request = mock_open.call_args[0][0]
         self.assertIn("Cookie", request.headers)
         self.assertEqual(request.headers["Cookie"], "session=redacted")
+        self.assertEqual(request.headers["User-agent"], "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 
     @patch.dict("os.environ", {"COMMANDCODE_AUTHORIZATION": "Bearer redacted", "COMMANDCODE_CREDITS_URL": "https://uam.getmerlin.in/status"}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
@@ -133,6 +134,7 @@ class TestCommandCodeProvider(unittest.TestCase):
         request = mock_open.call_args[0][0]
         self.assertEqual(request.headers["Origin"], "https://api.commandcode.ai")
         self.assertEqual(request.headers["Referer"], "https://api.commandcode.ai/")
+        self.assertEqual(request.headers["User-agent"], "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
         self.assertIn("X-merlin-version", request.headers)
         self.assertIn("X-request-timestamp", request.headers)
 
