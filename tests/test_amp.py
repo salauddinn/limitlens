@@ -43,6 +43,7 @@ class TestAmpProvider(unittest.TestCase):
         self.assertEqual(t0["remaining"], 1.20)
         self.assertEqual(t0["total"], 10.00)
         self.assertEqual(t0["pct_left"], 12.0)
+        self.assertEqual(t0["used"], 8.80)
         self.assertEqual(t0["replenish_rate"], 0.50)
         self.assertTrue(t0["visible"])
 
@@ -54,6 +55,7 @@ class TestAmpProvider(unittest.TestCase):
         t2 = data["tiers"][2]
         self.assertEqual(t2["label"], "Prepaid Credits")
         self.assertEqual(t2["remaining"], 25.00)
+        self.assertIsNone(t2["used"])
 
     @patch("limitlens.providers.amp.load_display_config")
     @patch("limitlens.providers.amp.subprocess.run")

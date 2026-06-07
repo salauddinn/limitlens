@@ -12,7 +12,8 @@ Tracked tools:
   • Codex      — per (account, window)
   • Antigravity — per (profile, model), only when status=running (stale data
                   is unreliable for waste detection because it can't see resets)
-  • Amp        — SKIPPED (replenishing $ pool, no fixed reset cycle)
+  • Amp        — recorded for usage tracking only (replenishing $ pool,
+                  no fixed reset cycle for waste detection)
   • Copilot    — SKIPPED (flat-fee unmetered)
 
 Storage: JSONL at ~/.cache/limitlens/snapshots.jsonl (append-only, durable).
@@ -103,6 +104,30 @@ def _flatten_snapshot(result):
                 "pct_left": float(pct_left),
                 "reset_at": lim.get("reset_time"),
             })
+
+    amp = result.get("amp") or {}
+    if "error" not in amp:
+        for tier in amp.get("tiers", []):
+            remaining = tier.get("remaining")
+            if remaining is None:
+                continue
+            row = {
+                "ts": ts,
+                "tool": "amp",
+                "key": f"amp::{tier.get('label') or 'credits'}",
+                "remaining": float(remaining),
+                "unit": "usd",
+            }
+            total = tier.get("total")
+            if total is not None:
+                row["total"] = float(total)
+                row["used"] = float(tier.get("used") if tier.get("used") is not None else max(0.0, float(total) - float(remaining)))
+            pct_left = tier.get("pct_left")
+            if pct_left is not None:
+                row["pct_left"] = float(pct_left)
+            if tier.get("replenish_rate") is not None:
+                row["replenish_rate"] = float(tier["replenish_rate"])
+            rows.append(row)
 
     ag = result.get("antigravity") or {}
     for prof in ag.get("profiles", []):
@@ -249,6 +274,8 @@ def compute_waste(days=7):
     by_key = {}
     for row in rows:
         # Filter legacy rows for unlimited models (e.g. recorded before exclusion).
+        if row.get("tool") == "amp":
+            continue
         key = row["key"]
         label = key.split("::", 1)[-1] if "::" in key else ""
         if _is_unlimited_model(label):

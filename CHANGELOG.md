@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
 - Add `--reset-spend` for a non-destructive visual spend reset across observed usage providers
+- Track observed Amp dollar spend in snapshots and `--usage` reports
 
 ### Changed
 - Menubar "Refresh Now" now forces a full Codex account sync (via `--sync-codex`) so manual refreshes pull fresh Codex data

@@ -47,6 +47,22 @@ class TestUsageTracker(unittest.TestCase):
         self.assertEqual(history["2023-10-01"]["codex-foo"], 20.0)
         self.assertEqual(history["2023-10-02"]["codex-foo"], 10.0)
 
+    @patch('limitlens.usage_tracker.waste_tracker._load_snapshots')
+    def test_compute_daily_usage_amp_dollars(self, mock_load_snapshots):
+        dt1 = datetime(2023, 10, 1, 10, 0, tzinfo=timezone.utc)
+        dt2 = datetime(2023, 10, 1, 11, 0, tzinfo=timezone.utc)
+        dt3 = datetime(2023, 10, 1, 12, 0, tzinfo=timezone.utc)
+
+        mock_load_snapshots.return_value = [
+            {"tool": "amp", "key": "amp::amp-pro", "remaining": 50.0, "_ts": dt1},
+            {"tool": "amp", "key": "amp::amp-pro", "remaining": 47.5, "_ts": dt2},
+            {"tool": "amp", "key": "amp::amp-pro", "remaining": 49.0, "_ts": dt3},  # refill ignored
+        ]
+
+        history = usage_tracker.compute_daily_usage()
+
+        self.assertEqual(history["2023-10-01"]["amp::amp-pro"], 2.5)
+
     @patch('limitlens.usage_tracker.compute_daily_usage')
     @patch('limitlens.usage_tracker._load_imported_data')
     def test_get_merged_history(self, mock_imported, mock_live):

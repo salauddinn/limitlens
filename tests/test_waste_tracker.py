@@ -97,6 +97,36 @@ def test_flatten_snapshot():
     assert ag_row["pct_left"] == 30.0
 
 
+def test_flatten_snapshot_includes_amp_for_usage_tracking():
+    result = {
+        "amp": {
+            "tiers": [
+                {
+                    "label": "amp-pro",
+                    "remaining": 47.5,
+                    "total": 50.0,
+                    "used": 2.5,
+                    "pct_left": 95.0,
+                    "replenish_rate": 0.5,
+                },
+                {"label": "credits", "remaining": 10.0, "total": None, "pct_left": None},
+            ]
+        }
+    }
+
+    rows = waste_tracker._flatten_snapshot(result)
+
+    assert len(rows) == 2
+    first = rows[0]
+    assert first["tool"] == "amp"
+    assert first["key"] == "amp::amp-pro"
+    assert first["remaining"] == 47.5
+    assert first["total"] == 50.0
+    assert first["used"] == 2.5
+    assert first["pct_left"] == 95.0
+    assert first["replenish_rate"] == 0.5
+
+
 @patch("limitlens.waste_tracker.os.makedirs")
 @patch("builtins.open", new_callable=mock_open)
 def test_record_snapshot(mock_open_fn, mock_makedirs):
@@ -234,6 +264,10 @@ def test_compute_waste(mock_load):
         # Unlimited model should be ignored
         {"key": "antigravity:prof::flash", "ts": "t1", "_ts": 1, "pct_left": 100},
         
+        # Amp is recorded for usage tracking but ignored for waste reports.
+        {"key": "amp::amp-pro", "ts": "t1", "_ts": 1, "pct_left": 10, "tool": "amp"},
+        {"key": "amp::amp-pro", "ts": "t2", "_ts": 2, "pct_left": 100, "tool": "amp"},
+
         # A valid codex reset (jump > 30)
         {"key": "codex-acc::l1", "ts": "t1", "_ts": 1, "pct_left": 10, "tool": "codex"},
         {"key": "codex-acc::l1", "ts": "t2", "_ts": 2, "pct_left": 50, "tool": "codex"},
@@ -251,6 +285,7 @@ def test_compute_waste(mock_load):
     
     assert "antigravity:prof::flash" not in result
     assert "antigravity:prof::m2" not in result
+    assert "amp::amp-pro" not in result
     
     assert "codex-acc::l1" in result
     assert result["codex-acc::l1"]["reset_count"] == 1

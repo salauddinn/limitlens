@@ -36,10 +36,29 @@ def _save_imported_data(data):
     except OSError:
         pass
 
+def _snapshot_float(row, field):
+    try:
+        value = row.get(field)
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_amp_key(key):
+    return str(key).startswith("amp::")
+
+
+def _is_amp_snapshot(row, key):
+    return row.get("tool") == "amp" or _is_amp_key(key)
+
+
 def compute_daily_usage(days=365):
     """
     Compute daily usage by playing back snapshots from snapshots.jsonl.
-    Returns: dict[date_str] -> dict[key] -> usage_float
+    Returns: dict[date_str] -> dict[key] -> usage_float.
+    Percent-based quota tools are stored as % used; Amp is stored as USD used.
     """
     rows = waste_tracker._load_snapshots()
     if not rows:
@@ -58,7 +77,15 @@ def compute_daily_usage(days=365):
             date_str = curr["_ts"].strftime("%Y-%m-%d")
             usage = 0.0
 
-            if waste_tracker._is_reset_event(prev, curr):
+            if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
+                # Amp reports dollar balances. Track verified net spend when
+                # remaining credit drops between snapshots. Replenishment/refill
+                # increases are ignored because they do not prove spend.
+                p_remaining = _snapshot_float(prev, "remaining")
+                c_remaining = _snapshot_float(curr, "remaining")
+                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                    usage = p_remaining - c_remaining
+            elif waste_tracker._is_reset_event(prev, curr):
                 # When a reset happens, we assume usage was the remainder in the old bucket
                 # plus what we see used in the new bucket. BUT waste_tracker assumes the 
                 # remainder in the old bucket was "wasted" (unused). 
@@ -160,6 +187,14 @@ def display_usage_report(args, print_c):
 
         items = sorted(daily.items(), key=lambda x: -x[1])
         for key, usage in items:
+            if _is_amp_key(key):
+                color = "\033[32m" if usage < 2 else "\033[33m" if usage < 10 else "\033[31m"
+                if args.no_color:
+                    print(f"    {key:<40} ${usage:>6.2f} used")
+                else:
+                    print(f"    {key:<40} {color}${usage:>6.2f} used\033[0m")
+                continue
+
             color = "\033[32m" if usage < 20 else "\033[33m" if usage < 80 else "\033[31m"
             if args.no_color:
                 print(f"    {key:<40} {usage:>6.1f}% used")
