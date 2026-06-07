@@ -313,11 +313,9 @@ def display_waste_report(report, days, args, print_c):
     items = sorted(report.items(), key=lambda kv: -kv[1]["avg_wasted_pct"])
 
     if args.no_color:
-        print(f"\n  {'IDENTITY / WINDOW':<46} {'RESETS':>8} {'AVG':>8} {'MAX':>8}  VERDICT")
+        print(f"\n  {'identity / window':<48} {'resets':>7} {'avg':>7} {'max':>7}  verdict")
     else:
-        print(f"\n  \033[1m{'IDENTITY / WINDOW':<46} {'RESETS':>8} {'AVG':>8} {'MAX':>8}  VERDICT\033[0m")
-    
-    print_c("  " + "─" * 81, "\033[90m", args.no_color)
+        print(f"\n  \033[1m{'identity / window':<48} {'resets':>7} {'avg':>7} {'max':>7}  verdict\033[0m")
 
     for key, data in items:
         avg = data["avg_wasted_pct"]
@@ -325,7 +323,7 @@ def display_waste_report(report, days, args, print_c):
         n   = data["reset_count"]
         verdict = _verdict(avg)
         color = "\033[31m" if avg >= 60 else "\033[33m" if avg >= 30 else "\033[32m"
-        line = f"  {key:<46} {n:>8d} {avg:>7.1f}% {mx:>7.1f}%  "
+        line = f"  {key:<48} {n:>7d} {avg:>6.1f}% {mx:>6.1f}%  "
         if args.no_color:
             print(line + verdict)
         else:

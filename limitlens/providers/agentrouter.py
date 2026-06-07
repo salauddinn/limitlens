@@ -224,7 +224,10 @@ def get_agentrouter_data(args, config=None, apply_reset_offset=True):
     if config is None:
         config = load_limitlens_config()
     if not is_agentrouter_enabled(config):
-        return {"disabled": True}
+        return {
+            "disabled": True,
+            "reason": "Configure Kilo Code with provider/gateway 'agentrouter' in your local LimitLens config to enable this view.",
+        }
     cfg = config.get("agentrouter") or {}
     manual = _manual_payload(cfg)
     headers = _auth_headers_from_env()
@@ -271,6 +274,15 @@ def get_agentrouter_data(args, config=None, apply_reset_offset=True):
 
 
 def display_agentrouter_text(data, args):
+    if data.get("disabled"):
+        section("Kilo Code (AgentRouter)", args)
+        print_c(
+            f"    disabled         {data.get('reason') or 'Not enabled in local config'}",
+            "\033[90m",
+            getattr(args, 'no_color', False),
+        )
+        return
+
     if "error" in data:
         section("Kilo Code (AgentRouter)", args)
         print_error(data["error"], args)

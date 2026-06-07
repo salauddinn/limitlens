@@ -141,7 +141,17 @@ class TestAgentRouterProvider(unittest.TestCase):
     def test_provider_mismatch_disables_agentrouter(self, mock_config):
         data = get_agentrouter_data(self.args)
 
-        self.assertEqual(data, {"disabled": True})
+        self.assertTrue(data["disabled"])
+        self.assertIn("provider/gateway 'agentrouter'", data["reason"])
+
+    def test_display_agentrouter_disabled_message(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            display_agentrouter_text({"disabled": True, "reason": "set provider"}, self.args)
+
+        output = buf.getvalue()
+        self.assertIn("Kilo Code (AgentRouter)", output)
+        self.assertIn("set provider", output)
 
     @patch("limitlens.providers.agentrouter._open_no_redirect")
     @patch("limitlens.providers.agentrouter.load_limitlens_config", return_value={"agentrouter": {"enabled": True, "provider": "agentrouter"}})

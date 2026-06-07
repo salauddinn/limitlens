@@ -423,99 +423,79 @@
           <div class="terminal-content active" id="status-tab">
             <span class="cli-prompt">user@machine:~$</span> <span class="cli-cmd">limitlens</span><br>
             <br>
-            <pre>
-  AI Tools Status
-
-  ✨ At a glance
-  ────────────────────────────────────────────────
-  hard task   Kilo Code                   97% left 
-  quick edit  ag:agy-cli → Gemini Pro     80% left   ·  2h 31m left to reset
-  cli         amp (demo_user)             88% left   ·  replenishing
-
-  ═══ Quota Left ═══
-
-  Codex
-
-  codex-p1  ~/.codex-***
-    5h window ░░░░░░░░░░░░░░░░░░░░   99.0% left  3 hours left to reset
-    weekly    ███░░░░░░░░░░░░░░░░░   84.0% left  6 days left to reset
-
-  Amp
-
-  amp  demo_user
-    amp-free       ██░░░░░░░░░░░░░░░░░░   87.6% left  $4.38/$5.00
-
-  Antigravity
-
-  agy-cli  running
-    Gemini 3.1 Pro       ████░░░░░░░░░░░░░░░░     80% left  2h 38m left to reset
-    Claude Opus 4.6      ████████████████░░░░     20% left  6 days left to reset
-
-  Pioneer
-
-  pioneer  signed in
-    hobby            ████░░░░░░░░░░░░░░░░   79.8% left  $23.94/$30.00  $6.06 used
-  💡 Tip: use --watch for live AI tool updates
-          </pre>
+            <span class="cli-title">AI Tools Status</span><br>
+            <hr class="cli-header">
+            <br>
+            <span class="cli-label">At a glance:</span><br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-pill action">Action</span>&nbsp;&nbsp;<span class="cli-cmd">🧠 agy-cli / Gemini Pro</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">100% left</span> · 4h reset<br>
+            &nbsp;&nbsp;<span class="cli-pill expiring">Expiring</span>&nbsp;&nbsp;<span class="cli-cmd">🧠 agy-cli / Opus 4.6</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-pill expiring">80% left</span> · use soon<br>
+            &nbsp;&nbsp;<span class="cli-pill danger">Danger</span>&nbsp;&nbsp;<span class="cli-cmd">🔥 Amp pool</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-pill danger">18% left</span> · $0.90/$5<br>
+            <br>
+            <span class="cli-label">Quota Left:</span><br>
+            <br>
+            &nbsp;&nbsp;<strong>Provider</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Quota</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Left</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Headroom</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Reset / total</strong><br>
+            &nbsp;&nbsp;🪐 Antigravity&nbsp;&nbsp;&nbsp;&nbsp;ide · Gemini 3.1 Pro&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">100%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill green" style="width: 100%"></span></span>&nbsp;&nbsp;&nbsp;4h reset<br>
+            &nbsp;&nbsp;🧠 Antigravity&nbsp;&nbsp;&nbsp;&nbsp;agy-cli · Claude Opus 4.6&nbsp;<span class="cli-prompt">80%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill green" style="width: 80%"></span></span>&nbsp;&nbsp;&nbsp;&nbsp;4h reset<br>
+            &nbsp;&nbsp;⚡ Codex&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;codex-p2 · weekly&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">97%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill green" style="width: 97%"></span></span>&nbsp;&nbsp;&nbsp;&nbsp;6d reset<br>
+            &nbsp;&nbsp;⚡ Codex&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;codex-p3 · weekly&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-pill danger">0%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill red" style="width: 0%"></span></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1d reset<br>
+            &nbsp;&nbsp;🔥 Amp&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;demo-user · amp-free&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-pill danger">18%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill yellow" style="width: 18%"></span></span>&nbsp;&nbsp;&nbsp;&nbsp;$0.90 / $5.00<br>
+            &nbsp;&nbsp;🔸 Kilo Code&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AgentRouter units&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">91%</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-bar"><span class="cli-bar-fill green" style="width: 91%"></span></span>&nbsp;&nbsp;&nbsp;&nbsp;77.4M / 84.9M<br>
+            <br>
+            <span class="cli-label">Latest UI surfaces:</span><br>
+            <br>
+            &nbsp;&nbsp;macOS menubar title: &nbsp;&nbsp;&nbsp;&nbsp;🪐 100% · 🧠 80% +3<br>
+            &nbsp;&nbsp;iTerm2 status bar widget: 🪐 [██████████] 100 &nbsp;🧠 [████████░░] 80 &nbsp;🔥 [█░░░░░░░░░] 18<br>
           </div>
 
           <!-- Tab 2: Recommendations -->
           <div class="terminal-content" id="reco-tab">
             <span class="cli-prompt">user@machine:~$</span> <span class="cli-cmd">limitlens --reco</span><br>
             <br>
-            <pre>
-  🎯 ═══ Smart Recommendations ═══
-
-  ♻️  Reduce waste most effectively:
-      ag:agy-cli → Gemini Pro           80.0% left
-      cmd:   agy
-      why:   model: Gemini 3.1 Pro
-      reset: 2h 38m left to reset
-
-  🔥 WASTE WATCH (use these soon or lose them)
-      • [URGENT] ag:agy-cli → Gemini Pro           80.0% left  (2h 38m left to reset)
-
-  ➜ 🧠 Right now (hard task / multi-file refactor):
-      Kilo Code                         97.0% left
-      cmd:   use Kilo Code
-      why:   manual AgentRouter quota
-
-  ➜ ⚡️ Right now (quick edit / grunt work):
-      ag:agy-cli → Gemini Pro           80.0% left
-      cmd:   agy
-      why:   model: Gemini 3.1 Pro
-      reset: 2h 38m left to reset
-
-  ➜ 💻 Right now (CLI / scripting / pair-prog):
-      amp (demo_user)                   87.6% left
-      cmd:   amp
-      why:   $4.38 pool, replenishing
-      reset: replenishing
-          </pre>
+            <span class="cli-title">Recommendations</span><br>
+            <hr class="cli-header">
+            <br>
+            &nbsp;&nbsp;<span class="cli-prompt">➜ Action now</span> <span class="cli-label">hard task / multi-file refactor</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;🪐 <span class="cli-cmd">antigravity:agy-cli ➜ Gemini 3.1 Pro</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">100% left</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>cmd:</strong> agy<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>why:</strong> best premium headroom; resets soon, so use it before long-run Codex.<br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-pill danger">⚠️ WASTE WATCH</span> <span class="cli-label">use these soon or lose them</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;[URGENT] 🧠 agy-cli ➜ Claude Opus 4.6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">80.0% left</span> · reset: 4h<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;[URGENT] 🪐 ide ➜ Gemini 3.1 Pro&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">100.0% left</span> · reset: 4h<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;[SLOW] &nbsp;&nbsp;🔸 Kilo Code / AgentRouter&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">91.2% left</span> · reset: manual<br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-prompt">➜ Quick edit / grunt work</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;🔥 <span class="cli-cmd">amp pool</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-pill danger">18.0% left</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>cmd:</strong> amp<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>why:</strong> $0.90 pool remaining, replenishing.<br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-prompt">➜ CLI / scripting / pair-programming</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;⚡ <span class="cli-cmd">codex-p2 weekly</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cli-prompt">97.0% left</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>cmd:</strong> codex<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<strong>why:</strong> 6 days left until reset window.<br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-pill expiring">💡 Skip today</span> <span class="cli-label">plenty of runway, save for later</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• ⚡ codex-p2 weekly — 97.0% left (6 days left)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• 🚀 Copilot ignored in planning (flat-fee, just use in editor)<br>
           </div>
 
           <!-- Tab 3: Waste Tracking -->
           <div class="terminal-content" id="waste-tab">
             <span class="cli-prompt">user@machine:~$</span> <span class="cli-cmd">limitlens --waste</span><br>
             <br>
-            <pre>
-  ═══ Waste Report (last 7 days) ═══
-
-  IDENTITY / WINDOW                                RESETS      AVG      MAX  VERDICT
-  ─────────────────────────────────────────────────────────────────────────────────
-  antigravity:agy-cli::Claude Opus 4.6                  1   100.0%   100.0%  <span style="color: var(--accent-red)">heavy waste</span>
-  codex-default::5h window                              1    99.0%    99.0%  <span style="color: var(--accent-red)">heavy waste</span>
-  antigravity:ide::Gemini 3.1 Pro                       2    90.0%   100.0%  <span style="color: var(--accent-red)">heavy waste</span>
-  codex-p1::5h window                                   2    50.0%   100.0%  <span style="color: var(--accent-gold)">wasting some</span>
-  antigravity:ide::Claude Opus 4.6                      1    40.0%    40.0%  <span style="color: var(--accent-gold)">wasting some</span>
-  antigravity:agy-cli::Gemini 3.1 Pro                   1    40.0%    40.0%  <span style="color: var(--accent-gold)">wasting some</span>
-
-  💡 'avg' = avg % unused at the moment each window reset. Lower = better.
-
-  Tip: snapshots are recorded on every `limitlens` run. To capture
-       resets you'd otherwise miss, add a cron/launchd job.
-          </pre>
+            <span class="cli-title">Subscription Waste Summary (Last 7 Days)</span><br>
+            <hr class="cli-header">
+            <br>
+            &nbsp;&nbsp;You have lost potential quota worth approximately <span class="cli-pill expiring"><strong>$18.40</strong></span> due to expired fast limits.<br>
+            <br>
+            &nbsp;&nbsp;<strong>Details:</strong><br>
+            &nbsp;&nbsp;• <strong>Cursor Pro:</strong> 120 fast requests expired unused on Jun 01. (Est. Waste: $4.80)<br>
+            &nbsp;&nbsp;• <strong>Codex-p3:</strong> 85% of weekly limit expired unused on Jun 03. (Est. Waste: $13.60)<br>
+            <br>
+            &nbsp;&nbsp;<span class="cli-label">Tip: Consider switching your heavy refactoring tasks to Cursor Pro earlier in the reset window!</span><br>
           </div>
+        </div>
       </div>
     </div>
   </section>
