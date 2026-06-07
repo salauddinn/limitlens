@@ -128,14 +128,22 @@ def parse_agentrouter_quota(payload, args, cfg=None, apply_reset_offset=True):
             if os.path.exists(SPEND_RESETS_PATH):
                 with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
                     resets = json.load(f)
-                    ar_offset = resets.get("agentrouter_offset", {})
-                    if ar_offset:
-                        offset_used = _number(ar_offset.get("used"), 0.0)
-                        offset_reqs = _int(ar_offset.get("request_count"), 0)
-                        if used >= offset_used:
-                            used -= offset_used
-                        if request_count >= offset_reqs:
-                            request_count -= offset_reqs
+                
+                ar_offset = resets.get("agentrouter_offset", {})
+                if ar_offset:
+                    offset_used = _number(ar_offset.get("used"), 0.0)
+                    offset_reqs = _int(ar_offset.get("request_count"), 0)
+                    
+                    if used < offset_used or request_count < offset_reqs:
+                        del resets["agentrouter_offset"]
+                        try:
+                            with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:
+                                json.dump(resets, f, indent=2)
+                        except Exception:
+                            pass
+                    else:
+                        used -= offset_used
+                        request_count -= offset_reqs
         except Exception:
             pass
 

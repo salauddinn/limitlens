@@ -191,6 +191,33 @@ class TestAgentRouterProvider(unittest.TestCase):
         data = get_agentrouter_data(self.args)
 
         self.assertIn("Connection refused", data["error"])
+    @patch("limitlens.providers.agentrouter.load_display_config", return_value={"auto_hide_enabled": False})
+    def test_parse_agentrouter_clears_offset_on_rollover(self, mock_display):
+        payload = {
+            "data": {
+                "quota": 200,
+                "used_quota": 10,
+                "request_count": 1,
+            },
+            "success": True,
+        }
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump({"agentrouter_offset": {"used": 25, "request_count": 2}}, f)
+            reset_path = f.name
+
+        try:
+            with patch("limitlens.providers.observed.SPEND_RESETS_PATH", reset_path):
+                data = parse_agentrouter_quota(payload, self.args)
+                
+                self.assertEqual(data["tiers"][0]["used"], 10.0)
+                self.assertEqual(data["request_count"], 1)
+                
+                with open(reset_path, "r", encoding="utf-8") as f:
+                    updated_resets = json.load(f)
+                self.assertNotIn("agentrouter_offset", updated_resets)
+        finally:
+            os.remove(reset_path)
 
 
 if __name__ == "__main__":

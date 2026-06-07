@@ -625,6 +625,37 @@ class TestCLI(unittest.TestCase):
         mock_exit.assert_called_once_with(1)
 
 
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "custom_tools": {"enabled": True},
+    })
+    def test_reset_spend_with_list_form_custom_tools(self, mock_config, mock_mark_reset):
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump({
+                "custom_tools": {
+                    "tools": [
+                        {"name": "t1", "used": 5, "request_count": 2},
+                        {"name": "t2", "used": 10, "request_count": 4}
+                    ]
+                }
+            }, f)
+            config_path = f.name
+            
+        try:
+            test_args = ["limitlens", "--reset-spend"]
+            with patch.object(sys, "argv", test_args), \
+                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 redirect_stdout(io.StringIO()):
+                main()
+                
+            with open(config_path, encoding="utf-8") as f:
+                updated = json.load(f)
+            self.assertEqual(updated["custom_tools"]["tools"][0]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"][1]["used"], 0)
+        finally:
+            os.remove(config_path)
+
+
 
 if __name__ == "__main__":
     unittest.main()

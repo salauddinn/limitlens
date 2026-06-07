@@ -252,7 +252,14 @@ def _main():
                     user_config = json.load(f)
                 
                 if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
-                    for tool_key, tool_data in user_config["custom_tools"]["tools"].items():
+                    tools_cfg = user_config["custom_tools"]["tools"]
+                    tools_list = []
+                    if isinstance(tools_cfg, dict):
+                        tools_list = tools_cfg.values()
+                    elif isinstance(tools_cfg, list):
+                        tools_list = tools_cfg
+
+                    for tool_data in tools_list:
                         if isinstance(tool_data, dict):
                             if "used" in tool_data and tool_data["used"] > 0:
                                 tool_data["used"] = 0
