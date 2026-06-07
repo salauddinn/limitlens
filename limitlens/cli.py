@@ -224,7 +224,21 @@ def _main():
 
     if args.reset_spend:
         from .providers.observed import mark_spend_reset
-        if mark_spend_reset():
+        extra_data = {}
+        
+        # Try to fetch current AgentRouter (Kilo Code) quota to use as an offset
+        if str(config.get("agentrouter", {}).get("enabled", False)).lower() not in ("false", "0", "no"):
+            import limitlens.providers.agentrouter as ar
+            ar_data = ar.get_agentrouter_data(args, config)
+            if "error" not in ar_data and ar_data.get("tiers"):
+                tier = ar_data["tiers"][0]
+                extra_data["agentrouter_offset"] = {
+                    "used": tier["used"],
+                    "request_count": ar_data.get("request_count", 0),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+
+        if mark_spend_reset(extra_data=extra_data):
             print_c("  ✓ spend tracking reset. Future reports will only count spend from now on.", "\033[32m", args.no_color)
         else:
             print_c("  ⚠ failed to record spend reset", "\033[31m", args.no_color)

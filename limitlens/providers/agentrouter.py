@@ -78,8 +78,26 @@ def parse_agentrouter_quota(payload, args, cfg=None):
 
     quota = max(0.0, _number(data.get("quota"), 0.0))
     used = max(0.0, _number(data.get("used_quota"), 0.0))
-    remaining = max(0.0, quota - used) if quota > 0 else 0.0
     request_count = max(0, _int(data.get("request_count"), 0))
+    
+    # Apply spend reset offset if available
+    try:
+        from .observed import SPEND_RESETS_PATH
+        if os.path.exists(SPEND_RESETS_PATH):
+            with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                resets = json.load(f)
+                ar_offset = resets.get("agentrouter_offset", {})
+                if ar_offset:
+                    offset_used = _number(ar_offset.get("used"), 0.0)
+                    offset_reqs = _int(ar_offset.get("request_count"), 0)
+                    if used >= offset_used:
+                        used -= offset_used
+                    if request_count >= offset_reqs:
+                        request_count -= offset_reqs
+    except Exception:
+        pass
+
+    remaining = max(0.0, quota - used) if quota > 0 else 0.0
     pct_left = max(0.0, (remaining / quota * 100.0)) if quota > 0 else 0.0
     pct_used = (used / quota * 100.0) if quota > 0 else 0.0
 

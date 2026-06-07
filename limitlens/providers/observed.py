@@ -29,7 +29,7 @@ def get_spend_reset_time(tool_name):
         pass
     return None
 
-def mark_spend_reset(tool_name=None):
+def mark_spend_reset(tool_name=None, extra_data=None):
     try:
         data = {}
         if os.path.exists(SPEND_RESETS_PATH):
@@ -45,6 +45,9 @@ def mark_spend_reset(tool_name=None):
         else:
             for t in ["opencode", "pi", "copilot_cli"]:
                 data[t] = now_iso
+                
+        if extra_data:
+            data.update(extra_data)
                 
         os.makedirs(os.path.dirname(SPEND_RESETS_PATH), mode=0o700, exist_ok=True)
         with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:
