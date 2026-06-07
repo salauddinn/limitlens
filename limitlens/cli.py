@@ -57,6 +57,7 @@ def _main():
     parser.add_argument("--record", action="store_true", help="Quietly record a snapshot for waste tracking, then exit")
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
+    parser.add_argument("--reset-spend", action="store_true", help="Reset all observed spend tracking (Pi, OpenCode, Copilot CLI)")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
@@ -219,6 +220,14 @@ def _main():
             print_c(f"  ✓ waste history cleared ({waste_tracker.SNAPSHOT_PATH})", "\033[32m", args.no_color)
         else:
             print_c(f"  ⚠ failed to delete {waste_tracker.SNAPSHOT_PATH}", "\033[31m", args.no_color)
+        return
+
+    if args.reset_spend:
+        from .providers.observed import mark_spend_reset
+        if mark_spend_reset():
+            print_c("  ✓ spend tracking reset. Future reports will only count spend from now on.", "\033[32m", args.no_color)
+        else:
+            print_c("  ⚠ failed to record spend reset", "\033[31m", args.no_color)
         return
 
     if args.record:

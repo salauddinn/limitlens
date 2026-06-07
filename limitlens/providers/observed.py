@@ -16,9 +16,49 @@ from limitlens.core import (
 
 # ── Observed usage helpers ──────────────────────────────────────────────────
 
-def usage_window_start(days):
+SPEND_RESETS_PATH = os.environ.get("LIMITLENS_SPEND_RESETS_PATH") or os.path.expanduser("~/.cache/limitlens/spend_resets.json")
+
+def get_spend_reset_time(tool_name):
+    try:
+        with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            ts = data.get(tool_name)
+            if ts:
+                return datetime.fromisoformat(ts)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+def mark_spend_reset(tool_name=None):
+    try:
+        data = {}
+        if os.path.exists(SPEND_RESETS_PATH):
+            try:
+                with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+        
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if tool_name:
+            data[tool_name] = now_iso
+        else:
+            for t in ["opencode", "pi", "copilot_cli"]:
+                data[t] = now_iso
+                
+        os.makedirs(os.path.dirname(SPEND_RESETS_PATH), mode=0o700, exist_ok=True)
+        with open(SPEND_RESETS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return True
+    except OSError:
+        return False
+
+def usage_window_start(days, reset_time=None):
     now = datetime.now(timezone.utc)
-    return now - timedelta(days=days)
+    since_days = now - timedelta(days=days)
+    if reset_time and reset_time > since_days:
+        return reset_time
+    return since_days
 
 def millis_from_dt(dt):
     return int(dt.timestamp() * 1000)
@@ -229,8 +269,9 @@ def get_opencode_usage(config):
     ignored_models = cfg.get("ignored_models") or []
     model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("opencode")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
     min_since_ms = min(millis_from_dt(w["since"]) for w in windows.values())
@@ -364,8 +405,9 @@ def get_copilot_cli_usage(config):
         }
 
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("copilot_cli")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
 
@@ -459,8 +501,9 @@ def get_pi_usage(config):
     ignored_models = cfg.get("ignored_models") or []
     model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
     days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("pi")
     windows = {
-        str(days): {"days": days, "since": usage_window_start(days), "by_key": {}}
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
         for days in days_list
     }
     min_since_ts = min(win["since"].timestamp() for win in windows.values())
