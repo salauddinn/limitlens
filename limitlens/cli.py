@@ -9,7 +9,7 @@ import argparse
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .core import (
     print_c,
@@ -31,6 +31,8 @@ from .providers import (
     get_cursor_data, display_cursor_text,
 )
 from .providers.observed import display_at_glance
+from .providers.agentrouter import is_agentrouter_enabled
+
 def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, and Antigravity")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
@@ -57,7 +59,7 @@ def _main():
     parser.add_argument("--record", action="store_true", help="Quietly record a snapshot for waste tracking, then exit")
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
-    parser.add_argument("--reset-spend", action="store_true", help="Reset all observed spend tracking (Pi, OpenCode, Copilot CLI)")
+    parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
@@ -69,7 +71,7 @@ def _main():
         "opencode": "observed usage",
         "pi": "Pi usage",
         "pioneer": "Pioneer",
-        "agentrouter": "AgentRouter",
+        "agentrouter": "Kilo Code (AgentRouter)",
         "commandcode": "Command Code",
         "custom": "custom tool",
         "cursor": "Cursor",
@@ -124,7 +126,7 @@ def _main():
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-            if args.tool == "agentrouter" or (args.tool == "all" and str(config.get("agentrouter", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
             if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
@@ -226,10 +228,11 @@ def _main():
         from .providers.observed import mark_spend_reset
         extra_data = {}
         
-        # Try to fetch current AgentRouter (Kilo Code) quota to use as an offset
-        if str(config.get("agentrouter", {}).get("enabled", False)).lower() not in ("false", "0", "no"):
+        # If Kilo is configured to use AgentRouter locally, capture the raw
+        # gateway totals as the reset baseline.
+        if is_agentrouter_enabled(config):
             import limitlens.providers.agentrouter as ar
-            ar_data = ar.get_agentrouter_data(args, config)
+            ar_data = ar.get_agentrouter_data(args, config, apply_reset_offset=False)
             if "error" not in ar_data and ar_data.get("tiers"):
                 tier = ar_data["tiers"][0]
                 extra_data["agentrouter_offset"] = {

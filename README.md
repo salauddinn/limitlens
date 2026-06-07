@@ -81,7 +81,7 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
 | **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
-| **AgentRouter / Kilo Code** | Any OS | Reads AgentRouter quota via env-authenticated API or custom config |
+| **Kilo Code (AgentRouter provider)** | Any OS | Reads AgentRouter quota when your local LimitLens config explicitly enables the AgentRouter-backed Kilo setup |
 | **Command Code**| Any OS | Web billing queried using `COMMANDCODE_COOKIE` |
 
 ---
@@ -154,6 +154,7 @@ Create a config file at `~/.config/limitlens/config.json`. You can completely di
     "tools": {
       "kilo": {
         "name": "Kilo Code",
+        "provider": "agentrouter",
         "total": 84917038,
         "used": 2582962
       }

@@ -3,7 +3,9 @@
 
 import io
 import json
+import os
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -283,6 +285,68 @@ class TestCLI(unittest.TestCase):
         # Verify success message was printed
         self.assertTrue(any("waste history cleared" in str(call) for call in mock_print.mock_calls))
 
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+    })
+    def test_reset_spend_uses_raw_agentrouter_totals_and_rewrites_custom_config(
+        self, mock_config, mock_agentrouter, mock_mark_reset
+    ):
+        mock_agentrouter.return_value = {"tiers": [{"used": 120}], "request_count": 12}
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump({
+                "custom_tools": {
+                    "tools": {
+                        "kilo": {"used": 8, "request_count": 3},
+                        "other": {"used": 0, "request_count": 0},
+                    }
+                }
+            }, f)
+            config_path = f.name
+
+        try:
+            test_args = ["limitlens", "--reset-spend"]
+            with patch.object(sys, "argv", test_args), \
+                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 redirect_stdout(io.StringIO()):
+                main()
+
+            mock_agentrouter.assert_called_once()
+            self.assertFalse(mock_agentrouter.call_args.kwargs["apply_reset_offset"])
+
+            extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+            self.assertEqual(extra_data["agentrouter_offset"]["used"], 120)
+            self.assertEqual(extra_data["agentrouter_offset"]["request_count"], 12)
+            self.assertIn("timestamp", extra_data["agentrouter_offset"])
+
+            with open(config_path, encoding="utf-8") as f:
+                updated = json.load(f)
+            self.assertEqual(updated["custom_tools"]["tools"]["kilo"]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["kilo"]["request_count"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["other"]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["other"]["request_count"], 0)
+        finally:
+            os.remove(config_path)
+
+    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
+    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "agentrouter": {"enabled": True},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "vertex"}}},
+    })
+    def test_reset_spend_skips_agentrouter_when_kilo_provider_is_not_agentrouter(
+        self, mock_config, mock_agentrouter, mock_mark_reset
+    ):
+        test_args = ["limitlens", "--reset-spend"]
+        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+            main()
+
+        mock_agentrouter.assert_not_called()
+        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
+        self.assertEqual(extra_data, {})
 
     @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("argparse.ArgumentParser.error")
@@ -312,8 +376,12 @@ class TestCLI(unittest.TestCase):
         for tool in ["agentrouter", "commandcode"]:
             test_args = ["limitlens", "--json", "--tool", tool, "--no-record"]
             buf = io.StringIO()
+            config = dict(TEST_CONFIG)
+            if tool == "agentrouter":
+                config = dict(TEST_CONFIG)
+                config["agentrouter"] = {"enabled": True, "provider": "agentrouter"}
             with patch.object(sys, "argv", test_args), \
-                 patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+                 patch("limitlens.cli.load_limitlens_config", return_value=config), \
                  redirect_stdout(buf):
                 main()
             payload = json.loads(buf.getvalue())
@@ -480,7 +548,7 @@ class TestCLI(unittest.TestCase):
         test_config = {
             "codex": {"enabled": True}, "amp": {"enabled": True}, "antigravity": {"enabled": True},
             "opencode": {"enabled": True}, "pi": {"enabled": True}, "pioneer": {"enabled": True},
-            "agentrouter": {"enabled": True}, "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
+            "agentrouter": {"enabled": True, "provider": "agentrouter"}, "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
             "cursor": {"enabled": True}
         }
         test_args = ["limitlens", "--tool", "all", "--no-record"]
