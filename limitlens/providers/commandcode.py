@@ -108,7 +108,10 @@ def parse_commandcode_credits(payload, args=None, cfg=None):
         "threshold": max(0.0, _number(data.get("creditThreshold"), 0.0)),
         "below_threshold": bool(data.get("belowThreshold", False)),
     }
-    available = credits["monthly"] + credits["purchased"] + credits["premium_monthly"] + credits["opensource_monthly"]
+    # Command Code's monthly bucket is the effective monthly pool; premium /
+    # opensource monthly values are informational sub-buckets and should not be
+    # added again or they will double-count the total available credits.
+    available = credits["monthly"] + credits["purchased"]
     total = max(available, _number(cfg.get("total"), 0.0))
     pct_left = (available / total * 100.0) if total > 0 else 0.0
 

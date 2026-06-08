@@ -107,7 +107,7 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("monthly", output)
         self.assertIn("premium monthly", output)
         self.assertIn("opensource monthly", output)
-        self.assertIn("11.8507/11.8507 credits", output)
+        self.assertIn("5.6007/5.6007 credits", output)
 
     @patch.dict("os.environ", {"COMMANDCODE_COOKIE": "session=redacted"}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
@@ -137,6 +137,18 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertEqual(request.headers["User-agent"], "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
         self.assertIn("X-merlin-version", request.headers)
         self.assertIn("X-request-timestamp", request.headers)
+
+    def test_monthly_sub_buckets_do_not_double_count_total(self):
+        data = parse_commandcode_credits({
+            "credits": {
+                "monthlyCredits": 10,
+                "purchasedCredits": 4.2074,
+                "premiumMonthlyCredits": 0,
+                "opensourceMonthlyCredits": 10,
+            }
+        }, self.args)
+
+        self.assertAlmostEqual(data["available"], 14.2074)
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
