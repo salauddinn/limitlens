@@ -211,10 +211,23 @@ def _main():
         except Exception as e:
             if not args.json:
                 print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
+        import copy
+        obs_config = copy.deepcopy(config)
+        if getattr(args, "days", None):
+            for k in ["opencode", "pi", "copilot_cli"]:
+                if k not in obs_config:
+                    obs_config[k] = {}
+                obs_config[k]["days"] = [args.days]
+
+        data = get_opencode_data(args, obs_config)
+
         if args.json:
-            print(json.dumps(usage_tracker._load_data(), indent=2))
+            payload = usage_tracker._load_data(args.days)
+            payload["waste"] = waste_tracker.compute_waste(args.days)
+            payload["observed"] = data
+            print(json.dumps(payload, indent=2))
         else:
-            usage_tracker.display_usage_report(args, print_c)
+            usage_tracker.display_consolidated_report(args, print_c, opencode_data=data)
         return
     if args.reset_waste:
         ok = waste_tracker.reset_snapshots()
@@ -227,7 +240,7 @@ def _main():
     if args.reset_spend:
         from .providers.observed import mark_spend_reset
         extra_data = {}
-        
+
         # If Kilo is configured to use AgentRouter locally, capture the raw
         # gateway totals as the reset baseline.
         if is_agentrouter_enabled(config):
@@ -258,7 +271,7 @@ def _main():
                     user_config = json.load(f)
                 if not isinstance(user_config, dict):
                     user_config = {}
-                
+
                 if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
                     tools_cfg = user_config["custom_tools"]["tools"]
                     tools_list = []
@@ -292,7 +305,7 @@ def _main():
                                         config_updated = True
                                 except ValueError:
                                     pass
-                
+
                 if config_updated:
                     dir_path = os.path.dirname(config_path)
                     os.makedirs(dir_path, exist_ok=True)

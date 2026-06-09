@@ -73,7 +73,7 @@ def _is_reset_event(prev, curr):
         after the previous reset deadline passed. This catches "never-touched"
         buckets that stay at 100%.
     """
-    pct_jump = (curr.get("pct_left") or 0) - (prev.get("pct_left") or 0)
+    pct_jump = float(curr.get("pct_left") or 0.0) - float(prev.get("pct_left") or 0.0)
     if pct_jump >= RESET_DETECT_PCT:
         return True
     p = _reset_at_seconds(prev.get("reset_at"))
@@ -189,6 +189,8 @@ def record_snapshot(result):
 
 def _parse_ts(s):
     try:
+        if isinstance(s, (int, float)):
+            return datetime.fromtimestamp(s, timezone.utc)
         if isinstance(s, str):
             s = s.replace("Z", "+00:00")
         dt = datetime.fromisoformat(s)
@@ -222,6 +224,85 @@ def _load_snapshots(since=None):
     except OSError:
         return []
     return rows
+
+
+def _load_snapshots_with_anchor(since=None):
+    rows = _load_snapshots()
+    if not since:
+        return rows
+
+    rows.sort(key=lambda r: r["_ts"])
+
+    anchors = {}
+    valid_rows = []
+
+    for row in rows:
+        ts = row.get("_ts")
+        if not ts:
+            continue
+        key = row.get("key")
+        if ts < since:
+            anchors[key] = row
+        else:
+            valid_rows.append(row)
+
+    final_rows = list(anchors.values()) + valid_rows
+    final_rows.sort(key=lambda r: r["_ts"])
+    return final_rows
+
+
+def merge_snapshots(new_rows):
+    if not isinstance(new_rows, list):
+        return False
+
+    existing = _load_snapshots()
+
+    parsed_new = []
+    for r in new_rows:
+        if not isinstance(r, dict):
+            continue
+        row_copy = r.copy()
+        if "_ts" not in row_copy:
+            row_copy["_ts"] = _parse_ts(row_copy.get("ts"))
+        if row_copy["_ts"] is not None:
+            parsed_new.append(row_copy)
+
+    all_rows = existing + parsed_new
+
+    seen = set()
+    deduped = []
+
+    for row in all_rows:
+        ts_str = row.get("ts")
+        key = row.get("key")
+        tool = row.get("tool")
+        pct_left = row.get("pct_left")
+        remaining = row.get("remaining")
+        reset_at = row.get("reset_at")
+
+        sig = tuple(str(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))
+        if sig not in seen:
+            seen.add(sig)
+            deduped.append(row)
+
+    deduped.sort(key=lambda r: r["_ts"])
+
+    try:
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+        tmp_path = SNAPSHOT_PATH + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            for row in deduped:
+                out = row.copy()
+                out.pop("_ts", None)
+                f.write(json.dumps(out) + "\n")
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp_path, SNAPSHOT_PATH)
+        return True
+    except OSError:
+        return False
 
 
 def reset_snapshots():
@@ -267,7 +348,7 @@ def compute_waste(days=7):
     historical snapshots from before the exclusion was added.
     """
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = _load_snapshots(since=since)
+    rows = _load_snapshots_with_anchor(since)
     if not rows:
         return {}
 
@@ -288,6 +369,12 @@ def compute_waste(days=7):
         is_antigravity = any(r.get("tool") == "antigravity" for r in series)
         events = []
         for prev, curr in zip(series, series[1:]):
+            # Rows before `since` are anchors only: they provide prior context
+            # for detecting the first in-window reset, but are never counted as
+            # events themselves.
+            curr_ts = curr.get("_ts")
+            if curr_ts is None or curr_ts < since:
+                continue
             if _is_reset_event(prev, curr):
                 wasted = float(prev["pct_left"] or 0)
                 # Antigravity's bottom-end pct is unreliable; don't count
