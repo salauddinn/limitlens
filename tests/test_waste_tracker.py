@@ -300,6 +300,24 @@ def test_compute_waste(mock_load):
     assert result["antigravity:prof::m1"]["avg_wasted_pct"] == 30.0
 
 
+@patch("limitlens.waste_tracker._load_snapshots_with_anchor")
+def test_compute_waste_filters_ignored_codex_accounts(mock_load):
+    now = datetime.now(timezone.utc)
+    t1 = now.replace(microsecond=0)
+    t2 = t1 + timedelta(seconds=1)
+    mock_load.return_value = [
+        {"key": "codex-default::weekly", "ts": "t1", "_ts": t1, "pct_left": 10, "tool": "codex"},
+        {"key": "codex-default::weekly", "ts": "t2", "_ts": t2, "pct_left": 80, "tool": "codex"},
+        {"key": "codex-p1::weekly", "ts": "t1", "_ts": t1, "pct_left": 20, "tool": "codex"},
+        {"key": "codex-p1::weekly", "ts": "t2", "_ts": t2, "pct_left": 90, "tool": "codex"},
+    ]
+
+    result = waste_tracker.compute_waste(config={"codex": {"ignored_accounts": ["~/.codex"]}})
+
+    assert "codex-default::weekly" not in result
+    assert "codex-p1::weekly" in result
+
+
 def _snapshot(key, ts, pct_left, tool="codex", reset_at=None):
     row = {
         "key": key,

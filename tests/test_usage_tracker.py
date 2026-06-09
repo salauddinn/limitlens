@@ -45,6 +45,24 @@ class TestUsageTracker(unittest.TestCase):
         self.assertEqual(usage["codex-foo"], 30.0)
 
     @patch('limitlens.usage_tracker.waste_tracker._load_snapshots_with_anchor')
+    def test_compute_consolidated_usage_filters_ignored_codex_accounts(self, mock_load_snapshots):
+        now = datetime.now(timezone.utc)
+        mock_load_snapshots.return_value = [
+            {"tool": "codex", "key": "codex-default::weekly", "pct_left": 90.0, "_ts": now - timedelta(hours=2)},
+            {"tool": "codex", "key": "codex-default::weekly", "pct_left": 70.0, "_ts": now - timedelta(hours=1)},
+            {"tool": "codex", "key": "codex-p1::weekly", "pct_left": 90.0, "_ts": now - timedelta(hours=2)},
+            {"tool": "codex", "key": "codex-p1::weekly", "pct_left": 80.0, "_ts": now - timedelta(hours=1)},
+        ]
+
+        usage = usage_tracker.compute_consolidated_usage(
+            days=1,
+            config={"codex": {"ignored_accounts": ["~/.codex"]}},
+        )
+
+        self.assertNotIn("codex-default::weekly", usage)
+        self.assertEqual(usage["codex-p1::weekly"], 10.0)
+
+    @patch('limitlens.usage_tracker.waste_tracker._load_snapshots_with_anchor')
     def test_compute_consolidated_usage_amp_dollars(self, mock_load_snapshots):
         now = datetime.now(timezone.utc)
         dt1 = now - timedelta(days=2)
@@ -60,6 +78,71 @@ class TestUsageTracker(unittest.TestCase):
         usage = usage_tracker.compute_consolidated_usage(days=3)
 
         self.assertEqual(usage["amp::amp-pro"], 2.5)
+
+    @patch('limitlens.usage_tracker.compute_consolidated_usage')
+    @patch('limitlens.usage_tracker.waste_tracker.compute_waste')
+    def test_compute_usage_analytics_basic_structure(self, mock_waste, mock_usage):
+        mock_usage.return_value = {"codex-foo::weekly": 30.0, "amp::amp-pro": 2.5}
+        mock_waste.return_value = {
+            "codex-foo::weekly": {"reset_count": 1, "avg_wasted_pct": 10.0, "events": []}
+        }
+        observed = {
+            "opencode": {
+                "windows": [
+                    {
+                        "days": 7,
+                        "models": [
+                            {
+                                "provider": "anthropic",
+                                "model": "claude",
+                                "requests": 2,
+                                "cost": 1.25,
+                                "tokens": {"total": 100, "input": 40, "output": 60},
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+
+        analytics = usage_tracker.compute_usage_analytics(days=7, observed=observed)
+
+        self.assertEqual(analytics["metadata"]["version"], usage_tracker.ANALYTICS_VERSION)
+        self.assertEqual(analytics["metadata"]["days"], 7)
+        self.assertIn("generated_at", analytics["metadata"])
+        self.assertEqual(analytics["snapshot_usage"]["codex-foo::weekly"]["unit"], "percent")
+        self.assertEqual(analytics["snapshot_usage"]["codex-foo::weekly"]["tool"], "codex")
+        self.assertEqual(analytics["snapshot_usage"]["amp::amp-pro"]["unit"], "usd")
+        self.assertEqual(analytics["snapshot_usage"]["amp::amp-pro"]["used"], 2.5)
+        self.assertEqual(analytics["waste"]["codex-foo::weekly"]["key"], "codex-foo::weekly")
+        self.assertEqual(analytics["waste"]["codex-foo::weekly"]["tool"], "codex")
+        self.assertEqual(analytics["waste"]["codex-foo::weekly"]["reset_count"], 1)
+        self.assertEqual(analytics["observed"], observed)
+        self.assertEqual(analytics["totals"]["snapshot_usage"]["percent"], 30.0)
+        self.assertEqual(analytics["totals"]["snapshot_usage"]["usd"], 2.5)
+        self.assertEqual(analytics["totals"]["observed"]["requests"], 2)
+        self.assertEqual(analytics["totals"]["observed"]["cost"], 1.25)
+        self.assertEqual(analytics["totals"]["observed"]["tokens"]["total"], 100)
+
+    @patch('limitlens.usage_tracker.compute_consolidated_usage', return_value={"amp::amp-pro": 2.5})
+    @patch('limitlens.usage_tracker.waste_tracker.compute_waste', return_value={})
+    def test_compute_usage_analytics_amp_usage_remains_dollar_based(self, mock_waste, mock_usage):
+        analytics = usage_tracker.compute_usage_analytics(days=7)
+
+        amp = analytics["snapshot_usage"]["amp::amp-pro"]
+        self.assertEqual(amp["used"], 2.5)
+        self.assertEqual(amp["unit"], "usd")
+        self.assertEqual(analytics["totals"]["snapshot_usage"]["usd"], 2.5)
+
+    @patch('limitlens.usage_tracker.compute_consolidated_usage', return_value={"codex-foo::weekly": 30.0})
+    @patch('limitlens.usage_tracker.waste_tracker.compute_waste', return_value={})
+    def test_compute_usage_analytics_normal_quota_usage_remains_percent_based(self, mock_waste, mock_usage):
+        analytics = usage_tracker.compute_usage_analytics(days=7)
+
+        quota = analytics["snapshot_usage"]["codex-foo::weekly"]
+        self.assertEqual(quota["used"], 30.0)
+        self.assertEqual(quota["unit"], "percent")
+        self.assertEqual(analytics["totals"]["snapshot_usage"]["percent"], 30.0)
 
     @patch('limitlens.usage_tracker.waste_tracker._load_snapshots')
     @patch('builtins.open', new_callable=mock_open)

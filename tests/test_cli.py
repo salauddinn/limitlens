@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from limitlens.cli import main
@@ -160,8 +161,63 @@ class TestCLI(unittest.TestCase):
              patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG):
             main()
 
-        mock_compute_waste.assert_called_once_with(days=14)
+        mock_compute_waste.assert_called_once_with(days=14, config=TEST_CONFIG)
         mock_display_waste.assert_called_once()
+
+    def test_usage_json_shape_and_observed_fetch_once(self):
+        config = dict(TEST_CONFIG)
+        config["pi"] = {"enabled": False}
+        config["cursor"] = {"enabled": False}
+        now = datetime.now(timezone.utc)
+        observed = {
+            "opencode": {
+                "windows": [
+                    {
+                        "days": 7,
+                        "models": [
+                            {
+                                "provider": "anthropic",
+                                "model": "claude",
+                                "requests": 1,
+                                "cost": 0.5,
+                                "tokens": {"total": 100},
+                            }
+                        ],
+                    }
+                ]
+            },
+            "pi": {"disabled": True},
+            "copilot_cli": {"disabled": True},
+        }
+
+        test_args = ["limitlens", "--usage", "--json", "--days", "7", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=config), \
+             patch("limitlens.cli.get_codex_data", return_value={"accounts": []}), \
+             patch("limitlens.cli.get_amp_data", return_value={}), \
+             patch("limitlens.cli.get_antigravity_data", return_value={}), \
+             patch("limitlens.cli.get_opencode_data", return_value=observed) as mock_observed, \
+             patch("limitlens.usage_tracker.waste_tracker._load_snapshots_with_anchor") as mock_snapshots, \
+             patch("limitlens.usage_tracker.waste_tracker.compute_waste", return_value={}), \
+             patch("limitlens.usage_tracker._load_imported_data", return_value={}), \
+             redirect_stdout(buf):
+            mock_snapshots.return_value = [
+                {"tool": "codex", "key": "codex-default::weekly", "pct_left": 90.0, "_ts": now - timedelta(hours=2)},
+                {"tool": "codex", "key": "codex-default::weekly", "pct_left": 70.0, "_ts": now - timedelta(hours=1)},
+            ]
+            main()
+
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["metadata"]["days"], 7)
+        self.assertIn("generated_at", payload["metadata"])
+        self.assertEqual(payload["snapshot_usage"]["codex-default::weekly"]["used"], 20.0)
+        self.assertEqual(payload["snapshot_usage"]["codex-default::weekly"]["unit"], "percent")
+        self.assertEqual(payload["waste"], {})
+        self.assertEqual(payload["observed"], observed)
+        self.assertEqual(payload["totals"]["observed"]["requests"], 1)
+        self.assertEqual(payload["consolidated_usage"], {"codex-default::weekly": 20.0})
+        mock_observed.assert_called_once()
 
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")

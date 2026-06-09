@@ -12,8 +12,8 @@ Tracked tools:
   • Codex      — per (account, window)
   • Antigravity — per (profile, model), only when status=running (stale data
                   is unreliable for waste detection because it can't see resets)
-  • Amp        — recorded for usage tracking only (replenishing $ pool,
-                  no fixed reset cycle for waste detection)
+  • Amp        — tracked as estimated missed replenishment when the pool
+                  appears full across snapshot intervals
   • Copilot    — SKIPPED (flat-fee unmetered)
 
 Storage: JSONL at ~/.cache/limitlens/snapshots.jsonl (append-only, durable).
@@ -39,6 +39,55 @@ UNLIMITED_MODEL_KEYWORDS = ("flash",)
 # Antigravity reset event as "waste" unless the prior pct_left was strictly
 # above this threshold.
 ANTIGRAVITY_WASTE_MIN_PCT = 20
+
+
+def _codex_account_from_snapshot_key(key):
+    """Return (account_name, expected_home) for a Codex snapshot key."""
+    key = str(key or "")
+    if key == "codex" or key.startswith("codex::"):
+        return "default", "~/.codex"
+    if not key.startswith("codex-"):
+        return None
+    account = key.split("::", 1)[0].removeprefix("codex-")
+    name = "default" if account in ("", "codex", "default") else account
+    home = "~/.codex" if name == "default" else f"~/.codex-{name}"
+    return name, home
+
+
+def _codex_account_is_ignored(name, home, ignored_accounts):
+    if isinstance(ignored_accounts, str):
+        ignored_accounts = [ignored_accounts]
+    elif not isinstance(ignored_accounts, list):
+        return False
+
+    label = "codex" if name == "default" else f"codex-{name}"
+    candidates = {
+        str(name).lower(),
+        label.lower(),
+        os.path.basename(home).lower(),
+        os.path.expanduser(home).lower(),
+    }
+    for ignored in ignored_accounts:
+        value = os.path.expanduser(str(ignored).strip()).lower()
+        if value in candidates:
+            return True
+    return False
+
+
+def _snapshot_key_is_config_ignored(key, config=None):
+    account = _codex_account_from_snapshot_key(key)
+    if not account or not isinstance(config, dict):
+        return False
+
+    cfg = config.get("codex") or {}
+    if not isinstance(cfg, dict):
+        return False
+
+    if str(cfg.get("enabled", True)).lower() in ("false", "0", "no"):
+        return True
+
+    name, home = account
+    return _codex_account_is_ignored(name, home, cfg.get("ignored_accounts") or [])
 
 
 def _is_unlimited_model(label):
@@ -336,14 +385,81 @@ def prune_old_snapshots():
         pass
 
 
-def compute_waste(days=7):
-    """
-    Return dict[key] -> {
-        reset_count, avg_wasted_pct, max_wasted_pct,
-        last_seen_pct, last_seen_at,
-        events: [{at, wasted_pct}],
+def _amp_float(row, field):
+    try:
+        value = row.get(field)
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_amp_replenish_waste(series, since):
+    """Estimate Amp refill dollars missed while a capped pool was full."""
+    events = []
+    totals = []
+    for prev, curr in zip(series, series[1:]):
+        curr_ts = curr.get("_ts")
+        prev_ts = prev.get("_ts")
+        if curr_ts is None or prev_ts is None or curr_ts < since:
+            continue
+        hours = (curr_ts - prev_ts).total_seconds() / 3600.0
+        if hours <= 0:
+            continue
+        total = _amp_float(curr, "total") or _amp_float(prev, "total")
+        rate = _amp_float(curr, "replenish_rate") or _amp_float(prev, "replenish_rate")
+        prev_remaining = _amp_float(prev, "remaining")
+        curr_remaining = _amp_float(curr, "remaining")
+        if not total or not rate or prev_remaining is None or curr_remaining is None:
+            continue
+        if curr_remaining < total - 0.01:
+            continue
+
+        # Snapshot data cannot know exact usage timing inside the interval.
+        # This estimates missed refill when the interval ends at the cap.
+        cap_space_at_start = max(0.0, total - prev_remaining)
+        missed = max(0.0, (rate * hours) - cap_space_at_start)
+        if missed < 0.01:
+            continue
+        events.append({
+            "at": curr["ts"],
+            "wasted_usd": round(missed, 2),
+            "hours": round(hours, 2),
+            "estimated": True,
+        })
+        totals.append(total)
+
+    if not events:
+        return None
+    wastes = [e["wasted_usd"] for e in events]
+    total_wasted = round(sum(wastes), 2)
+    avg_wasted = round(total_wasted / len(wastes), 2)
+    cap = max(totals) if totals else None
+    avg_pct = (avg_wasted / cap * 100.0) if cap else 0.0
+    return {
+        "waste_type": "replenish_cap",
+        "waste_unit": "usd",
+        "reset_count": len(events),
+        "avg_wasted_usd": avg_wasted,
+        "max_wasted_usd": max(wastes),
+        "total_wasted_usd": total_wasted,
+        "avg_wasted_pct": avg_pct,
+        "max_wasted_pct": (max(wastes) / cap * 100.0) if cap else 0.0,
+        "last_seen_remaining": series[-1].get("remaining"),
+        "last_seen_at": series[-1]["ts"],
+        "events": events,
+        "estimated": True,
     }
-    Only keys with at least one detected reset event are included.
+
+
+def compute_waste(days=7, config=None):
+    """
+    Return dict[key] -> waste data.
+
+    Reset quotas report pct left unused at reset. Amp reports estimated missed
+    replenish dollars when a capped pool appears full across snapshot intervals.
+    Only keys with at least one detected waste event are included.
     Unlimited-model keys (Flash etc.) are filtered out — they may exist in
     historical snapshots from before the exclusion was added.
     """
@@ -355,17 +471,26 @@ def compute_waste(days=7):
     by_key = {}
     for row in rows:
         # Filter legacy rows for unlimited models (e.g. recorded before exclusion).
-        if row.get("tool") == "amp":
-            continue
         key = row["key"]
         label = key.split("::", 1)[-1] if "::" in key else ""
         if _is_unlimited_model(label):
+            continue
+        # Respect current Codex account ignores for historical rows too. The
+        # snapshot log is append-only, so ignored accounts may still exist in
+        # old data even though live collection no longer returns them.
+        if _snapshot_key_is_config_ignored(key, config):
             continue
         by_key.setdefault(key, []).append(row)
 
     out = {}
     for key, series in by_key.items():
         series.sort(key=lambda r: r["_ts"])
+        if any(r.get("tool") == "amp" for r in series):
+            amp_waste = _compute_amp_replenish_waste(series, since)
+            if amp_waste:
+                out[key] = amp_waste
+            continue
+
         is_antigravity = any(r.get("tool") == "antigravity" for r in series)
         events = []
         for prev, curr in zip(series, series[1:]):
@@ -409,8 +534,58 @@ def _verdict(avg_pct):
     return "well used"
 
 
+def _color(text, color, no_color):
+    return text if no_color else f"{color}{text}\033[0m"
+
+
+def _friendly_key(key):
+    key = str(key)
+    if key.startswith("codex-"):
+        return "Codex " + key.replace("codex-", "", 1).replace("::", " / ")
+    if key.startswith("antigravity:"):
+        return "Antigravity " + key.replace("antigravity:", "", 1).replace("::", " / ")
+    return key.replace("::", " / ")
+
+
+def _shorten(text, width):
+    text = str(text)
+    return text if len(text) <= width else text[: max(0, width - 1)] + "…"
+
+
+def _waste_tip(avg_pct):
+    if avg_pct >= 60:
+        return "try this earlier"
+    if avg_pct >= 30:
+        return "room to use more"
+    if avg_pct >= 10:
+        return "pretty balanced"
+    return "great usage"
+
+
+def _bar(value, width=10):
+    value = max(0.0, min(100.0, float(value or 0.0)))
+    filled = int(round((value / 100.0) * width))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _box(title, lines):
+    width = max([len(title) + 4] + [len(line) for line in lines])
+    top = f"╭─ {title} " + "─" * max(0, width - len(title) - 3) + "╮"
+    bottom = "╰" + "─" * (len(top) - 2) + "╯"
+    body = [f"│ {line:<{len(top) - 4}} │" for line in lines]
+    return "\n".join([top] + body + [bottom])
+
+
+def _waste_group(avg_pct):
+    if avg_pct >= 30:
+        return "Needs attention"
+    if avg_pct >= 10:
+        return "Okay"
+    return "Healthy"
+
+
 def display_waste_report(report, days, args, print_c):
-    print_c(f"\n  ═══ Waste Report (last {days} days) ═══", "\033[1;35m", args.no_color)
+    print_c(f"\n  ═══ Waste Report · last {days} days ═══", "\033[1;35m", args.no_color)
 
     if not report:
         print_c(
@@ -421,30 +596,65 @@ def display_waste_report(report, days, args, print_c):
             "     or set up a cron/launchd job to record snapshots automatically.)",
             "\033[33m", args.no_color,
         )
+        print_c(
+            "    Friendly meaning: waste appears after a quota resets while unused quota was left over.",
+            "\033[90m", args.no_color,
+        )
         _print_setup_hint(args, print_c)
         return
 
     items = sorted(report.items(), key=lambda kv: -kv[1]["avg_wasted_pct"])
+    total_resets = sum(int(data.get("reset_count") or 0) for _, data in items)
+    weighted_avg = sum(
+        float(data.get("avg_wasted_pct") or 0.0) * int(data.get("reset_count") or 0)
+        for _, data in items
+    ) / max(1, total_resets)
+    needs_attention = sum(1 for _, data in items if float(data.get("avg_wasted_pct") or 0.0) >= 30)
+    worst_key, worst_data = items[0]
 
-    if args.no_color:
-        print(f"\n  {'identity / window':<48} {'resets':>7} {'avg':>7} {'max':>7}  verdict")
-    else:
-        print(f"\n  \033[1m{'identity / window':<48} {'resets':>7} {'avg':>7} {'max':>7}  verdict\033[0m")
+    print("\n  " + _box(
+        f"LimitLens Waste · last {days} days",
+        [
+            "Waste means quota left unused when it resets",
+            f"Resets measured     {total_resets}",
+            f"Avg unused          {_bar(weighted_avg)}  {weighted_avg:.1f}%",
+            f"Needs attention     {needs_attention} quota{'s' if needs_attention != 1 else ''}",
+            f"Worst quota         {_shorten(_friendly_key(worst_key), 34)}",
+        ],
+    ).replace("\n", "\n  "))
 
+    grouped = {"Needs attention": [], "Okay": [], "Healthy": []}
     for key, data in items:
-        avg = data["avg_wasted_pct"]
-        mx  = data["max_wasted_pct"]
-        n   = data["reset_count"]
-        verdict = _verdict(avg)
-        color = "\033[31m" if avg >= 60 else "\033[33m" if avg >= 30 else "\033[32m"
-        line = f"  {key:<48} {n:>7d} {avg:>6.1f}% {mx:>6.1f}%  "
-        if args.no_color:
-            print(line + verdict)
-        else:
-            print(line + f"{color}{verdict}\033[0m")
+        grouped[_waste_group(float(data.get("avg_wasted_pct") or 0.0))].append((key, data))
+
+    for title in ("Needs attention", "Okay", "Healthy"):
+        rows = grouped[title]
+        if not rows:
+            continue
+        print_c(f"\n  {title}", "\033[1;36m", args.no_color)
+        max_rows = len(rows) if getattr(args, "verbose", False) else 5
+        for key, data in rows[:max_rows]:
+            avg = float(data["avg_wasted_pct"])
+            mx = float(data["max_wasted_pct"])
+            n = int(data["reset_count"])
+            color = "\033[31m" if avg >= 60 else "\033[33m" if avg >= 30 else "\033[32m"
+            line = f"{_bar(avg)}  {avg:5.1f}% unused"
+            print(f"    {_shorten(_friendly_key(key), 30):<30} {_color(line, color, args.no_color)}")
+            if title == "Needs attention":
+                print(f"      Status: {_verdict(avg)} · Action: use this quota earlier before reset")
+            else:
+                print(f"      Status: {_verdict(avg)}")
+            if getattr(args, "verbose", False):
+                print_c(f"      raw: {key}", "\033[90m", args.no_color)
+                print_c(f"      resets: {n}, worst: {mx:.1f}%, last seen: {data.get('last_seen_at', 'unknown')}", "\033[90m", args.no_color)
+                for event in data.get("events", []):
+                    print_c(f"      event: {event.get('at')} · {event.get('wasted_pct')}% unused", "\033[90m", args.no_color)
+        hidden = len(rows) - max_rows
+        if hidden > 0:
+            print_c(f"    +{hidden} more (use --verbose)", "\033[90m", args.no_color)
 
     print_c(
-        "\n  💡 'avg' = avg % unused at the moment each window reset. Lower = better.",
+        "\n  Tip: default is 7 days because waste is reset-based. Use --days 1 for today or --days 30 for trends.",
         "\033[90m", args.no_color,
     )
     _print_setup_hint(args, print_c)
