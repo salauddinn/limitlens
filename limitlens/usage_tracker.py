@@ -11,7 +11,6 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from . import waste_tracker
-from .providers.observed import display_opencode_text
 
 IMPORTED_USAGE_PATH = os.environ.get("LIMITLENS_IMPORTED_USAGE_PATH") or os.path.expanduser("~/.cache/limitlens/imported_usage.json")
 ANALYTICS_VERSION = 1
@@ -380,11 +379,14 @@ def import_usage(import_path):
         return False
 
 def has_observed(data):
-    if not data: return False
+    if not data:
+        return False
     for k in ["opencode", "pi", "copilot_cli"]:
         src = data.get(k, {})
-        if src.get("credit_limits") or any(w.get("models") for w in src.get("windows", [])): return True
-        if "error" in src and k == "opencode": return True
+        if src.get("credit_limits") or any(w.get("models") for w in src.get("windows", [])):
+            return True
+        if "error" in src and k == "opencode":
+            return True
     return False
 
 

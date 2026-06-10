@@ -24,7 +24,6 @@ Each candidate has:
 
 from datetime import datetime, timezone
 import re
-from .core import parse_to_utc
 from .providers.observed import compact_reco_name
 
 # ── Classification ──────────────────────────────────────────────────────────
