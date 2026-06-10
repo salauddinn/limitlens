@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-10
+
 ### Added
 - Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
 - Add `--reset-spend` for a non-destructive visual spend reset across observed usage providers
@@ -14,6 +16,14 @@ All notable changes to this project will be documented in this file.
 - Menubar "Refresh Now" now forces a full Codex account sync (via `--sync-codex`) so manual refreshes pull fresh Codex data
 - Treat spend resets as timestamp cutoffs for Pi/OpenCode/Copilot CLI and as offset subtraction for Kilo Code when it is explicitly configured to use AgentRouter
 - Reset manual `custom_tools` usage counters in local config without deleting any underlying provider history
+
+### Fixed
+- Respect ignored Codex accounts in historical usage and waste reports
+- Detect waste events correctly across report window boundaries
+- Avoid double-counting Command Code monthly sub-buckets
+- Preserve legacy usage history in exports while avoiding snapshot/history double-counting on import
+- Display Amp missed-refill waste as dollar estimates instead of percent-unused reset waste
+- Sanitize Command Code environment-derived request headers before API calls
 
 ## [1.2.3] - 2026-06-04
 

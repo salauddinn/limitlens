@@ -140,8 +140,10 @@ def parse_agentrouter_quota(payload, args, cfg=None, apply_reset_offset=True):
                     if used >= offset_used and request_count >= offset_reqs:
                         used -= offset_used
                         request_count -= offset_reqs
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            # Reset offsets are best-effort local state; ignore malformed or
+            # unreadable reset files without affecting live quota reporting.
+            resets = {}
 
     remaining = max(0.0, quota - raw_used) if quota > 0 else 0.0
     pct_left = max(0.0, (remaining / quota * 100.0)) if quota > 0 else 0.0
