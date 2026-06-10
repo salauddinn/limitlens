@@ -75,7 +75,7 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | Provider | Supported OS | Notes / Details |
 |:---|:---|:---|
 | **Codex** | macOS, Linux | Parses local configurations from `~/.codex-*` |
-| **Amp** | macOS, Linux | Executes local `amp` binary to fetch quota |
+| **Amp** | macOS, Linux | Executes local `amp` binary to fetch quota and observed dollar usage |
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux configurations |
 | **Cursor** | macOS, Linux, Win | Fetches active limits across Cursor tiers |
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
@@ -96,6 +96,7 @@ limitlens --tool codex  # Filter output to a specific tool
 limitlens --watch    # Keep alive and refresh every 5 seconds
 limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report (% of quota wasted over 7 days)
+limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
 ```
 

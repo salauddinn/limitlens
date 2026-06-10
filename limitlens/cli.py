@@ -205,16 +205,41 @@ def _main():
         return
 
     if args.usage:
+        if getattr(args, "days", None):
+            for k in ["opencode", "pi", "copilot_cli"]:
+                if k not in config:
+                    config[k] = {}
+                config[k]["days"] = [args.days]
+
+        result = {}
         try:
             result = fetch_and_refresh()
             _record(result)
         except Exception as e:
             if not args.json:
                 print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
+
+        data = {}
+        opencode_result = result.get("opencode")
+        if isinstance(opencode_result, dict) and any(k in opencode_result for k in ("opencode", "pi", "copilot_cli")):
+            data.update(opencode_result)
+        elif isinstance(opencode_result, dict):
+            data["opencode"] = opencode_result
+        if isinstance(result.get("pi"), dict) and "pi" not in data:
+            data["pi"] = result["pi"]
+        if isinstance(result.get("copilot_cli"), dict) and "copilot_cli" not in data:
+            data["copilot_cli"] = result["copilot_cli"]
+
+        analytics = usage_tracker.compute_usage_analytics(args.days, observed=data, config=config)
         if args.json:
-            print(json.dumps(usage_tracker._load_data(), indent=2))
+            payload = dict(analytics)
+            payload["version"] = 4
+            payload["consolidated_usage"] = {
+                key: item["used"] for key, item in analytics["snapshot_usage"].items()
+            }
+            print(json.dumps(payload, indent=2))
         else:
-            usage_tracker.display_usage_report(args, print_c)
+            usage_tracker.display_consolidated_report(args, print_c, analytics=analytics)
         return
     if args.reset_waste:
         ok = waste_tracker.reset_snapshots()
@@ -227,7 +252,7 @@ def _main():
     if args.reset_spend:
         from .providers.observed import mark_spend_reset
         extra_data = {}
-        
+
         # If Kilo is configured to use AgentRouter locally, capture the raw
         # gateway totals as the reset baseline.
         if is_agentrouter_enabled(config):
@@ -258,7 +283,7 @@ def _main():
                     user_config = json.load(f)
                 if not isinstance(user_config, dict):
                     user_config = {}
-                
+
                 if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
                     tools_cfg = user_config["custom_tools"]["tools"]
                     tools_list = []
@@ -292,7 +317,7 @@ def _main():
                                         config_updated = True
                                 except ValueError:
                                     pass
-                
+
                 if config_updated:
                     dir_path = os.path.dirname(config_path)
                     os.makedirs(dir_path, exist_ok=True)
@@ -324,7 +349,7 @@ def _main():
         except Exception as e:
             if not args.json:
                 print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
-        report = waste_tracker.compute_waste(days=args.days)
+        report = waste_tracker.compute_waste(days=args.days, config=config)
         if args.json:
             print(json.dumps(report, indent=2))
             return

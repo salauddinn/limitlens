@@ -63,10 +63,12 @@ def get_amp_data(args):
                 continue
             replenish = tier_match.group(4)
             pct_left = (remaining / total * 100) if total > 0 else 0
+            used = max(0.0, total - remaining) if total is not None else None
             tier = {
                 "label": label,
                 "remaining": remaining,
                 "total": total,
+                "used": used,
                 "pct_left": pct_left,
                 "pct_used": 100.0 - pct_left
             }
@@ -90,6 +92,7 @@ def get_amp_data(args):
                 "label": label,
                 "remaining": remaining,
                 "total": None,
+                "used": None,
                 "pct_left": None,
                 "pct_used": None,
             })
@@ -165,7 +168,8 @@ def display_amp_text(data, args):
                 print(f"    {short:<14}   \033[90m${tier['remaining']:.2f} remaining{replenish}{full_at}\033[0m")
         else:
             b = bar(pct_used, no_color=getattr(args, 'no_color', False))
+            used_text = f"  used ${tier.get('used', 0.0):.2f}" if tier.get("used") is not None else ""
             if getattr(args, 'no_color', False):
-                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}")
+                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{used_text}{replenish}{full_at}")
             else:
-                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{replenish}{full_at}\033[0m")
+                print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{used_text}{replenish}{full_at}\033[0m")

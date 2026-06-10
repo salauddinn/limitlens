@@ -62,6 +62,32 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("purchased", output)
         self.assertIn("4.3507 credits", output)
 
+    def test_parse_merlin_status_response(self):
+        data = parse_commandcode_credits({
+            "status": "success",
+            "data": {
+                "user": {
+                    "type": "FREE",
+                    "userPlan": "FREE",
+                    "used": 2,
+                    "limit": 102,
+                    "cappedFeatures": {
+                        "merlin": {"used": 2, "limit": 102, "resetsAt": 1778630399999}
+                    },
+                    "dailyUsage": {"cost": 0.0003375},
+                    "monthlyUsage": {"cost": 0.001401},
+                }
+            }
+        }, self.args)
+
+        self.assertAlmostEqual(data["available"], 100.0)
+        self.assertEqual(data["unit_label"], "uses")
+        self.assertEqual(data["tiers"][0]["label"], "merlin")
+        self.assertEqual(data["tiers"][0]["unit"], "uses")
+        self.assertEqual(data["plan"], "FREE")
+        self.assertIn("daily_usage", data)
+        self.assertIsNotNone(data["tiers"][0]["reset_time"])
+
     def test_display_nonzero_credit_types(self):
         data = parse_commandcode_credits({
             "credits": {
@@ -81,7 +107,7 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("monthly", output)
         self.assertIn("premium monthly", output)
         self.assertIn("opensource monthly", output)
-        self.assertIn("11.8507/11.8507 credits", output)
+        self.assertIn("5.6007/5.6007 credits", output)
 
     @patch.dict("os.environ", {"COMMANDCODE_COOKIE": "session=redacted"}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
@@ -93,6 +119,55 @@ class TestCommandCodeProvider(unittest.TestCase):
         request = mock_open.call_args[0][0]
         self.assertIn("Cookie", request.headers)
         self.assertEqual(request.headers["Cookie"], "session=redacted")
+        self.assertEqual(request.headers["User-agent"], "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
+
+    @patch.dict("os.environ", {"COMMANDCODE_AUTHORIZATION": "Bearer redacted", "COMMANDCODE_CREDITS_URL": "https://uam.getmerlin.in/status"}, clear=True)
+    @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
+    @patch("limitlens.providers.commandcode._open_no_redirect", return_value=FakeResponse({
+        "status": "success",
+        "data": {"user": {"used": 1, "limit": 10, "cappedFeatures": {"merlin": {"used": 1, "limit": 10}}}}
+    }))
+    def test_get_merlin_status_uses_merlin_headers(self, mock_open, mock_config):
+        data = get_commandcode_data(self.args)
+
+        self.assertAlmostEqual(data["available"], 9.0)
+        request = mock_open.call_args[0][0]
+        self.assertEqual(request.headers["Origin"], "https://api.commandcode.ai")
+        self.assertEqual(request.headers["Referer"], "https://api.commandcode.ai/")
+        self.assertEqual(request.headers["User-agent"], "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
+        self.assertIn("X-merlin-version", request.headers)
+        self.assertIn("X-request-timestamp", request.headers)
+
+    @patch.dict("os.environ", {
+        "COMMANDCODE_AUTHORIZATION": "Bearer redacted\r\nX-Bad: yes",
+        "COMMANDCODE_COOKIE": "session=redacted\r\nX-Bad: yes",
+        "COMMANDCODE_USER_AGENT": "LimitLens\r\nX-Bad: yes",
+        "COMMANDCODE_ORIGIN": "https://api.commandcode.ai\r\nX-Bad: yes",
+    }, clear=True)
+    @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
+    @patch("limitlens.providers.commandcode._open_no_redirect", return_value=FakeResponse({"credits": {"purchasedCredits": 2.5}}))
+    def test_get_credits_strips_header_newlines(self, mock_open, mock_config):
+        data = get_commandcode_data(self.args)
+
+        self.assertAlmostEqual(data["available"], 2.5)
+        request = mock_open.call_args[0][0]
+        for value in request.headers.values():
+            self.assertNotIn("\r", value)
+            self.assertNotIn("\n", value)
+        self.assertEqual(request.headers["Authorization"], "Bearer redactedX-Bad: yes")
+        self.assertEqual(request.headers["Cookie"], "session=redactedX-Bad: yes")
+
+    def test_monthly_sub_buckets_do_not_double_count_total(self):
+        data = parse_commandcode_credits({
+            "credits": {
+                "monthlyCredits": 10,
+                "purchasedCredits": 4.2074,
+                "premiumMonthlyCredits": 0,
+                "opensourceMonthlyCredits": 10,
+            }
+        }, self.args)
+
+        self.assertAlmostEqual(data["available"], 14.2074)
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})

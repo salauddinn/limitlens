@@ -297,6 +297,7 @@ def _commandcode_candidates(commandcode_data):
     if available <= 0.01:
         return []
     tiers = commandcode_data.get("tiers") or []
+    unit = commandcode_data.get("unit_label") or (tiers[0].get("unit") if tiers else None) or "credits"
     headroom = float(tiers[0].get("pct_left", 100.0)) if tiers else 100.0
     return [{
         "tool": "commandcode",
@@ -309,7 +310,7 @@ def _commandcode_candidates(commandcode_data):
         "cost_class": "prepaid",
         "surface": "cli",
         "stale": False,
-        "note": f"{available:.4f} credits available",
+        "note": f"{available:.4f} {unit} available",
     }]
 
 

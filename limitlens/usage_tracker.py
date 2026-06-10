@@ -8,10 +8,13 @@ waste_tracker.py. Imported historical data is merged on the fly for display.
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
 from . import waste_tracker
+from .providers.observed import display_opencode_text
 
 IMPORTED_USAGE_PATH = os.environ.get("LIMITLENS_IMPORTED_USAGE_PATH") or os.path.expanduser("~/.cache/limitlens/imported_usage.json")
+ANALYTICS_VERSION = 1
 
 def _load_imported_data():
     if not os.path.exists(IMPORTED_USAGE_PATH):
@@ -36,71 +39,285 @@ def _save_imported_data(data):
     except OSError:
         pass
 
-def compute_daily_usage(days=365):
-    """
-    Compute daily usage by playing back snapshots from snapshots.jsonl.
-    Returns: dict[date_str] -> dict[key] -> usage_float
-    """
-    rows = waste_tracker._load_snapshots()
-    if not rows:
-        return {}
+def _snapshot_float(row, field):
+    try:
+        value = row.get(field)
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+def _is_amp_key(key):
+    return str(key).startswith("amp::")
+
+def _is_amp_snapshot(row, key):
+    return row.get("tool") == "amp" or _is_amp_key(key)
+
+
+def _tool_from_key(key):
+    key = str(key)
+    if key.startswith("amp::"):
+        return "amp"
+    if key.startswith("codex-"):
+        return "codex"
+    if key.startswith("antigravity:"):
+        return "antigravity"
+    return key.split(":", 1)[0].split("-", 1)[0] or "unknown"
+
+
+def _snapshot_unit_for_key(key):
+    return "usd" if _is_amp_key(key) else "percent"
+
+def _since_for_days(days):
+    if days is None:
+        return None
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def compute_consolidated_usage(days, config=None):
+    since = _since_for_days(days)
+    rows = waste_tracker._load_snapshots_with_anchor(since)
 
     by_key = {}
     for row in rows:
-        key = row["key"]
+        key = row.get("key")
+        if not key:
+            continue
+        if waste_tracker._snapshot_key_is_config_ignored(key, config):
+            continue
+        by_key.setdefault(key, []).append(row)
+
+    usage_by_key = {}
+
+    for key, series in by_key.items():
+        series.sort(key=lambda r: r["_ts"])
+        total_usage = 0.0
+
+        for prev, curr in zip(series, series[1:]):
+            if since and curr["_ts"] < since:
+                continue
+
+            usage = 0.0
+            if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
+                p_remaining = _snapshot_float(prev, "remaining")
+                c_remaining = _snapshot_float(curr, "remaining")
+                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                    usage = p_remaining - c_remaining
+            elif waste_tracker._is_reset_event(prev, curr):
+                usage = 100.0 - float(curr.get("pct_left") or 0.0)
+            else:
+                p_val = float(prev.get("pct_left") or 0.0)
+                c_val = float(curr.get("pct_left") or 0.0)
+                if c_val < p_val:
+                    usage = p_val - c_val
+
+            total_usage += usage
+
+        if total_usage > 0:
+            usage_by_key[key] = round(total_usage, 2)
+
+    # Also add in legacy imported_usage.json data for dates >= since
+    imported = _load_imported_data()
+    for date_str, daily_usage in imported.items():
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if since is None or dt >= since:
+                for k, v in daily_usage.items():
+                    if waste_tracker._snapshot_key_is_config_ignored(k, config):
+                        continue
+                    usage_by_key[k] = round(usage_by_key.get(k, 0.0) + v, 2)
+        except ValueError:
+            continue
+
+    return usage_by_key
+
+
+def compute_daily_usage(days=365, config=None):
+    """
+    Backward-compatible daily usage history derived from snapshots.
+
+    Returns dict[YYYY-MM-DD] -> dict[snapshot_key] -> usage_float.
+    """
+    since = _since_for_days(days)
+    rows = waste_tracker._load_snapshots_with_anchor(since)
+    by_key = {}
+    for row in rows:
+        key = row.get("key")
+        if not key:
+            continue
+        if waste_tracker._snapshot_key_is_config_ignored(key, config):
+            continue
         by_key.setdefault(key, []).append(row)
 
     history = {}
-    
     for key, series in by_key.items():
         series.sort(key=lambda r: r["_ts"])
         for prev, curr in zip(series, series[1:]):
-            date_str = curr["_ts"].strftime("%Y-%m-%d")
-            usage = 0.0
+            curr_ts = curr.get("_ts")
+            if curr_ts is None or (since and curr_ts < since):
+                continue
 
-            if waste_tracker._is_reset_event(prev, curr):
-                # When a reset happens, we assume usage was the remainder in the old bucket
-                # plus what we see used in the new bucket. BUT waste_tracker assumes the 
-                # remainder in the old bucket was "wasted" (unused). 
-                # To align with not overcounting, we only count the usage we can verify:
-                # which is the usage in the new bucket (100 - curr.pct_left).
-                usage = 100.0 - (curr.get("pct_left") or 0.0)
+            usage = 0.0
+            if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
+                p_remaining = _snapshot_float(prev, "remaining")
+                c_remaining = _snapshot_float(curr, "remaining")
+                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                    usage = p_remaining - c_remaining
+            elif waste_tracker._is_reset_event(prev, curr):
+                usage = 100.0 - float(curr.get("pct_left") or 0.0)
             else:
-                p_val = prev.get("pct_left") or 0.0
-                c_val = curr.get("pct_left") or 0.0
+                p_val = float(prev.get("pct_left") or 0.0)
+                c_val = float(curr.get("pct_left") or 0.0)
                 if c_val < p_val:
                     usage = p_val - c_val
-            
+
             if usage > 0:
-                if date_str not in history:
-                    history[date_str] = {}
+                date_str = curr_ts.strftime("%Y-%m-%d")
+                history.setdefault(date_str, {})
                 history[date_str][key] = round(history[date_str].get(key, 0.0) + usage, 2)
-                
     return history
 
-def _get_merged_history():
-    """Merge dynamically computed usage with imported historical usage."""
-    live = compute_daily_usage()
+
+def _get_merged_history(days=365, config=None):
+    """Merge dynamically computed daily usage with imported historical usage."""
+    live = compute_daily_usage(days=days, config=config)
     imported = _load_imported_data()
-    
+    since = _since_for_days(days)
+
     merged = {}
     all_dates = set(live.keys()) | set(imported.keys())
-    
     for date_str in all_dates:
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if since and dt < since:
+            continue
         merged[date_str] = {}
         for k, v in imported.get(date_str, {}).items():
-            merged[date_str][k] = v
+            if not waste_tracker._snapshot_key_is_config_ignored(k, config):
+                merged[date_str][k] = v
         for k, v in live.get(date_str, {}).items():
             prev_v = merged[date_str].get(k, 0.0)
-            merged[date_str][k] = max(prev_v, v)
-            
+            merged[date_str][k] = round(max(prev_v, v), 2)
     return merged
 
-def _load_data():
+
+def _observed_totals(observed):
+    totals = {
+        "requests": 0,
+        "cost": 0.0,
+        "tokens": {
+            "total": 0,
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+        },
+        "credit_used": 0.0,
+    }
+    if not isinstance(observed, dict):
+        return totals
+
+    for source in observed.values():
+        if not isinstance(source, dict):
+            continue
+        for limit in source.get("credit_limits") or []:
+            try:
+                totals["credit_used"] += float(limit.get("used") or 0.0)
+            except (TypeError, ValueError):
+                pass
+        for window in source.get("windows") or []:
+            for model in window.get("models") or []:
+                try:
+                    totals["requests"] += int(model.get("requests") or 0)
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    totals["cost"] += float(model.get("cost") or 0.0)
+                except (TypeError, ValueError):
+                    pass
+                tokens = model.get("tokens") or {}
+                if not isinstance(tokens, dict):
+                    continue
+                cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+                token_values = {
+                    "total": tokens.get("total"),
+                    "input": tokens.get("input"),
+                    "output": tokens.get("output"),
+                    "reasoning": tokens.get("reasoning"),
+                    "cache_read": cache.get("read") if cache else tokens.get("cache_read"),
+                    "cache_write": cache.get("write") if cache else tokens.get("cache_write"),
+                }
+                for key, value in token_values.items():
+                    try:
+                        totals["tokens"][key] += int(value or 0)
+                    except (TypeError, ValueError):
+                        pass
+    totals["cost"] = round(totals["cost"], 6)
+    totals["credit_used"] = round(totals["credit_used"], 6)
+    return totals
+
+
+def compute_usage_analytics(days=365, observed=None, config=None):
+    """Return normalized usage analytics for CLI text and JSON reports."""
+    snapshot_values = compute_consolidated_usage(days, config=config)
+    raw_waste = waste_tracker.compute_waste(days, config=config)
+    waste = {
+        key: {"key": key, "tool": _tool_from_key(key), **data}
+        for key, data in sorted(raw_waste.items())
+    }
+
+    snapshot_usage = {}
+    snapshot_totals = {"percent": 0.0, "usd": 0.0, "keys": len(snapshot_values), "quota_keys": 0}
+    for key in sorted(snapshot_values):
+        used = snapshot_values[key]
+        unit = _snapshot_unit_for_key(key)
+        snapshot_usage[key] = {
+            "key": key,
+            "tool": _tool_from_key(key),
+            "used": used,
+            "unit": unit,
+        }
+        snapshot_totals[unit] = round(snapshot_totals.get(unit, 0.0) + used, 2)
+        if unit == "percent":
+            snapshot_totals["quota_keys"] += 1
+
+    waste_totals = {
+        "keys": len(waste),
+        "reset_count": sum(int(v.get("reset_count") or 0) for v in waste.values()),
+    }
+    analytics = {
+        "metadata": {
+            "version": ANALYTICS_VERSION,
+            "days": days,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "snapshot_usage": snapshot_usage,
+        "history": _get_merged_history(days=days, config=config),
+        "waste": waste,
+        "observed": observed or {},
+        "totals": {
+            "snapshot_usage": snapshot_totals,
+            "waste": waste_totals,
+            "observed": _observed_totals(observed or {}),
+        },
+    }
+    return analytics
+
+
+def _load_data(days=365):
     """
-    Backward compatibility for cli.py which prints raw data.
+    Backward compatibility for cli.py and callers that expect loadable usage data.
     """
-    return {"version": 2, "history": _get_merged_history()}
+    analytics = compute_usage_analytics(days)
+    analytics["version"] = 4
+    analytics["consolidated_usage"] = {
+        key: item["used"] for key, item in analytics["snapshot_usage"].items()
+    }
+    return analytics
 
 def record_usage(result):
     """
@@ -110,8 +327,22 @@ def record_usage(result):
     pass
 
 def export_usage(export_path):
-    history = _get_merged_history()
-    export_data = {"version": 2, "history": history}
+    rows = waste_tracker._load_snapshots()
+    export_rows = []
+    for r in rows:
+        row_copy = r.copy()
+        row_copy.pop("_ts", None)
+        export_rows.append(row_copy)
+
+    export_data = {
+        "version": 3,
+        "snapshots": export_rows,
+        # Backward-compatible merged history for scripts that still consume
+        # version-2 exports. Importers should not add this on top of snapshots.
+        "history": _get_merged_history(days=None),
+        # Raw legacy imports that cannot be reconstructed from snapshots.
+        "imported_history": _load_imported_data(),
+    }
     try:
         with open(export_path, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2)
@@ -123,45 +354,268 @@ def import_usage(import_path):
     try:
         with open(import_path, "r", encoding="utf-8") as f:
             new_data = json.load(f)
-            
-        incoming_history = new_data.get("history", {})
+
+        snapshots_ok = True
+        if "snapshots" in new_data:
+            snapshots_ok = waste_tracker.merge_snapshots(new_data["snapshots"])
+
+        incoming_history = new_data.get("imported_history", {})
+        if not incoming_history and "snapshots" not in new_data:
+            incoming_history = new_data.get("history", {})
         if not incoming_history and not new_data.get("version"):
             if any(isinstance(v, dict) for v in new_data.values()):
                 incoming_history = new_data
-                
+
         imported = _load_imported_data()
-        
+
         for date_str, daily_usage in incoming_history.items():
             if date_str not in imported:
                 imported[date_str] = {}
             for k, v in daily_usage.items():
-                imported[date_str][k] = max(imported[date_str].get(k, 0.0), v)
-                
+                imported[date_str][k] = round(max(imported[date_str].get(k, 0.0), v), 2)
+
         _save_imported_data(imported)
-        return True
+        return snapshots_ok
     except (json.JSONDecodeError, OSError):
         return False
 
-def display_usage_report(args, print_c):
-    history = _get_merged_history()
-    print_c("\n  ═══ Usage Tracking Report ═══", "\033[1;35m", args.no_color)
+def has_observed(data):
+    if not data: return False
+    for k in ["opencode", "pi", "copilot_cli"]:
+        src = data.get(k, {})
+        if src.get("credit_limits") or any(w.get("models") for w in src.get("windows", [])): return True
+        if "error" in src and k == "opencode": return True
+    return False
 
-    if not history:
+
+def _color(text, color, no_color):
+    return text if no_color else f"{color}{text}\033[0m"
+
+
+def _friendly_snapshot_label(key):
+    key = str(key)
+    if key.startswith("amp::"):
+        return key.replace("amp::", "Amp ", 1)
+    if key.startswith("antigravity:"):
+        rest = key.replace("antigravity:", "", 1)
+        return f"Antigravity {rest.replace('::', ' / ')}"
+    if key.startswith("codex-"):
+        rest = key.replace("codex-", "", 1)
+        return f"Codex {rest.replace('::', ' / ')}"
+    return key.replace("::", " / ")
+
+
+def _shorten(text, width):
+    text = str(text)
+    return text if len(text) <= width else text[: max(0, width - 1)] + "…"
+
+
+def _usage_health(used):
+    if used >= 80:
+        return "high"
+    if used >= 40:
+        return "active"
+    if used > 0:
+        return "light"
+    return "idle"
+
+
+def _bar(value, width=10):
+    value = max(0.0, min(100.0, float(value or 0.0)))
+    filled = int(round((value / 100.0) * width))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _box(title, lines, no_color=False):
+    width = max([len(title) + 4] + [len(line) for line in lines])
+    top = f"╭─ {title} " + "─" * max(0, width - len(title) - 3) + "╮"
+    bottom = "╰" + "─" * (len(top) - 2) + "╯"
+    body = [f"│ {line:<{len(top) - 4}} │" for line in lines]
+    return "\n".join([top] + body + [bottom])
+
+
+def _waste_summary(avg, resets):
+    if resets <= 0:
+        return "no resets yet"
+    verdict = waste_tracker._verdict(avg)
+    return f"{avg:.0f}% unused avg · {verdict}"
+
+
+def _fmt_snapshot_total(totals):
+    parts = []
+    if totals.get("percent"):
+        parts.append(f"{totals['percent']:.1f}% quota used")
+    if totals.get("usd"):
+        parts.append(f"${totals['usd']:.2f} Amp used")
+    if not parts:
+        parts.append("no snapshot usage")
+    return " · ".join(parts)
+
+
+def _fmt_tokens(value):
+    value = int(value or 0)
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return str(value)
+
+
+def _fmt_observed_total(totals):
+    requests = int(totals.get("requests") or 0)
+    cost = float(totals.get("cost") or 0.0)
+    token_total = int((totals.get("tokens") or {}).get("total") or 0)
+    parts = []
+    if requests:
+        parts.append(f"{requests} requests")
+    if token_total:
+        parts.append(f"{_fmt_tokens(token_total)} tokens")
+    if cost:
+        parts.append(f"${cost:.2f}")
+    return " · ".join(parts) if parts else "no observed spend"
+
+
+def _observed_activity_rows(observed):
+    rows = []
+    if not isinstance(observed, dict):
+        return rows
+    for source_name, source in observed.items():
+        if not isinstance(source, dict):
+            continue
+        for window in source.get("windows") or []:
+            for model in window.get("models") or []:
+                tokens = model.get("tokens") or {}
+                try:
+                    total_tokens = int(tokens.get("total") or 0) if isinstance(tokens, dict) else 0
+                except (TypeError, ValueError):
+                    total_tokens = 0
+                try:
+                    requests = int(model.get("requests") or 0)
+                except (TypeError, ValueError):
+                    requests = 0
+                try:
+                    cost = float(model.get("cost") or 0.0)
+                except (TypeError, ValueError):
+                    cost = 0.0
+                if not (total_tokens or requests or cost):
+                    continue
+                provider = model.get("provider") or source_name
+                name = model.get("model") or "unknown"
+                rows.append({
+                    "label": f"{source_name} {provider}/{name}",
+                    "requests": requests,
+                    "tokens": total_tokens,
+                    "cost": cost,
+                })
+    rows.sort(key=lambda r: (r["cost"], r["tokens"], r["requests"]), reverse=True)
+    return rows
+
+
+def display_consolidated_report(args, print_c, opencode_data=None, analytics=None, config=None):
+    analytics = analytics or compute_usage_analytics(args.days, observed=opencode_data, config=config)
+    usage_by_key = {
+        key: item.get("used", 0.0)
+        for key, item in analytics.get("snapshot_usage", {}).items()
+    }
+    waste_by_key = analytics.get("waste", {})
+    observed = analytics.get("observed") or opencode_data or {}
+
+    totals = analytics.get("totals", {})
+
+    if not usage_by_key and not waste_by_key and not has_observed(observed):
+        print_c(f"\n  ═══ Usage Summary · last {args.days} days ═══", "\033[1;35m", args.no_color)
         print_c("    No usage history recorded yet.", "\033[90m", args.no_color)
+        print_c("    Run `limitlens --record` occasionally to build a history.", "\033[90m", args.no_color)
         return
 
-    for date_str in sorted(history.keys(), reverse=True)[:7]: # Last 7 days
-        print_c(f"\n  Date: {date_str}", "\033[1m", args.no_color)
-        daily = history[date_str]
+    snapshot_totals = totals.get("snapshot_usage", {})
+    observed_total = _fmt_observed_total(totals.get("observed", {}))
+    waste_total = totals.get("waste", {})
+    reset_count = int(waste_total.get("reset_count") or 0)
+    quota_used = float(snapshot_totals.get("percent") or 0.0)
+    amp_used = float(snapshot_totals.get("usd") or 0.0)
+    quota_count = int(snapshot_totals.get("quota_keys") or 0)
+    overall = "Good activity" if quota_used or amp_used or has_observed(observed) else "No recent activity"
 
-        if not daily:
-            print_c("    No usage", "\033[90m", args.no_color)
-            continue
+    print("\n  " + _box(
+        f"LimitLens Usage · last {args.days} days",
+        [
+            f"Overall        {overall}",
+            f"Quota usage    {_bar(min(quota_used, 100))}  {quota_used:.1f}% across {quota_count} quotas",
+            f"Amp spend      ${amp_used:.2f}",
+            f"API spend      {observed_total}",
+            f"Waste risk     {reset_count} reset{'s' if reset_count != 1 else ''} had leftover quota",
+        ],
+        args.no_color,
+    ).replace("\n", "\n  "))
 
-        items = sorted(daily.items(), key=lambda x: -x[1])
-        for key, usage in items:
-            color = "\033[32m" if usage < 20 else "\033[33m" if usage < 80 else "\033[31m"
-            if args.no_color:
-                print(f"    {key:<40} {usage:>6.1f}% used")
-            else:
-                print(f"    {key:<40} {color}{usage:>6.1f}% used\033[0m")
+    all_keys = set(usage_by_key.keys()) | set(waste_by_key.keys())
+    quota_items = [k for k in all_keys if not _is_amp_key(k)]
+    amp_items = [k for k in all_keys if _is_amp_key(k)]
+
+    if quota_items:
+        print_c("\n  Quota usage", "\033[1;36m", args.no_color)
+        items = sorted(quota_items, key=lambda k: usage_by_key.get(k, 0.0), reverse=True)
+        max_rows = len(items) if getattr(args, "verbose", False) else 5
+        for key in items[:max_rows]:
+            usage = float(usage_by_key.get(key, 0.0))
+            label = _shorten(_friendly_snapshot_label(key), 30)
+            color = "\033[32m" if usage < 40 else "\033[33m" if usage < 80 else "\033[31m"
+            used_text = _color(f"{_bar(usage)}  {usage:5.1f}%", color, args.no_color)
+            print(f"    {label:<30} {used_text}   {_usage_health(usage)}")
+        hidden = len(items) - max_rows
+        if hidden > 0:
+            print_c(f"    +{hidden} more (use --verbose)", "\033[90m", args.no_color)
+
+    activity_rows = _observed_activity_rows(observed)
+    if activity_rows:
+        print_c("\n  Tokens / requests", "\033[1;36m", args.no_color)
+        max_rows = len(activity_rows) if getattr(args, "verbose", False) else 5
+        for row in activity_rows[:max_rows]:
+            cost_text = f" · ${row['cost']:.2f}" if row["cost"] else ""
+            print(
+                f"    {_shorten(row['label'], 30):<30} "
+                f"{_fmt_tokens(row['tokens']):>7} tokens · {row['requests']:>4} req{cost_text}"
+            )
+        hidden = len(activity_rows) - max_rows
+        if hidden > 0:
+            print_c(f"    +{hidden} more (use --verbose)", "\033[90m", args.no_color)
+        if quota_items:
+            print_c("    Note: token/request data comes from observed providers, not quota snapshots.", "\033[90m", args.no_color)
+
+    if amp_items or has_observed(observed):
+        print_c("\n  Spend", "\033[1;36m", args.no_color)
+        for key in sorted(amp_items):
+            usage = float(usage_by_key.get(key, 0.0))
+            print(f"    {_shorten(_friendly_snapshot_label(key), 30):<30} ${usage:.2f} used")
+        if has_observed(observed):
+            print(f"    {'OpenCode / Pi / Copilot':<30} {observed_total}")
+
+    warning_items = sorted(
+        [(k, v) for k, v in waste_by_key.items() if float(v.get("avg_wasted_pct") or 0.0) >= 30],
+        key=lambda kv: float(kv[1].get("avg_wasted_pct") or 0.0),
+        reverse=True,
+    )
+    if warning_items:
+        key, data = warning_items[0]
+        avg = float(data.get("avg_wasted_pct") or 0.0)
+        print_c("\n  Waste warning", "\033[1;36m", args.no_color)
+        if data.get("waste_unit") == "usd":
+            avg_usd = float(data.get("avg_wasted_usd") or 0.0)
+            print(f"    {_friendly_snapshot_label(key)} missed about ${avg_usd:.2f} refill on average while capped.")
+            print("    Action: use Amp credits before the pool stays capped.")
+        else:
+            print(f"    {_friendly_snapshot_label(key)} reset with {avg:.0f}% unused on average.")
+            print("    Action: use this quota earlier before reset.")
+    else:
+        print_c("\n  Tip: use `limitlens --waste` to see reset waste details.", "\033[90m", args.no_color)
+
+    if getattr(args, "verbose", False) and all_keys:
+        print_c("\n  Raw snapshot keys", "\033[90m", args.no_color)
+        for key in sorted(all_keys):
+            print_c(f"    {key}", "\033[90m", args.no_color)
+
+
+def display_usage_report(args, print_c):
+    """Backward-compatible alias for the consolidated report."""
+    display_consolidated_report(args, print_c)
