@@ -138,6 +138,25 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("X-merlin-version", request.headers)
         self.assertIn("X-request-timestamp", request.headers)
 
+    @patch.dict("os.environ", {
+        "COMMANDCODE_AUTHORIZATION": "Bearer redacted\r\nX-Bad: yes",
+        "COMMANDCODE_COOKIE": "session=redacted\r\nX-Bad: yes",
+        "COMMANDCODE_USER_AGENT": "LimitLens\r\nX-Bad: yes",
+        "COMMANDCODE_ORIGIN": "https://api.commandcode.ai\r\nX-Bad: yes",
+    }, clear=True)
+    @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})
+    @patch("limitlens.providers.commandcode._open_no_redirect", return_value=FakeResponse({"credits": {"purchasedCredits": 2.5}}))
+    def test_get_credits_strips_header_newlines(self, mock_open, mock_config):
+        data = get_commandcode_data(self.args)
+
+        self.assertAlmostEqual(data["available"], 2.5)
+        request = mock_open.call_args[0][0]
+        for value in request.headers.values():
+            self.assertNotIn("\r", value)
+            self.assertNotIn("\n", value)
+        self.assertEqual(request.headers["Authorization"], "Bearer redactedX-Bad: yes")
+        self.assertEqual(request.headers["Cookie"], "session=redactedX-Bad: yes")
+
     def test_monthly_sub_buckets_do_not_double_count_total(self):
         data = parse_commandcode_credits({
             "credits": {

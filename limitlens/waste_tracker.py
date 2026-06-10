@@ -615,9 +615,9 @@ def display_waste_report(report, days, args, print_c):
     print("\n  " + _box(
         f"LimitLens Waste · last {days} days",
         [
-            "Waste means quota left unused when it resets",
-            f"Resets measured     {total_resets}",
-            f"Avg unused          {_bar(weighted_avg)}  {weighted_avg:.1f}%",
+            "Waste means unused quota at reset or missed refill while capped",
+            f"Events measured     {total_resets}",
+            f"Avg waste           {_bar(weighted_avg)}  {weighted_avg:.1f}%",
             f"Needs attention     {needs_attention} quota{'s' if needs_attention != 1 else ''}",
             f"Worst quota         {_shorten(_friendly_key(worst_key), 34)}",
         ],
@@ -638,17 +638,32 @@ def display_waste_report(report, days, args, print_c):
             mx = float(data["max_wasted_pct"])
             n = int(data["reset_count"])
             color = "\033[31m" if avg >= 60 else "\033[33m" if avg >= 30 else "\033[32m"
-            line = f"{_bar(avg)}  {avg:5.1f}% unused"
+            if data.get("waste_unit") == "usd":
+                avg_usd = float(data.get("avg_wasted_usd") or 0.0)
+                mx_usd = float(data.get("max_wasted_usd") or 0.0)
+                line = f"{_bar(avg)}  ${avg_usd:5.2f} missed refill avg ({avg:4.1f}% cap)"
+                action = "use Amp credits before the pool stays capped"
+                status = f"{_verdict(avg)} · estimated"
+            else:
+                mx_usd = None
+                line = f"{_bar(avg)}  {avg:5.1f}% unused"
+                action = "use this quota earlier before reset"
+                status = _verdict(avg)
             print(f"    {_shorten(_friendly_key(key), 30):<30} {_color(line, color, args.no_color)}")
             if title == "Needs attention":
-                print(f"      Status: {_verdict(avg)} · Action: use this quota earlier before reset")
+                print(f"      Status: {status} · Action: {action}")
             else:
-                print(f"      Status: {_verdict(avg)}")
+                print(f"      Status: {status}")
             if getattr(args, "verbose", False):
                 print_c(f"      raw: {key}", "\033[90m", args.no_color)
-                print_c(f"      resets: {n}, worst: {mx:.1f}%, last seen: {data.get('last_seen_at', 'unknown')}", "\033[90m", args.no_color)
-                for event in data.get("events", []):
-                    print_c(f"      event: {event.get('at')} · {event.get('wasted_pct')}% unused", "\033[90m", args.no_color)
+                if mx_usd is not None:
+                    print_c(f"      events: {n}, worst: ${mx_usd:.2f} ({mx:.1f}% cap), last seen: {data.get('last_seen_at', 'unknown')}", "\033[90m", args.no_color)
+                    for event in data.get("events", []):
+                        print_c(f"      event: {event.get('at')} · ${float(event.get('wasted_usd') or 0.0):.2f} missed refill", "\033[90m", args.no_color)
+                else:
+                    print_c(f"      resets: {n}, worst: {mx:.1f}%, last seen: {data.get('last_seen_at', 'unknown')}", "\033[90m", args.no_color)
+                    for event in data.get("events", []):
+                        print_c(f"      event: {event.get('at')} · {event.get('wasted_pct')}% unused", "\033[90m", args.no_color)
         hidden = len(rows) - max_rows
         if hidden > 0:
             print_c(f"    +{hidden} more (use --verbose)", "\033[90m", args.no_color)

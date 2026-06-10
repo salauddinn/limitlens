@@ -473,6 +473,36 @@ def test_display_waste_report(capsys):
     assert "\033[" not in out
 
 
+def test_display_waste_report_formats_amp_dollar_waste(capsys):
+    args = MagicMock()
+    args.no_color = True
+    args.verbose = True
+
+    def dummy_print_c(text, color, no_color):
+        print(text)
+
+    report = {
+        "amp::amp-pro": {
+            "waste_unit": "usd",
+            "reset_count": 1,
+            "avg_wasted_usd": 2.5,
+            "max_wasted_usd": 2.5,
+            "total_wasted_usd": 2.5,
+            "avg_wasted_pct": 5.0,
+            "max_wasted_pct": 5.0,
+            "last_seen_at": "t2",
+            "events": [{"at": "t2", "wasted_usd": 2.5, "estimated": True}],
+        }
+    }
+
+    waste_tracker.display_waste_report(report, 7, args, dummy_print_c)
+    out, err = capsys.readouterr()
+
+    assert "$ 2.50 missed refill avg" in out
+    assert "$2.50 missed refill" in out
+    assert "None% unused" not in out
+
+
 def test_print_setup_hint():
     args = MagicMock()
     args.no_color = True

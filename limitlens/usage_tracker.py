@@ -69,8 +69,14 @@ def _tool_from_key(key):
 def _snapshot_unit_for_key(key):
     return "usd" if _is_amp_key(key) else "percent"
 
+def _since_for_days(days):
+    if days is None:
+        return None
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
 def compute_consolidated_usage(days, config=None):
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = _since_for_days(days)
     rows = waste_tracker._load_snapshots_with_anchor(since)
 
     by_key = {}
@@ -89,7 +95,7 @@ def compute_consolidated_usage(days, config=None):
         total_usage = 0.0
 
         for prev, curr in zip(series, series[1:]):
-            if curr["_ts"] < since:
+            if since and curr["_ts"] < since:
                 continue
 
             usage = 0.0
@@ -116,7 +122,7 @@ def compute_consolidated_usage(days, config=None):
     for date_str, daily_usage in imported.items():
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            if dt >= since:
+            if since is None or dt >= since:
                 for k, v in daily_usage.items():
                     if waste_tracker._snapshot_key_is_config_ignored(k, config):
                         continue
@@ -125,6 +131,78 @@ def compute_consolidated_usage(days, config=None):
             continue
 
     return usage_by_key
+
+
+def compute_daily_usage(days=365, config=None):
+    """
+    Backward-compatible daily usage history derived from snapshots.
+
+    Returns dict[YYYY-MM-DD] -> dict[snapshot_key] -> usage_float.
+    """
+    since = _since_for_days(days)
+    rows = waste_tracker._load_snapshots_with_anchor(since)
+    by_key = {}
+    for row in rows:
+        key = row.get("key")
+        if not key:
+            continue
+        if waste_tracker._snapshot_key_is_config_ignored(key, config):
+            continue
+        by_key.setdefault(key, []).append(row)
+
+    history = {}
+    for key, series in by_key.items():
+        series.sort(key=lambda r: r["_ts"])
+        for prev, curr in zip(series, series[1:]):
+            curr_ts = curr.get("_ts")
+            if curr_ts is None or (since and curr_ts < since):
+                continue
+
+            usage = 0.0
+            if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
+                p_remaining = _snapshot_float(prev, "remaining")
+                c_remaining = _snapshot_float(curr, "remaining")
+                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                    usage = p_remaining - c_remaining
+            elif waste_tracker._is_reset_event(prev, curr):
+                usage = 100.0 - float(curr.get("pct_left") or 0.0)
+            else:
+                p_val = float(prev.get("pct_left") or 0.0)
+                c_val = float(curr.get("pct_left") or 0.0)
+                if c_val < p_val:
+                    usage = p_val - c_val
+
+            if usage > 0:
+                date_str = curr_ts.strftime("%Y-%m-%d")
+                history.setdefault(date_str, {})
+                history[date_str][key] = round(history[date_str].get(key, 0.0) + usage, 2)
+    return history
+
+
+def _get_merged_history(days=365, config=None):
+    """Merge dynamically computed daily usage with imported historical usage."""
+    live = compute_daily_usage(days=days, config=config)
+    imported = _load_imported_data()
+    since = _since_for_days(days)
+
+    merged = {}
+    all_dates = set(live.keys()) | set(imported.keys())
+    for date_str in all_dates:
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if since and dt < since:
+            continue
+        merged[date_str] = {}
+        for k, v in imported.get(date_str, {}).items():
+            if not waste_tracker._snapshot_key_is_config_ignored(k, config):
+                merged[date_str][k] = v
+        for k, v in live.get(date_str, {}).items():
+            prev_v = merged[date_str].get(k, 0.0)
+            merged[date_str][k] = round(max(prev_v, v), 2)
+    return merged
+
 
 def _observed_totals(observed):
     totals = {
@@ -193,7 +271,7 @@ def compute_usage_analytics(days=365, observed=None, config=None):
     }
 
     snapshot_usage = {}
-    snapshot_totals = {"percent": 0.0, "usd": 0.0, "keys": len(snapshot_values)}
+    snapshot_totals = {"percent": 0.0, "usd": 0.0, "keys": len(snapshot_values), "quota_keys": 0}
     for key in sorted(snapshot_values):
         used = snapshot_values[key]
         unit = _snapshot_unit_for_key(key)
@@ -204,6 +282,8 @@ def compute_usage_analytics(days=365, observed=None, config=None):
             "unit": unit,
         }
         snapshot_totals[unit] = round(snapshot_totals.get(unit, 0.0) + used, 2)
+        if unit == "percent":
+            snapshot_totals["quota_keys"] += 1
 
     waste_totals = {
         "keys": len(waste),
@@ -216,6 +296,7 @@ def compute_usage_analytics(days=365, observed=None, config=None):
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "snapshot_usage": snapshot_usage,
+        "history": _get_merged_history(days=days, config=config),
         "waste": waste,
         "observed": observed or {},
         "totals": {
@@ -253,7 +334,15 @@ def export_usage(export_path):
         row_copy.pop("_ts", None)
         export_rows.append(row_copy)
 
-    export_data = {"version": 3, "snapshots": export_rows}
+    export_data = {
+        "version": 3,
+        "snapshots": export_rows,
+        # Backward-compatible merged history for scripts that still consume
+        # version-2 exports. Importers should not add this on top of snapshots.
+        "history": _get_merged_history(days=None),
+        # Raw legacy imports that cannot be reconstructed from snapshots.
+        "imported_history": _load_imported_data(),
+    }
     try:
         with open(export_path, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2)
@@ -266,10 +355,13 @@ def import_usage(import_path):
         with open(import_path, "r", encoding="utf-8") as f:
             new_data = json.load(f)
 
+        snapshots_ok = True
         if "snapshots" in new_data:
-            return waste_tracker.merge_snapshots(new_data["snapshots"])
+            snapshots_ok = waste_tracker.merge_snapshots(new_data["snapshots"])
 
-        incoming_history = new_data.get("history", {})
+        incoming_history = new_data.get("imported_history", {})
+        if not incoming_history and "snapshots" not in new_data:
+            incoming_history = new_data.get("history", {})
         if not incoming_history and not new_data.get("version"):
             if any(isinstance(v, dict) for v in new_data.values()):
                 incoming_history = new_data
@@ -280,10 +372,10 @@ def import_usage(import_path):
             if date_str not in imported:
                 imported[date_str] = {}
             for k, v in daily_usage.items():
-                imported[date_str][k] = round(imported[date_str].get(k, 0.0) + v, 2)
+                imported[date_str][k] = round(max(imported[date_str].get(k, 0.0), v), 2)
 
         _save_imported_data(imported)
-        return True
+        return snapshots_ok
     except (json.JSONDecodeError, OSError):
         return False
 
@@ -393,9 +485,18 @@ def _observed_activity_rows(observed):
         for window in source.get("windows") or []:
             for model in window.get("models") or []:
                 tokens = model.get("tokens") or {}
-                total_tokens = int(tokens.get("total") or 0) if isinstance(tokens, dict) else 0
-                requests = int(model.get("requests") or 0)
-                cost = float(model.get("cost") or 0.0)
+                try:
+                    total_tokens = int(tokens.get("total") or 0) if isinstance(tokens, dict) else 0
+                except (TypeError, ValueError):
+                    total_tokens = 0
+                try:
+                    requests = int(model.get("requests") or 0)
+                except (TypeError, ValueError):
+                    requests = 0
+                try:
+                    cost = float(model.get("cost") or 0.0)
+                except (TypeError, ValueError):
+                    cost = 0.0
                 if not (total_tokens or requests or cost):
                     continue
                 provider = model.get("provider") or source_name
@@ -433,7 +534,7 @@ def display_consolidated_report(args, print_c, opencode_data=None, analytics=Non
     reset_count = int(waste_total.get("reset_count") or 0)
     quota_used = float(snapshot_totals.get("percent") or 0.0)
     amp_used = float(snapshot_totals.get("usd") or 0.0)
-    quota_count = int(snapshot_totals.get("keys") or 0)
+    quota_count = int(snapshot_totals.get("quota_keys") or 0)
     overall = "Good activity" if quota_used or amp_used or has_observed(observed) else "No recent activity"
 
     print("\n  " + _box(
@@ -499,8 +600,13 @@ def display_consolidated_report(args, print_c, opencode_data=None, analytics=Non
         key, data = warning_items[0]
         avg = float(data.get("avg_wasted_pct") or 0.0)
         print_c("\n  Waste warning", "\033[1;36m", args.no_color)
-        print(f"    {_friendly_snapshot_label(key)} reset with {avg:.0f}% unused on average.")
-        print("    Action: use this quota earlier before reset.")
+        if data.get("waste_unit") == "usd":
+            avg_usd = float(data.get("avg_wasted_usd") or 0.0)
+            print(f"    {_friendly_snapshot_label(key)} missed about ${avg_usd:.2f} refill on average while capped.")
+            print("    Action: use Amp credits before the pool stays capped.")
+        else:
+            print(f"    {_friendly_snapshot_label(key)} reset with {avg:.0f}% unused on average.")
+            print("    Action: use this quota earlier before reset.")
     else:
         print_c("\n  Tip: use `limitlens --waste` to see reset waste details.", "\033[90m", args.no_color)
 

@@ -144,9 +144,10 @@ class TestUsageTracker(unittest.TestCase):
         self.assertEqual(quota["unit"], "percent")
         self.assertEqual(analytics["totals"]["snapshot_usage"]["percent"], 30.0)
 
+    @patch('limitlens.usage_tracker._get_merged_history', return_value={"2023-10-01": {"codex": 50.0}})
     @patch('limitlens.usage_tracker.waste_tracker._load_snapshots')
     @patch('builtins.open', new_callable=mock_open)
-    def test_export_usage(self, mock_file, mock_snapshots):
+    def test_export_usage(self, mock_file, mock_snapshots, mock_history):
         mock_snapshots.return_value = [{"key": "codex", "pct_left": 10.0, "_ts": "internal"}]
         res = usage_tracker.export_usage("dummy.json")
         self.assertTrue(res)
@@ -154,7 +155,11 @@ class TestUsageTracker(unittest.TestCase):
         # verify dump
         written = "".join(call[0][0] for call in mock_file().write.call_args_list)
         self.assertIn('"codex"', written)
+        self.assertIn('"history"', written)
+        self.assertIn('"imported_history"', written)
+        self.assertIn('"snapshots"', written)
         self.assertNotIn('_ts', written)
+        mock_history.assert_called_once_with(days=None)
 
     @patch('limitlens.usage_tracker.waste_tracker.merge_snapshots')
     @patch('builtins.open', new_callable=mock_open, read_data='{"version": 3, "snapshots": [{"key": "c"}]}')
@@ -170,7 +175,27 @@ class TestUsageTracker(unittest.TestCase):
     def test_import_usage_legacy(self, mock_save, mock_load, mock_file):
         res = usage_tracker.import_usage("dummy.json")
         self.assertTrue(res)
-        mock_save.assert_called_once_with({"2023-10-01": {"codex": 60.0}}) # 50 + 10 = 60
+        mock_save.assert_called_once_with({"2023-10-01": {"codex": 50.0}}) # max-merge keeps imports idempotent
+
+    @patch('limitlens.usage_tracker.waste_tracker.merge_snapshots', return_value=True)
+    @patch('builtins.open', new_callable=mock_open, read_data='{"version": 3, "snapshots": [{"key": "c"}], "history": {"2023-10-01": {"codex": 50.0}}, "imported_history": {"2023-09-01": {"legacy": 5.0}}}')
+    @patch('limitlens.usage_tracker._load_imported_data', return_value={})
+    @patch('limitlens.usage_tracker._save_imported_data')
+    def test_import_usage_v3_preserves_only_imported_history_with_snapshots(self, mock_save, mock_load, mock_file, mock_merge):
+        res = usage_tracker.import_usage("dummy.json")
+        self.assertTrue(res)
+        mock_merge.assert_called_once_with([{"key": "c"}])
+        mock_save.assert_called_once_with({"2023-09-01": {"legacy": 5.0}})
+
+    @patch('limitlens.usage_tracker.waste_tracker.merge_snapshots', return_value=True)
+    @patch('builtins.open', new_callable=mock_open, read_data='{"version": 3, "snapshots": [{"key": "c"}], "history": {"2023-10-01": {"codex": 50.0}}}')
+    @patch('limitlens.usage_tracker._load_imported_data', return_value={})
+    @patch('limitlens.usage_tracker._save_imported_data')
+    def test_import_usage_v3_does_not_double_count_derived_history(self, mock_save, mock_load, mock_file, mock_merge):
+        res = usage_tracker.import_usage("dummy.json")
+        self.assertTrue(res)
+        mock_merge.assert_called_once_with([{"key": "c"}])
+        mock_save.assert_called_once_with({})
 
 if __name__ == '__main__':
     unittest.main()

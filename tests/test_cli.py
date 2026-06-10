@@ -216,6 +216,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(payload["waste"], {})
         self.assertEqual(payload["observed"], observed)
         self.assertEqual(payload["totals"]["observed"]["requests"], 1)
+        self.assertEqual(payload["history"][now.strftime("%Y-%m-%d")], {"codex-default::weekly": 20.0})
         self.assertEqual(payload["consolidated_usage"], {"codex-default::weekly": 20.0})
         mock_observed.assert_called_once()
 
