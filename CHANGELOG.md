@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-06-10
+## [1.3.2] - 2026-06-10
 
 ### Added
 - Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
