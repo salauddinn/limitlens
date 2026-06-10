@@ -6,7 +6,7 @@
   <title>LimitLens — Unified Quota Monitor & Recommendations for AI Coding Tools</title>
   
   <!-- SEO Meta Tags -->
-  <meta name="description" content="Stop hitting rate limits. Monitor remaining headroom, resets, and get smart routing recommendations across Codex, Cursor, Amp, Antigravity, OpenCode, and more. Zero dependencies, 100% local.">
+  <meta name="description" content="Stop hitting rate limits. Monitor remaining headroom, resets, spend, waste, and get smart routing recommendations across Codex, Cursor, Amp, Antigravity, OpenCode, and more. Zero dependencies, local-first.">
   <meta name="keywords" content="ai, quota, rate-limit, cursor, codex, copilot, claude code, terminal, developer-tools, menubar, iterm2">
   <meta name="author" content="Salauddin">
   
@@ -63,7 +63,7 @@
     <div class="container hero-grid">
       <div class="hero-content">
         <h1>Never hit an <br><span>AI Rate Limit</span> again.</h1>
-        <p>The ultimate unified quota monitor and recommendation engine for AI coding tools. Written in standard Python with <strong>zero runtime dependencies</strong>, 100% locally and privately.</p>
+        <p>The ultimate unified quota monitor and recommendation engine for AI coding tools. Written in standard Python with <strong>zero runtime dependencies</strong>, local-first storage, and privacy-safe provider checks.</p>
         <div class="hero-ctas">
           <a href="#install" class="btn-primary">
             <span>Get Started</span>
@@ -104,6 +104,11 @@
           <span class="feature-icon">⚡</span>
           <h3>Zero-Dependency CLI</h3>
           <p>Built completely on top of standard library Python modules. No external dependencies, heavy packages, or complex building steps.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">💸</span>
+          <h3>Usage, Spend & Waste</h3>
+          <p>Track snapshot usage, Amp dollar spend, reset waste, and non-destructive spend baselines so reports stay accurate across releases.</p>
         </div>
         <div class="feature-card" style="display: flex; flex-direction: column;">
           <span class="feature-icon">🍎</span>
@@ -484,16 +489,16 @@
           <div class="terminal-content" id="waste-tab">
             <span class="cli-prompt">user@machine:~$</span> <span class="cli-cmd">limitlens --waste</span><br>
             <br>
-            <span class="cli-title">Subscription Waste Summary (Last 7 Days)</span><br>
+            <span class="cli-title">LimitLens Waste · last 7 days</span><br>
             <hr class="cli-header">
             <br>
-            &nbsp;&nbsp;You have lost potential quota worth approximately <span class="cli-pill expiring"><strong>$18.40</strong></span> due to expired fast limits.<br>
+            &nbsp;&nbsp;Waste means unused quota at reset or missed refill while capped.<br>
             <br>
-            &nbsp;&nbsp;<strong>Details:</strong><br>
-            &nbsp;&nbsp;• <strong>Cursor Pro:</strong> 120 fast requests expired unused on Jun 01. (Est. Waste: $4.80)<br>
-            &nbsp;&nbsp;• <strong>Codex-p3:</strong> 85% of weekly limit expired unused on Jun 03. (Est. Waste: $13.60)<br>
+            &nbsp;&nbsp;<strong>Needs attention</strong><br>
+            &nbsp;&nbsp;• <strong>Codex p3 / weekly:</strong> 85.0% unused avg · use this quota earlier before reset<br>
+            &nbsp;&nbsp;• <strong>Amp pool:</strong> $2.50 missed refill avg while capped · estimated dollar waste<br>
             <br>
-            &nbsp;&nbsp;<span class="cli-label">Tip: Consider switching your heavy refactoring tasks to Cursor Pro earlier in the reset window!</span><br>
+            &nbsp;&nbsp;<span class="cli-label">Tip: Use --usage for Amp spend and --reset-spend for a clean visual baseline.</span><br>
           </div>
         </div>
       </div>

@@ -6,13 +6,13 @@
   <title>Privacy Policy — LimitLens</title>
 
   <!-- SEO Meta Tags -->
-  <meta name="description" content="LimitLens Privacy Policy. Learn how LimitLens handles your data — spoiler: everything stays on your machine.">
+  <meta name="description" content="LimitLens Privacy Policy. Learn how LimitLens handles data with local-first storage and optional direct provider API checks.">
   <meta name="robots" content="index, follow">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Privacy Policy — LimitLens">
-  <meta property="og:description" content="LimitLens is a 100% local-first tool. No data leaves your machine. Read our full privacy policy.">
+  <meta property="og:description" content="LimitLens is local-first, uses no telemetry, and only contacts provider APIs when you configure those providers.">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="assets/limitlens_logo.png">
@@ -158,28 +158,28 @@
         <span class="effective-date">Effective Date: June 4, 2026</span>
 
         <div class="privacy-highlight">
-          <p><strong>TL;DR —</strong> LimitLens is a 100% local-first tool. It never transmits your data to any external server. Your API keys, session tokens, usage data, and configuration files never leave your machine.</p>
+          <p><strong>TL;DR —</strong> LimitLens is local-first. It does not collect analytics or send data to LimitLens servers. Some optional providers can make direct requests from your machine to the provider's own API when you explicitly configure credentials for that provider.</p>
         </div>
 
         <h2>1. What LimitLens Does</h2>
         <p>LimitLens is an open-source command-line utility and desktop companion that reads locally stored configuration files, SQLite databases, and session data from AI coding tools installed on your computer. It aggregates quota usage information and displays it in your terminal, macOS menu bar, or iTerm2 status bar.</p>
 
         <h2>2. Data We Collect</h2>
-        <p><strong>None.</strong> LimitLens does not collect, store, or transmit any personal data whatsoever. Specifically:</p>
+        <p><strong>None by LimitLens.</strong> LimitLens does not collect or upload personal data to any LimitLens-operated service. Specifically:</p>
         <ul>
-          <li>No analytics or telemetry is sent anywhere</li>
+          <li>No analytics or telemetry is sent by the CLI</li>
           <li>No crash reports are uploaded</li>
-          <li>No API keys or tokens are transmitted off-device</li>
-          <li>No usage statistics leave your machine</li>
+          <li>No API keys, tokens, cookies, or usage statistics are sent to LimitLens</li>
+          <li>Optional web-backed providers only contact their own configured provider endpoints from your machine</li>
           <li>No cookies or tracking pixels are used on this website</li>
         </ul>
 
         <h2>3. Data LimitLens Reads Locally</h2>
-        <p>To provide quota monitoring, LimitLens reads the following data from your local filesystem. This data is <strong>never</strong> sent to any remote server:</p>
+        <p>To provide quota monitoring, LimitLens reads the following data from your local filesystem. This data is stored locally and is not sent to LimitLens:</p>
         <ul>
           <li><strong>Configuration files</strong> — JSON config files from tools like Cursor, Codex, Amp, and others to determine subscription tiers and usage limits</li>
           <li><strong>Local SQLite databases</strong> — Rate-limit and session databases maintained by AI coding tools on your machine</li>
-          <li><strong>Session tokens (read-only)</strong> — Used solely to calculate remaining quota headroom; never stored, copied, or transmitted</li>
+          <li><strong>Session tokens (read-only)</strong> — Used solely to calculate remaining quota headroom or authenticate direct provider API checks when that provider is enabled; never stored by LimitLens</li>
           <li><strong>File paths &amp; email addresses</strong> — Detected in configs but <strong>actively redacted</strong> from all CLI output to protect your privacy</li>
         </ul>
 
@@ -193,7 +193,7 @@
         <p>You can delete this directory at any time to completely remove all LimitLens data from your system.</p>
 
         <h2>5. Third-Party Services</h2>
-        <p>LimitLens itself makes <strong>zero network requests</strong>. It does not depend on or communicate with any third-party APIs, cloud services, or analytics platforms.</p>
+        <p>LimitLens does not use telemetry, analytics, or LimitLens-hosted backend services. Most providers are read from local files/databases. Some optional providers, such as Cursor, Pioneer, AgentRouter, and Command Code, can make direct HTTPS requests from your machine to that provider's API when credentials are configured. Those requests go only to the provider endpoint needed to fetch quota or usage data.</p>
         <p>This website is hosted on <a href="https://vercel.com" target="_blank" rel="noopener">Vercel</a>, which may collect standard web server logs (IP address, user agent, referrer) as part of normal HTTP serving. Please review <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel's Privacy Policy</a> for details on their data practices.</p>
 
         <h2>6. Open Source Transparency</h2>
