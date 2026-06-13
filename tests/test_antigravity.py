@@ -69,11 +69,11 @@ class TestAntigravityStatus(unittest.TestCase):
         labels = [m["label"] for m in prof_data["models"]]
         self.assertTrue(should_cache)
         # Flash and Pro share the same quota+reset → collapsed to the best (Pro)
-        self.assertNotIn("Gemini Flash (hourly)", labels)
-        self.assertIn("Gemini Pro (hourly)", labels)
+        self.assertNotIn("Gemini Flash", labels)
+        self.assertIn("Gemini Pro", labels)
         # Claude Sonnet 4.6 is hidden, Claude Sonnet remains
-        self.assertIn("Claude Sonnet (hourly)", labels)
-        self.assertNotIn("Claude Sonnet 4.6 (hourly)", labels)
+        self.assertIn("Claude Sonnet", labels)
+        self.assertNotIn("Claude Sonnet 4.6", labels)
         self.assertNotIn("GPT-OSS 120B", labels)
 
     def test_fetch_single_profile_keeps_flash_when_different_quota(self):
@@ -107,8 +107,8 @@ class TestAntigravityStatus(unittest.TestCase):
         labels = [m["label"] for m in prof_data["models"]]
         self.assertTrue(should_cache)
         # Different quotas → both should appear
-        self.assertIn("Gemini Flash (hourly)", labels)
-        self.assertIn("Gemini Pro (hourly)", labels)
+        self.assertIn("Gemini Flash", labels)
+        self.assertIn("Gemini Pro", labels)
 
     def test_get_profile_name_from_config_dir(self):
         # Default dir

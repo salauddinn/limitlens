@@ -742,21 +742,6 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
             continue
         base_name = re.sub(r'\s*\((High|Medium|Low|Thinking)\)', '', label, flags=re.IGNORECASE).strip()
         
-        suffix = ""
-        reset_time_str = m.get("reset_time")
-        if reset_time_str:
-            try:
-                rt = parse_to_utc(reset_time_str)
-                now = datetime.now(timezone.utc)
-                if (rt - now).total_seconds() > 86400:
-                    suffix = " (weekly)"
-                else:
-                    suffix = " (hourly)"
-            except Exception:
-                pass
-                
-        base_name += suffix
-        
         lbl_lower = base_name.lower()
         if "gemini" in lbl_lower:
             family = "gemini"
@@ -940,6 +925,17 @@ def display_antigravity_text(data, args):
             pct_left = m["pct_left"]
             pct_used = 100.0 - pct_left
             rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
+            
+            try:
+                rt = parse_to_utc(m.get("reset_time"))
+                now = datetime.now(timezone.utc)
+                if (rt - now).total_seconds() > 86400:
+                    rst += " (weekly cap)"
+                else:
+                    rst += " (5h sprint)"
+            except Exception:
+                pass
+                
             label = m["label"]
             b = bar(pct_used, no_color=getattr(args, 'no_color', False))
             pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
