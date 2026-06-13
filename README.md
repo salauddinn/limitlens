@@ -174,6 +174,25 @@ Create a config file at `~/.config/limitlens/config.json`. You can completely di
 }
 ```
 
+You can also selectively **ignore specific accounts or profiles** without disabling the whole provider.
+This is useful when you have multiple Codex accounts or Antigravity profiles and only want to track certain ones.
+
+```json
+{
+  "codex": {
+    "enabled": true,
+    "ignored_accounts": ["codex-old", "default"]
+  },
+  "antigravity": {
+    "enabled": true,
+    "ignored_accounts": ["ide", "work-profile"]
+  }
+}
+```
+
+> **Codex** accounts map to `~/.codex-<name>` directories. Use the account name (e.g. `work`, `default`, `codex-work`).
+> **Antigravity** profiles include named IDE profiles and CLI profiles (e.g. `ide`, `agy-cli`). Matching is case-insensitive.
+
 ### 🔒 Privacy Guarantee
 * `limitlens` does **not** store or transmit any sensitive information (such as API keys, secrets, or session cookies).
 * All operations are local or direct to the provider's API.

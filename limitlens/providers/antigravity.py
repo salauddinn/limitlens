@@ -780,7 +780,34 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
     prof_data["checked_at"] = datetime.now(timezone.utc).isoformat()
     return prof_data, True
 
-def get_antigravity_data(args):
+def profile_is_ignored(name, ignored_accounts):
+    """Return True if *name* matches any entry in *ignored_accounts*."""
+    if isinstance(ignored_accounts, str):
+        ignored_accounts = [ignored_accounts]
+    elif not isinstance(ignored_accounts, list):
+        return False
+    name_lower = str(name).lower()
+    for ignored in ignored_accounts:
+        if str(ignored).strip().lower() == name_lower:
+            return True
+    return False
+
+
+def filter_antigravity_profiles(profiles, cli_profiles, config=None):
+    """Return (filtered_profiles, filtered_cli_profiles) with ignored names removed.
+
+    Uses ``config.antigravity.ignored_accounts`` — a list of profile name
+    strings.  Matching is case-insensitive and applied to both named IDE
+    profiles and CLI profile keys.
+    """
+    cfg = (config or {}).get("antigravity", {}) if isinstance(config, dict) else {}
+    ignored = cfg.get("ignored_accounts") or []
+    filtered_named = [p for p in profiles if not profile_is_ignored(p, ignored)]
+    filtered_cli = {k: v for k, v in cli_profiles.items() if not profile_is_ignored(k, ignored)}
+    return filtered_named, filtered_cli
+
+
+def get_antigravity_data(args, config=None):
     sys_name = platform.system()
     if sys_name not in ("Darwin", "Linux"):
         return {"error": f"Antigravity status unsupported on {sys_name}"}
@@ -792,13 +819,21 @@ def get_antigravity_data(args):
     cache_warning = None
 
     active_cli = discover_active_cli_profiles(sys_name)
-    
+
     known_cli_profiles = set(active_cli.keys())
     for cached_name in cache.get("profiles", {}).keys():
         if cached_name not in known_profiles and cached_name != "ide":
             known_cli_profiles.add(cached_name)
     if not known_cli_profiles:
         known_cli_profiles.add("agy-cli")
+
+    # Apply ignored_accounts filter from config
+    known_profiles, known_cli_profiles_dict = filter_antigravity_profiles(
+        known_profiles,
+        {k: active_cli.get(k) for k in known_cli_profiles},
+        config,
+    )
+    known_cli_profiles = set(known_cli_profiles_dict.keys())
 
     all_profiles = list(known_profiles) + ["ide"] + list(known_cli_profiles)
     results = {}
@@ -808,8 +843,11 @@ def get_antigravity_data(args):
         for profile in known_profiles:
             fut = executor.submit(_fetch_single_profile, profile, sys_name, cache)
             futures[fut] = profile
-        fut = executor.submit(_fetch_single_profile, "ide", sys_name, cache, is_main=True, known_profiles=known_profiles)
-        futures[fut] = "ide"
+        cfg = (config or {}).get("antigravity", {}) if isinstance(config, dict) else {}
+        ignored = cfg.get("ignored_accounts") or []
+        if not profile_is_ignored("ide", ignored):
+            fut = executor.submit(_fetch_single_profile, "ide", sys_name, cache, is_main=True, known_profiles=known_profiles)
+            futures[fut] = "ide"
         
         for cli_prof in known_cli_profiles:
             info = active_cli.get(cli_prof)
@@ -921,25 +959,56 @@ def display_antigravity_text(data, args):
         if "warning" in prof and should_show_warning(prof["warning"], args):
             print_warning(prof["warning"], args)
 
+        # Group models by family
+        families = {}
         for m in visible_models:
-            pct_left = m["pct_left"]
-            pct_used = 100.0 - pct_left
-            rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
-            
-            try:
-                rt = parse_to_utc(m.get("reset_time"))
-                now = datetime.now(timezone.utc)
-                if (rt - now).total_seconds() > 86400:
-                    rst += " (weekly cap)"
-                else:
-                    rst += " (5h sprint)"
-            except Exception:
-                pass
-                
-            label = m["label"]
-            b = bar(pct_used, no_color=getattr(args, 'no_color', False))
-            pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
-            if getattr(args, 'no_color', False):
-                print(f"    {label:<20} {b}  {pct_fmt} left  {rst}")
+            label = m["label"].lower()
+            if "gemini" in label:
+                fam = "Gemini"
+            elif "claude" in label or "sonnet" in label or "opus" in label:
+                fam = "Claude"
+            elif "gpt" in label or "o1" in label or "o3" in label:
+                fam = "GPT"
             else:
-                print(f"    {label:<20} {b}  {pct_fmt} left  \033[90m{rst}\033[0m")
+                fam = "Other"
+            families.setdefault(fam, []).append(m)
+
+        for fam, fam_models in families.items():
+            if getattr(args, 'no_color', False):
+                print(f"    {fam}")
+            else:
+                print(f"    \033[1m{fam}\033[0m")
+                
+            # Sort so 5h limit comes before weekly limit
+            def sort_key(x):
+                try:
+                    rt = parse_to_utc(x.get("reset_time"))
+                    now = datetime.now(timezone.utc)
+                    return (rt - now).total_seconds()
+                except Exception:
+                    return 0
+            fam_models.sort(key=sort_key)
+
+            for m in fam_models:
+                pct_left = m["pct_left"]
+                pct_used = 100.0 - pct_left
+                rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
+                
+                limit_label = "unknown limit"
+                try:
+                    rt = parse_to_utc(m.get("reset_time"))
+                    now = datetime.now(timezone.utc)
+                    if (rt - now).total_seconds() > 86400:
+                        limit_label = "weekly limit"
+                    else:
+                        limit_label = "5h limit"
+                except Exception:
+                    pass
+                    
+                b = bar(pct_used, no_color=getattr(args, 'no_color', False))
+                pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
+                if getattr(args, 'no_color', False):
+                    print(f"      {limit_label:<14} {b}  {pct_fmt} left  {rst}")
+                else:
+                    print(f"      {limit_label:<14} {b}  {pct_fmt} left  \033[90m{rst}\033[0m")
+

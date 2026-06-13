@@ -749,8 +749,94 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         args.no_color = True
         ag_mod.display_antigravity_text(data, args)
 
-if __name__ == "__main__":
-    unittest.main()
+from limitlens.providers.antigravity import (
+    profile_is_ignored,
+    filter_antigravity_profiles,
+)
+
+
+class TestAntigravityIgnoredAccounts(unittest.TestCase):
+    """Tests for profile_is_ignored and filter_antigravity_profiles."""
+
+    # ── profile_is_ignored ────────────────────────────────────────────────
+
+    def test_ignored_exact_match(self):
+        self.assertTrue(profile_is_ignored("work", ["work"]))
+
+    def test_ignored_case_insensitive(self):
+        self.assertTrue(profile_is_ignored("Work", ["work"]))
+        self.assertTrue(profile_is_ignored("WORK", ["Work"]))
+
+    def test_ignored_no_match(self):
+        self.assertFalse(profile_is_ignored("personal", ["work"]))
+
+    def test_ignored_empty_list(self):
+        self.assertFalse(profile_is_ignored("personal", []))
+
+    def test_ignored_string_input(self):
+        """A bare string (not a list) is treated as a single entry."""
+        self.assertTrue(profile_is_ignored("ide", "ide"))
+
+    def test_ignored_non_list_non_string(self):
+        """None or other non-list values never match."""
+        self.assertFalse(profile_is_ignored("ide", None))
+        self.assertFalse(profile_is_ignored("ide", 42))
+
+    def test_ignored_whitespace_stripped(self):
+        self.assertTrue(profile_is_ignored("ide", ["  ide  "]))
+
+    # ── filter_antigravity_profiles ───────────────────────────────────────
+
+    def test_filter_no_config(self):
+        named, cli = filter_antigravity_profiles(["work", "personal"], {"agy-cli": None})
+        self.assertEqual(named, ["work", "personal"])
+        self.assertEqual(cli, {"agy-cli": None})
+
+    def test_filter_empty_ignored(self):
+        config = {"antigravity": {"ignored_accounts": []}}
+        named, cli = filter_antigravity_profiles(["work", "personal"], {"agy-cli": None}, config)
+        self.assertEqual(named, ["work", "personal"])
+        self.assertIn("agy-cli", cli)
+
+    def test_filter_removes_named_profile(self):
+        config = {"antigravity": {"ignored_accounts": ["work"]}}
+        named, cli = filter_antigravity_profiles(["work", "personal"], {"agy-cli": None}, config)
+        self.assertNotIn("work", named)
+        self.assertIn("personal", named)
+
+    def test_filter_removes_cli_profile(self):
+        config = {"antigravity": {"ignored_accounts": ["agy-cli"]}}
+        named, cli = filter_antigravity_profiles(["work"], {"agy-cli": None, "agy-work": None}, config)
+        self.assertNotIn("agy-cli", cli)
+        self.assertIn("agy-work", cli)
+        self.assertEqual(named, ["work"])
+
+    def test_filter_case_insensitive_named(self):
+        config = {"antigravity": {"ignored_accounts": ["Work"]}}
+        named, cli = filter_antigravity_profiles(["work", "personal"], {}, config)
+        self.assertNotIn("work", named)
+        self.assertIn("personal", named)
+
+    def test_filter_removes_multiple(self):
+        config = {"antigravity": {"ignored_accounts": ["work", "agy-cli"]}}
+        named, cli = filter_antigravity_profiles(
+            ["work", "personal"], {"agy-cli": None, "agy-work": None}, config
+        )
+        self.assertEqual(named, ["personal"])
+        self.assertEqual(list(cli.keys()), ["agy-work"])
+
+    def test_filter_all_ignored_returns_empty(self):
+        config = {"antigravity": {"ignored_accounts": ["work", "personal"]}}
+        named, cli = filter_antigravity_profiles(["work", "personal"], {}, config)
+        self.assertEqual(named, [])
+        self.assertEqual(cli, {})
+
+    def test_filter_missing_antigravity_key(self):
+        """Config without an antigravity section passes everything through."""
+        named, cli = filter_antigravity_profiles(["work"], {"agy-cli": None}, {"codex": {}})
+        self.assertEqual(named, ["work"])
+        self.assertIn("agy-cli", cli)
+
 
 if __name__ == "__main__":
     unittest.main()

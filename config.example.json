@@ -11,7 +11,8 @@
     "enabled": true
   },
   "antigravity": {
-    "enabled": true
+    "enabled": true,
+    "ignored_accounts": []
   },
   "opencode": {
     "enabled": true,

@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     },
     "antigravity": {
         "enabled": True,
+        "ignored_accounts": [],
     },
     "opencode": {
         "enabled": True,
