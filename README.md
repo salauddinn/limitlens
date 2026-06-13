@@ -98,7 +98,10 @@ limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report (% of quota wasted over 7 days)
 limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
+limitlens-switch     # Switch context interactively and execute a tool in place
+limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with args
 ```
+
 
 > **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 

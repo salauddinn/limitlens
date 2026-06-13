@@ -46,6 +46,8 @@ Issues = "https://github.com/salauddinn/limitlens/issues"
 [project.scripts]
 limitlens = "limitlens.cli:main"
 limitlens-menubar = "limitlens.menubar:main"
+limitlens-switch = "limitlens.switcher:main"
+
 
 [tool.setuptools.packages.find]
 include = ["limitlens*"]
