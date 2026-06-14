@@ -636,20 +636,22 @@ def load_antigravity_cache():
     return data
 
 def save_antigravity_cache(cache):
+    import tempfile
     path = antigravity_cache_path()
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-    tmp_path = path + ".tmp"
+    tmp_path = None
     try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix="antigravity_cache_", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(cache, f, indent=2)
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
         os.replace(tmp_path, path)
+        tmp_path = None
     except Exception:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
         raise
 
 def try_save_antigravity_cache(cache):

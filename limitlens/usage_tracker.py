@@ -27,18 +27,15 @@ def _load_imported_data():
         return {}
 
 def _save_imported_data(data):
+    import tempfile
     tmp_path = None
     from limitlens.core import file_lock
     try:
         with file_lock(IMPORTED_USAGE_PATH + ".lock"):
             os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), mode=0o700, exist_ok=True)
-            tmp_path = IMPORTED_USAGE_PATH + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
+            fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(IMPORTED_USAGE_PATH), prefix="usage_", suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
-            try:
-                os.chmod(tmp_path, 0o600)
-            except OSError:
-                pass
             os.replace(tmp_path, IMPORTED_USAGE_PATH)
             tmp_path = None
     except OSError:

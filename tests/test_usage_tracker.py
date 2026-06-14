@@ -19,12 +19,15 @@ class TestUsageTracker(unittest.TestCase):
 
     @patch('limitlens.usage_tracker.os.makedirs')
     @patch('limitlens.usage_tracker.os.replace')
-    @patch('builtins.open', new_callable=mock_open)
-    def test_save_imported_data(self, mock_file, mock_replace, mock_makedirs):
+    @patch('tempfile.mkstemp', return_value=(3, "/tmp/usage_test.tmp"))
+    @patch('os.fdopen', new_callable=mock_open)
+    def test_save_imported_data(self, mock_fdopen, mock_mkstemp, mock_replace, mock_makedirs):
         usage_tracker._save_imported_data({"2023-10-01": {"codex": 10.0}})
         mock_makedirs.assert_called_once()
-        mock_file.assert_called_once()
+        mock_mkstemp.assert_called_once()
+        mock_fdopen.assert_called_once()
         mock_replace.assert_called_once()
+
 
     @patch('limitlens.usage_tracker.waste_tracker._load_snapshots_with_anchor')
     def test_compute_consolidated_usage(self, mock_load_snapshots):
@@ -151,7 +154,7 @@ class TestUsageTracker(unittest.TestCase):
         mock_snapshots.return_value = [{"key": "codex", "pct_left": 10.0, "_ts": "internal"}]
         res = usage_tracker.export_usage("dummy.json")
         self.assertTrue(res)
-        mock_file.assert_called_once_with("dummy.json", "w", encoding="utf-8")
+        mock_file.assert_any_call("dummy.json", "w", encoding="utf-8")
         # verify dump
         written = "".join(call[0][0] for call in mock_file().write.call_args_list)
         self.assertIn('"codex"', written)

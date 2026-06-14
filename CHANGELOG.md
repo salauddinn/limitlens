@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+- Fixed a race condition where temporary files were momentarily readable by other users before `os.chmod` was applied. `usage_tracker`, `waste_tracker`, and `antigravity` now use `tempfile.mkstemp` to create files securely with `0o600` permissions.
+
+### Fixed
+- Fixed a `KeyError` in `config.apply_env_overrides` when custom provider keys (like `pioneer.plan`) were used in the config but missing from `DEFAULT_CONFIG`.
+
 ## [1.3.2] - 2026-06-10
 
 ### Added

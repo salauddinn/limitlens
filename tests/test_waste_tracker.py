@@ -237,13 +237,14 @@ def test_prune_old_snapshots_not_exists(mock_exists):
 @patch("limitlens.waste_tracker.os.path.exists", return_value=True)
 @patch("limitlens.waste_tracker._load_snapshots")
 @patch("limitlens.waste_tracker.os.replace")
-def test_prune_old_snapshots(mock_replace, mock_load, mock_exists):
+@patch("tempfile.mkstemp", return_value=(3, "/tmp/waste_test.tmp"))
+@patch("os.fdopen", new_callable=mock_open)
+def test_prune_old_snapshots(mock_fdopen, mock_mkstemp, mock_replace, mock_load, mock_exists):
     mock_load.return_value = [{"key": "k1", "_ts": "fake", "ts": "something"}]
-    with patch("builtins.open", mock_open()) as mock_file:
-        waste_tracker.prune_old_snapshots()
-        mock_file.assert_called_once()
-        mock_file().write.assert_called_once_with('{"key": "k1", "ts": "something"}\n')
-        mock_replace.assert_called_once()
+    waste_tracker.prune_old_snapshots()
+    mock_fdopen.assert_called_once()
+    mock_fdopen().write.assert_called_once_with('{"key": "k1", "ts": "something"}\n')
+    mock_replace.assert_called_once()
 
 
 @patch("limitlens.waste_tracker.os.path.exists", return_value=True)
@@ -253,6 +254,24 @@ def test_prune_old_snapshots_error(mock_replace, mock_load, mock_exists):
     mock_load.return_value = []
     with patch("builtins.open", mock_open()):
         waste_tracker.prune_old_snapshots()
+
+
+@patch("limitlens.waste_tracker.os.path.exists", return_value=True)
+@patch("limitlens.waste_tracker.os.makedirs")
+@patch("limitlens.waste_tracker.os.replace")
+@patch("limitlens.waste_tracker._load_snapshots")
+@patch("tempfile.mkstemp", return_value=(3, "/tmp/waste_test.tmp"))
+@patch("os.fdopen", new_callable=mock_open)
+def test_merge_snapshots_success(mock_fdopen, mock_mkstemp, mock_load, mock_replace, mock_makedirs, mock_exists):
+    from datetime import datetime, timezone
+    mock_load.return_value = [{"ts": "2023-01-01T12:00:00Z", "key": "k1", "_ts": datetime(2023, 1, 1, 12, 0, tzinfo=timezone.utc)}]
+    new_rows = [{"ts": "2023-01-01T13:00:00Z", "key": "k1"}]
+    assert waste_tracker.merge_snapshots(new_rows) is True
+    mock_makedirs.assert_called_once()
+    mock_mkstemp.assert_called_once()
+    mock_fdopen.assert_called_once()
+    assert mock_fdopen().write.call_count == 2
+    mock_replace.assert_called_once()
 
 
 @patch("limitlens.waste_tracker._load_snapshots_with_anchor")

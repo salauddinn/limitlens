@@ -129,7 +129,10 @@ def apply_env_overrides(config):
             env_key = f"LIMITLENS_{section.upper()}_{key.upper()}"
             if env_key in os.environ:
                 raw_val = os.environ[env_key]
-                expected_type = type(DEFAULT_CONFIG[section][key])
+                if key in DEFAULT_CONFIG[section]:
+                    expected_type = type(DEFAULT_CONFIG[section][key])
+                else:
+                    expected_type = type(expected_value)
                 if expected_type is bool:
                     config[section][key] = raw_val.lower() in ("true", "1", "yes", "t", "y")
                 elif expected_type is int:

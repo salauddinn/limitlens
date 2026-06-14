@@ -348,19 +348,16 @@ def merge_snapshots(new_rows):
 
             deduped.sort(key=lambda r: r["_ts"])
 
+            import tempfile
             tmp_path = None
             try:
                 os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
-                tmp_path = SNAPSHOT_PATH + ".tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
+                fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(SNAPSHOT_PATH), prefix="snapshots_", suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     for row in deduped:
                         out = row.copy()
                         out.pop("_ts", None)
                         f.write(json.dumps(out) + "\n")
-                try:
-                    os.chmod(tmp_path, 0o600)
-                except OSError:
-                    pass
                 os.replace(tmp_path, SNAPSHOT_PATH)
                 tmp_path = None
                 return True
@@ -397,17 +394,14 @@ def prune_old_snapshots():
         with file_lock(SNAPSHOT_PATH + ".lock"):
             cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_PRUNE_DAYS)
             rows = _load_snapshots(since=cutoff)
+            import tempfile
             tmp_path = None
             try:
-                tmp_path = SNAPSHOT_PATH + ".tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
+                fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(SNAPSHOT_PATH), prefix="snapshots_", suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     for row in rows:
                         row.pop("_ts", None)
                         f.write(json.dumps(row) + "\n")
-                try:
-                    os.chmod(tmp_path, 0o600)
-                except OSError:
-                    pass
                 os.replace(tmp_path, SNAPSHOT_PATH)
                 tmp_path = None
             except OSError:
