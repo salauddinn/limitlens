@@ -466,14 +466,15 @@ def is_localhost(host):
         pass
     return False
 
-def log_security_warning(message):
+def log_security_warning(message, emit_stderr=False):
     import sys
     log_dir = os.path.expanduser("~/.cache/limitlens")
     log_file = os.path.join(log_dir, "limitlens.log")
     timestamp = datetime.now().isoformat()
     log_message = f"[{timestamp}] SECURITY WARNING: {message}\n"
-    sys.stderr.write(f"SECURITY WARNING: {message}\n")
-    sys.stderr.flush()
+    if emit_stderr:
+        sys.stderr.write(f"SECURITY WARNING: {message}\n")
+        sys.stderr.flush()
     try:
         os.makedirs(log_dir, exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
@@ -502,7 +503,7 @@ def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeou
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:  # nosec B310
         return json.loads(resp.read().decode("utf-8"))
 
-def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3, host="127.0.0.1"):
+def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3, host="127.0.0.1", verbose=False):
     try:
         return make_ag_request(
             port, csrf_token, method, body_dict, verify_tls=True, timeout=timeout, host=host
@@ -512,7 +513,10 @@ def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeo
             raise
         if not is_localhost(host):
             raise ssl.SSLError(f"Bypassing TLS verification is restricted to localhost/127.0.0.1. Refusing fallback for host: {host}") from e
-        log_security_warning(f"TLS verification failed for {host}:{port}. Bypassing verification for local endpoint.")
+        log_security_warning(
+            f"TLS verification failed for {host}:{port}. Bypassing verification for local endpoint.",
+            emit_stderr=verbose,
+        )
         resp = make_ag_request(
             port, csrf_token, method, body_dict, verify_tls=False, timeout=timeout, host=host
         )
@@ -525,7 +529,7 @@ def _tcp_port_open(port, timeout=0.5):
     except (OSError, socket.timeout):
         return False
 
-def probe_ag_port(ports, csrf_token, port_tokens=None):
+def probe_ag_port(ports, csrf_token, port_tokens=None, verbose=False):
     port_tokens = port_tokens or {}
     body = {
         "metadata": {
@@ -544,7 +548,7 @@ def probe_ag_port(ports, csrf_token, port_tokens=None):
             continue
         try:
             _, insecure = make_ag_request_with_tls_fallback(
-                port, request_token, "GetUnleashData", body, timeout=AG_PROBE_HTTP_TIMEOUT
+                port, request_token, "GetUnleashData", body, timeout=AG_PROBE_HTTP_TIMEOUT, verbose=verbose
             )
             used_insecure_tls = used_insecure_tls or insecure
             return port, request_token, None, used_insecure_tls
@@ -553,7 +557,7 @@ def probe_ag_port(ports, csrf_token, port_tokens=None):
             continue
     return None, None, "; ".join(errors), used_insecure_tls
 
-def get_ag_model_quotas(port, csrf_token):
+def get_ag_model_quotas(port, csrf_token, verbose=False):
     body = {
         "metadata": {
             "ideName": "antigravity",
@@ -564,7 +568,7 @@ def get_ag_model_quotas(port, csrf_token):
     }
     try:
         resp, used_insecure_tls = make_ag_request_with_tls_fallback(
-            port, csrf_token, "GetUserStatus", body, timeout=AG_MODEL_HTTP_TIMEOUT
+            port, csrf_token, "GetUserStatus", body, timeout=AG_MODEL_HTTP_TIMEOUT, verbose=verbose
         )
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
@@ -700,7 +704,7 @@ def apply_antigravity_cached_fallback(prof_data, cache, reason):
     prof_data["warning"] = format_stale_message(cached.get("fetched_at"), reason)
     return True
 
-def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profiles=None, source="ide", cli_info=None):
+def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profiles=None, source="ide", cli_info=None, verbose=False):
     prof_data = {"name": profile, "status": "unknown", "source": source}
     if source == "cli":
         if cli_info:
@@ -741,14 +745,14 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         apply_antigravity_cached_fallback(prof_data, cache, prof_data["error"])
         return prof_data, False
 
-    port, selected_token, probe_err, probe_insecure_tls = probe_ag_port(ports, csrf_token, port_tokens)
+    port, selected_token, probe_err, probe_insecure_tls = probe_ag_port(ports, csrf_token, port_tokens, verbose=verbose)
     if not port:
         prof_data["status"] = "stopped"
         prof_data["error"] = f"language server not responding ({probe_err})"
         apply_antigravity_cached_fallback(prof_data, cache, prof_data["error"])
         return prof_data, False
 
-    models, model_err, model_insecure_tls = get_ag_model_quotas(port, selected_token)
+    models, model_err, model_insecure_tls = get_ag_model_quotas(port, selected_token, verbose=verbose)
     if probe_insecure_tls or model_insecure_tls:
         prof_data["warning"] = "used insecure local TLS fallback"
     if model_err == "not_signed_in":
@@ -877,20 +881,25 @@ def get_antigravity_data(args, config=None):
     all_profiles = list(known_profiles) + ["ide"] + list(known_cli_profiles)
     results = {}
 
+    verbose = getattr(args, "verbose", False)
+
     with ThreadPoolExecutor(max_workers=len(all_profiles) or 1) as executor:
         futures = {}
         for profile in known_profiles:
-            fut = executor.submit(_fetch_single_profile, profile, sys_name, cache)
+            kwargs = {"verbose": verbose} if verbose else {}
+            fut = executor.submit(_fetch_single_profile, profile, sys_name, cache, **kwargs)
             futures[fut] = profile
         cfg = (config or {}).get("antigravity", {}) if isinstance(config, dict) else {}
         ignored = cfg.get("ignored_accounts") or []
         if not profile_is_ignored("ide", ignored):
-            fut = executor.submit(_fetch_single_profile, "ide", sys_name, cache, is_main=True, known_profiles=known_profiles)
+            kwargs = {"verbose": verbose} if verbose else {}
+            fut = executor.submit(_fetch_single_profile, "ide", sys_name, cache, is_main=True, known_profiles=known_profiles, **kwargs)
             futures[fut] = "ide"
 
         for cli_prof in known_cli_profiles:
             info = active_cli.get(cli_prof)
-            fut = executor.submit(_fetch_single_profile, cli_prof, sys_name, cache, source="cli", cli_info=info)
+            kwargs = {"verbose": verbose} if verbose else {}
+            fut = executor.submit(_fetch_single_profile, cli_prof, sys_name, cache, source="cli", cli_info=info, **kwargs)
             futures[fut] = cli_prof
 
         for fut in as_completed(futures):
