@@ -75,7 +75,29 @@ class LimitLensApp(rumps.App):
         # Keep the macOS menubar compact. Full details live in the dropdown.
         self._max_title_items = 2
 
-    @rumps.timer(300)  # Refresh every 5 minutes
+        # Load display config for thresholds and refresh interval.
+        try:
+            from .config import load_display_config as _ldcfg
+            _dcfg = _ldcfg()
+            self._refresh_interval = max(30, int(_dcfg.get("menubar_refresh_seconds", 300)))
+            self._notify_warn_pct = float(_dcfg.get("notify_warn_pct", 30.0))
+            self._notify_critical_pct = float(_dcfg.get("notify_critical_pct", 10.0))
+        except Exception:  # pragma: no cover - config failures must not crash the app
+            self._refresh_interval = 300
+            self._notify_warn_pct = 30.0
+            self._notify_critical_pct = 10.0
+
+        self._start_refresh_timer()
+
+    def _start_refresh_timer(self):
+        """Start a daemon thread that refreshes data on the configured interval."""
+        def _loop():
+            while True:
+                time.sleep(self._refresh_interval)
+                self.fetch_data()
+        t = threading.Thread(target=_loop, daemon=True)
+        t.start()
+
     def refresh(self, _=None):
         self.fetch_data()
 
@@ -548,14 +570,14 @@ class LimitLensApp(rumps.App):
                         if pct is None:
                             return
                         active_keys.add(id_str)
-                        if pct < 10.0:
+                        if pct < self._notify_critical_pct:
                             if not suppress_notifications and id_str not in self._notified_set:
                                 self.notify(
                                     "LimitLens Quota Warning",
                                     f"{label} is running low ({pct:.1f}% left). {details}".strip(),
                                 )
                                 self._notified_set.add(id_str)
-                        elif pct >= 15.0 and id_str in self._notified_set:
+                        elif pct >= min(self._notify_warn_pct, self._notify_critical_pct + 5.0) and id_str in self._notified_set:
                             self._notified_set.remove(id_str)
 
                     rows = self._collect_rows(data, check_low_quota)

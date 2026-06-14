@@ -1,5 +1,5 @@
 """limitlens — unified status checker for Codex, Amp, OpenCode, and Antigravity."""
 
-__version__ = "1.2.3"
+__version__ = "1.3.2"
 
 from .cli import main  # noqa: F401

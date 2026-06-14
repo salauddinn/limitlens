@@ -367,7 +367,7 @@ class TestCLI(unittest.TestCase):
         try:
             test_args = ["limitlens", "--reset-spend"]
             with patch.object(sys, "argv", test_args), \
-                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 patch("limitlens.cli.limitlens_config_path", return_value=config_path), \
                  redirect_stdout(io.StringIO()):
                 main()
 
@@ -701,7 +701,7 @@ class TestCLI(unittest.TestCase):
         try:
             test_args = ["limitlens", "--reset-spend"]
             with patch.object(sys, "argv", test_args), \
-                 patch("limitlens.config.limitlens_config_path", return_value=config_path), \
+                 patch("limitlens.cli.limitlens_config_path", return_value=config_path), \
                  redirect_stdout(io.StringIO()):
                 main()
                 

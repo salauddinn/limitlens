@@ -18,6 +18,12 @@ from .core import (
     parse_to_utc,
     fmt_reset,
 )
+from .config import (
+    is_provider_enabled,
+    ConfigValidationError,
+    reset_custom_tool_spend,
+    limitlens_config_path,
+)
 from .providers import (
     get_codex_data, display_codex_text,
     get_amp_data, display_amp_text,
@@ -35,6 +41,15 @@ from .providers.agentrouter import is_agentrouter_enabled
 
 def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more")
+    try:
+        from importlib.metadata import version as _pkg_version, PackageNotFoundError as _PNF
+        try:
+            _ver = _pkg_version("limitlens")
+        except _PNF:
+            from . import __version__ as _ver
+    except ImportError:
+        from . import __version__ as _ver
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_ver}")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
@@ -60,6 +75,7 @@ def _main():
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
     parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
+    parser.add_argument("--store-token", nargs=2, metavar=("PROVIDER", "TOKEN"), help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode)")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
@@ -114,25 +130,25 @@ def _main():
         result = {}
         fetchers = {}
         with ThreadPoolExecutor(max_workers=6) as executor:
-            if args.tool == "codex" or (args.tool == "all" and str(config.get("codex", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
+            if args.tool == "codex" or (args.tool == "all" and is_provider_enabled(config, "codex", default=True)):
                 fetchers["codex"] = executor.submit(get_codex_data, args, config)
-            if args.tool == "amp" or (args.tool == "all" and str(config.get("amp", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
+            if args.tool == "amp" or (args.tool == "all" and is_provider_enabled(config, "amp", default=True)):
                 fetchers["amp"] = executor.submit(get_amp_data, args)
-            if args.tool == "antigravity" or (args.tool == "all" and str(config.get("antigravity", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
+            if args.tool == "antigravity" or (args.tool == "all" and is_provider_enabled(config, "antigravity", default=True)):
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args, config)
-            if args.tool == "opencode" or (args.tool == "all" and str(config.get("opencode", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
+            if args.tool == "opencode" or (args.tool == "all" and is_provider_enabled(config, "opencode", default=True)):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-            if args.tool == "pi" or (args.tool == "all" and str(config.get("pi", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
-            if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
             if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
                 fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
-            if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
-            if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
+            if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
-            if args.tool == "cursor" or (args.tool == "all" and str(config.get("cursor", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
+            if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
                 fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
             for key, fut in fetchers.items():
                 try:
@@ -187,6 +203,18 @@ def _main():
             waste_tracker.record_snapshot(result)
             usage_tracker.record_usage(result)
 
+
+    if args.store_token:
+        provider, token = args.store_token
+        try:
+            from .keychain import set_keychain_token
+            if set_keychain_token(provider, token):
+                print_c(f"  ✓ Token for '{provider}' stored securely in keychain.", "\033[32m", args.no_color)
+            else:
+                print_c(f"  ⚠ Failed to store token for '{provider}' in keychain.", "\033[31m", args.no_color)
+        except Exception as e:
+            print_c(f"  ⚠ Error storing token: {e}", "\033[31m", args.no_color)
+        return
 
     if args.export_usage:
         ok = usage_tracker.export_usage(args.export_usage)
@@ -272,62 +300,11 @@ def _main():
                 }
 
         # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
-        from .config import limitlens_config_path
-        import os
-        import tempfile
-        config_path = limitlens_config_path()
-        config_updated = False
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    user_config = json.load(f)
-                if not isinstance(user_config, dict):
-                    user_config = {}
-
-                if "custom_tools" in user_config and "tools" in user_config["custom_tools"]:
-                    tools_cfg = user_config["custom_tools"]["tools"]
-                    tools_list = []
-                    if isinstance(tools_cfg, dict):
-                        tools_list = tools_cfg.values()
-                    elif isinstance(tools_cfg, list):
-                        tools_list = tools_cfg
-
-                    for tool_data in tools_list:
-                        if isinstance(tool_data, dict):
-                            used_val = tool_data.get("used", 0)
-                            if isinstance(used_val, (int, float)) and used_val > 0:
-                                tool_data["used"] = 0
-                                config_updated = True
-                            elif isinstance(used_val, str):
-                                try:
-                                    if float(used_val) > 0:
-                                        tool_data["used"] = 0
-                                        config_updated = True
-                                except ValueError:
-                                    pass
-
-                            req_val = tool_data.get("request_count", 0)
-                            if isinstance(req_val, (int, float)) and req_val > 0:
-                                tool_data["request_count"] = 0
-                                config_updated = True
-                            elif isinstance(req_val, str):
-                                try:
-                                    if float(req_val) > 0:
-                                        tool_data["request_count"] = 0
-                                        config_updated = True
-                                except ValueError:
-                                    pass
-
-                if config_updated:
-                    dir_path = os.path.dirname(config_path)
-                    os.makedirs(dir_path, exist_ok=True)
-                    fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
-                    with os.fdopen(fd, "w", encoding="utf-8") as f:
-                        json.dump(user_config, f, indent=2)
-                    os.replace(tmp_path, config_path)
-                    print_c("  ✓ custom tools usage reset in config.json", "\033[32m", args.no_color)
-            except (json.JSONDecodeError, OSError):
-                print_c(f"  ⚠ failed to update custom tools in {config_path}", "\033[31m", args.no_color)
+        try:
+            if reset_custom_tool_spend(limitlens_config_path()):
+                print_c("  ✓ custom tools usage reset in config.json", "\033[32m", args.no_color)
+        except ConfigValidationError as e:
+            print_c(f"  ⚠ failed to update custom tools: {e}", "\033[31m", args.no_color)
 
         if mark_spend_reset(extra_data=extra_data):
             print_c("  ✓ spend tracking reset. Future reports will only count spend from now on.", "\033[32m", args.no_color)
@@ -384,6 +361,7 @@ def _main():
                     payload[k] = v
             if recs is not None:
                 payload["recommendations"] = recs
+            payload["schema_version"] = 1
             print(json.dumps(payload, indent=2))
             return
 
@@ -431,13 +409,31 @@ def _main():
         print()
 
     if args.watch:
+        _prev_lines = [0]
+
+        def _clear_watch():
+            n = _prev_lines[0]
+            if n > 0:
+                print(f"\033[{n}A\033[J", end="", flush=True)
+
         try:
             while True:
                 result = fetch_and_refresh()
                 _record(result)
                 if not args.json:
-                    print("\033[2J\033[H", end="")
-                display_result(result)
+                    import io as _io
+                    import sys as _sys
+                    _clear_watch()
+                    buf = _io.StringIO()
+                    _orig = _sys.stdout
+                    _sys.stdout = buf
+                    display_result(result)
+                    _sys.stdout = _orig
+                    output = buf.getvalue()
+                    print(output, end="", flush=True)
+                    _prev_lines[0] = output.count("\n")
+                else:
+                    display_result(result)
                 time.sleep(args.interval)
         except KeyboardInterrupt:
             if not args.json:

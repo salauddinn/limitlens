@@ -160,9 +160,16 @@ def get_pioneer_data(args, config=None):
     cfg = config.get("pioneer") or {}
     token = os.environ.get("PIONEER_API_TOKEN")
     if not token:
+        try:
+            from limitlens.keychain import get_keychain_token
+            token = get_keychain_token("pioneer")
+        except ImportError:
+            pass
+            
+    if not token:
         if _has_config_balance(cfg):
             return parse_pioneer_billing(cfg, args)
-        return {"error": "PIONEER_API_TOKEN environment variable not set"}
+        return {"error": "PIONEER_API_TOKEN environment variable not set and no keychain token found"}
 
     team_id = cfg.get("team_id") or os.environ.get("PIONEER_TEAM_ID")
     if team_id:

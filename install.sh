@@ -156,6 +156,16 @@ PLIST
   fi
 fi
 
+# ── macOS: auto-install iTerm2 widget ──────────────────────────────────────────
+if $IS_MAC && [[ -d "$HOME/Library/Application Support/iTerm2/Scripts" ]]; then
+  ITERM_DIR="$HOME/Library/Application Support/iTerm2/Scripts"
+  if [[ -f "iterm_widget.py" ]]; then
+    sed "s|USER_LIMITLENS_DIR = \"\"|USER_LIMITLENS_DIR = \"$PWD\"|" iterm_widget.py > "$ITERM_DIR/limitlens_widget.py"
+    chmod +x "$ITERM_DIR/limitlens_widget.py"
+    success "iTerm2 widget auto-installed to Scripts menu."
+  fi
+fi
+
 # ── Done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}LimitLens is ready!${RESET}"

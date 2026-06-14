@@ -453,7 +453,70 @@ def _compute_amp_replenish_waste(series, since):
     }
 
 
+def compute_ttx(snapshots, key):
+    """Compute time-to-exhaustion in hours for a given snapshot key.
+
+    Uses the last 6 snapshots for ``key`` and fits a linear velocity.
+    Returns None if there are fewer than 2 data points, velocity is
+    non-negative (not decreasing), or the timestamps are unusable.
+    """
+    key_snaps = [
+        s for s in snapshots
+        if s.get("key") == key and s.get("pct_left") is not None and s.get("ts")
+    ]
+    key_snaps.sort(key=lambda s: s.get("ts", ""))
+    
+    valid_snaps = []
+    for snap in reversed(key_snaps):
+        if not valid_snaps:
+            valid_snaps.append(snap)
+        else:
+            if float(snap["pct_left"]) < float(valid_snaps[-1]["pct_left"]):
+                break  # Reset boundary detected
+            valid_snaps.append(snap)
+            if len(valid_snaps) == 6:
+                break
+                
+    valid_snaps.reverse()
+    if len(valid_snaps) < 2:
+        return None
+        
+    first, last = valid_snaps[0], valid_snaps[-1]
+    t_first = _parse_ts(first["ts"])
+    t_last = _parse_ts(last["ts"])
+    if t_first is None or t_last is None:
+        return None
+    elapsed_hours = (t_last - t_first).total_seconds() / 3600.0
+    if elapsed_hours <= 0:
+        return None
+    pct_change = float(last["pct_left"]) - float(first["pct_left"])
+    if pct_change >= 0:
+        return None  # quota is not decreasing
+    velocity = pct_change / elapsed_hours  # negative, % per hour
+    pct_current = float(last["pct_left"])
+    if pct_current <= 0:
+        return 0.0
+    return pct_current / abs(velocity)
+
+
+def format_ttx(ttx_hours):
+    """Human-readable time-to-exhaustion string, or None if ttx_hours is None."""
+    if ttx_hours is None:
+        return None
+    if ttx_hours < 1:
+        return "< 1h"
+    if ttx_hours < 48:
+        hours = int(ttx_hours)
+        minutes = int((ttx_hours - hours) * 60)
+        if minutes:
+            return f"{hours}h {minutes}m"
+        return f"{hours}h"
+    days = int(ttx_hours / 24)
+    return f"{days} days"
+
+
 def compute_waste(days=7, config=None):
+
     """
     Return dict[key] -> waste data.
 
@@ -488,6 +551,9 @@ def compute_waste(days=7, config=None):
         if any(r.get("tool") == "amp" for r in series):
             amp_waste = _compute_amp_replenish_waste(series, since)
             if amp_waste:
+                ttx = compute_ttx(rows, key)
+                amp_waste["ttx_hours"] = ttx
+                amp_waste["ttx_label"] = format_ttx(ttx)
                 out[key] = amp_waste
             continue
 
@@ -513,6 +579,7 @@ def compute_waste(days=7, config=None):
         if not events:
             continue
         wastes = [e["wasted_pct"] for e in events]
+        ttx = compute_ttx(rows, key)
         out[key] = {
             "reset_count": len(events),
             "avg_wasted_pct": sum(wastes) / len(wastes),
@@ -520,6 +587,8 @@ def compute_waste(days=7, config=None):
             "last_seen_pct": series[-1]["pct_left"],
             "last_seen_at": series[-1]["ts"],
             "events": events,
+            "ttx_hours": ttx,
+            "ttx_label": format_ttx(ttx),
         }
     return out
 

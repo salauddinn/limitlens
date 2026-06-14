@@ -145,6 +145,18 @@ def _auth_headers_from_env():
     token = _clean_header_value(os.environ.get("COMMANDCODE_API_TOKEN"))
     cookie = _clean_header_value(os.environ.get("COMMANDCODE_COOKIE"))
 
+    if not authorization and not token and not cookie:
+        try:
+            from limitlens.keychain import get_keychain_token
+            kc_token = get_keychain_token("commandcode")
+            if kc_token:
+                if "=" in kc_token and not kc_token.strip().endswith("=") and " " not in kc_token.strip():
+                    cookie = kc_token
+                else:
+                    token = kc_token
+        except ImportError:
+            pass
+
     if authorization:
         headers["authorization"] = authorization
     elif token:

@@ -204,10 +204,11 @@ def test_parse_pioneer_billing_no_tiers_but_credits_remaining(mock_disp):
 
 @patch("limitlens.providers.pioneer.load_limitlens_config")
 @patch.dict(os.environ, clear=True)
-def test_get_pioneer_data_no_token(mock_cfg):
+@patch("limitlens.keychain.get_keychain_token", return_value=None)
+def test_get_pioneer_data_no_token(mock_keychain, mock_cfg):
     mock_cfg.return_value = {}
     res = get_pioneer_data(DummyArgs())
-    assert res["error"] == "PIONEER_API_TOKEN environment variable not set"
+    assert res["error"] == "PIONEER_API_TOKEN environment variable not set and no keychain token found"
     
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "test", "remaining": 10, "total": 100, "used": 90}]}}
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
@@ -219,7 +220,8 @@ def test_get_pioneer_data_no_token(mock_cfg):
 @patch("limitlens.providers.pioneer.load_limitlens_config")
 @patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
-def test_get_pioneer_data_success(mock_open, mock_cfg):
+@patch("limitlens.keychain.get_keychain_token", return_value=None)
+def test_get_pioneer_data_success(mock_keychain, mock_open, mock_cfg):
     mock_cfg.return_value = {}
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
@@ -248,7 +250,8 @@ def test_get_pioneer_data_success(mock_open, mock_cfg):
 @patch("limitlens.providers.pioneer.load_limitlens_config")
 @patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token", "PIONEER_TEAM_ID": "team_1"}, clear=True)
-def test_get_pioneer_data_team_id(mock_open, mock_cfg):
+@patch("limitlens.keychain.get_keychain_token", return_value=None)
+def test_get_pioneer_data_with_team(mock_keychain, mock_open, mock_cfg):
     mock_cfg.return_value = {}
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
@@ -262,7 +265,8 @@ def test_get_pioneer_data_team_id(mock_open, mock_cfg):
 @patch("limitlens.providers.pioneer.load_limitlens_config")
 @patch("limitlens.providers.pioneer._open_no_redirect")
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
-def test_get_pioneer_data_urlopen_error(mock_open, mock_cfg):
+@patch("limitlens.keychain.get_keychain_token", return_value=None)
+def test_get_pioneer_data_http_error(mock_keychain, mock_open, mock_cfg):
     mock_cfg.return_value = {}
     mock_open.side_effect = urllib.error.URLError("test error")
     res = get_pioneer_data(DummyArgs())

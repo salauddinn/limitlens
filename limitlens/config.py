@@ -65,6 +65,9 @@ DEFAULT_CONFIG = {
         "auto_hide_enabled": True,
         "auto_hide_days": 1,
         "amp_usable_pct": 30.0,
+        "menubar_refresh_seconds": 300,
+        "notify_warn_pct": 30.0,
+        "notify_critical_pct": 10.0,
     },
 }
 
@@ -162,6 +165,10 @@ def load_limitlens_config():
             
         validate_config_types(user_config)
         config = deep_merge(config, user_config)
+    else:
+        auto_config = auto_detect_providers(path)
+        if auto_config:
+            config = deep_merge(config, auto_config)
         
     apply_env_overrides(config)
     return config
@@ -181,10 +188,25 @@ def load_display_config():
         amp_usable_pct = float(disp.get("amp_usable_pct", 30.0))
     except (TypeError, ValueError):
         amp_usable_pct = 30.0
+    try:
+        menubar_refresh_seconds = int(disp.get("menubar_refresh_seconds", 300))
+    except (TypeError, ValueError):
+        menubar_refresh_seconds = 300
+    try:
+        notify_warn_pct = float(disp.get("notify_warn_pct", 30.0))
+    except (TypeError, ValueError):
+        notify_warn_pct = 30.0
+    try:
+        notify_critical_pct = float(disp.get("notify_critical_pct", 10.0))
+    except (TypeError, ValueError):
+        notify_critical_pct = 10.0
     return {
         "auto_hide_enabled": auto_hide_enabled,
         "auto_hide_days": auto_hide_days,
         "amp_usable_pct": amp_usable_pct,
+        "menubar_refresh_seconds": menubar_refresh_seconds,
+        "notify_warn_pct": notify_warn_pct,
+        "notify_critical_pct": notify_critical_pct,
     }
 
 def configured_days(config_section):
@@ -198,3 +220,126 @@ def configured_days(config_section):
         if day > 0 and day not in out:
             out.append(day)
     return out or [1, 7]
+
+
+def is_provider_enabled(config, key, default=True):
+    """Return True if the named provider section is enabled.
+
+    Handles boolean, string ("false"/"0"/"no"), and missing values.
+    ``default`` controls what to return when the key or "enabled" field
+    is absent from the config.
+    """
+    section = config.get(key)
+    if not isinstance(section, dict):
+        return default
+    raw = section.get("enabled", default)
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).lower() not in ("false", "0", "no")
+
+
+def reset_custom_tool_spend(config_path):
+    """Zero out 'used' and 'request_count' for all custom_tools in config.json.
+
+    Returns True if the file was updated, False if no update was needed or the
+    file does not exist. Raises ConfigValidationError on parse/write failure.
+    """
+    import tempfile
+    if not os.path.exists(config_path):
+        return False
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            user_config = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ConfigValidationError(f"Invalid JSON in {config_path}: {e}")
+    except OSError as e:
+        raise ConfigValidationError(f"Cannot read {config_path}: {e}")
+
+    if not isinstance(user_config, dict):
+        return False
+
+    updated = False
+    tools_cfg = (user_config.get("custom_tools") or {}).get("tools", {})
+    if isinstance(tools_cfg, dict):
+        tools_list = list(tools_cfg.values())
+    elif isinstance(tools_cfg, list):
+        tools_list = tools_cfg
+    else:
+        tools_list = []
+
+    for tool_data in tools_list:
+        if not isinstance(tool_data, dict):
+            continue
+        for field in ("used", "request_count"):
+            val = tool_data.get(field, 0)
+            try:
+                if float(val) > 0:
+                    tool_data[field] = 0
+                    updated = True
+            except (TypeError, ValueError):
+                pass
+
+    if not updated:
+        return False
+
+    dir_path = os.path.dirname(config_path)
+    os.makedirs(dir_path, exist_ok=True)
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(user_config, f, indent=2)
+        os.replace(tmp_path, config_path)
+    except OSError as e:
+        raise ConfigValidationError(f"Cannot write {config_path}: {e}")
+    return True
+
+
+def auto_detect_providers(path):
+    """Scan the local system for installed providers and write an initial config."""
+    import sys
+    import shutil
+    
+    detected = {}
+    found_names = []
+
+    def check(key, found):
+        detected[key] = {"enabled": bool(found)}
+        if found:
+            found_names.append(key)
+
+    def safe_exists(p):
+        try:
+            return os.path.exists(os.path.expanduser(p))
+        except Exception:
+            return False
+
+    def safe_which(cmd):
+        try:
+            return bool(shutil.which(cmd))
+        except Exception:
+            return False
+
+    check("cursor", safe_exists("~/Library/Application Support/Cursor") or safe_exists("~/.cursor"))
+    check("codex", safe_exists("~/.config/codex") or safe_exists("~/.codex"))
+    check("amp", safe_which("amp") or safe_exists("~/.amp"))
+    check("antigravity", safe_exists("~/.agy-p1-home") or safe_exists("~/.config/agy"))
+    check("pi", safe_exists("~/.pi/agent/sessions"))
+    check("pioneer", "PIONEER_API_TOKEN" in os.environ)
+    check("agentrouter", safe_exists("~/.config/agentrouter"))
+    check("opencode", safe_exists("~/.local/share/opencode"))
+    check("copilot_cli", safe_exists("~/.cache/limitlens/copilot-otel.jsonl") or safe_exists("~/.config/github-copilot"))
+
+    try:
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(detected, f, indent=2)
+            
+        if "--json" not in sys.argv:
+            sys.stderr.write(f"\033[36m[LimitLens]\033[0m First run setup. Auto-enabled providers: \033[1m{', '.join(found_names) if found_names else 'none'}\033[0m\n")
+            sys.stderr.write(f"Config written to: {path}\n\n")
+    except OSError:
+        pass
+        
+    return detected
