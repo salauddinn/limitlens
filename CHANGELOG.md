@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add `individual_credits` configuration option for Amp to selectively hide credit-only tiers.
+
 ## [1.3.3] - 2026-06-14
 
 ### Added
