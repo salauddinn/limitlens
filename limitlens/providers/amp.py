@@ -15,6 +15,7 @@ from limitlens.core import (
     print_error,
     is_verbose,
     load_display_config,
+    load_limitlens_config,
 )
 
 
@@ -47,6 +48,9 @@ def get_amp_data(args):
     if email_match:
         email = email_match.group(1)
         info["email"] = redact_email(email) if getattr(args, 'redact', True) else email
+
+    config = load_limitlens_config()
+    show_individual = config.get("amp", {}).get("individual_credits", True)
 
     for line in output.splitlines():
         tier_match = re.match(
@@ -83,6 +87,8 @@ def get_amp_data(args):
             line.strip(),
         )
         if credit_match:
+            if not show_individual:
+                continue
             label = credit_match.group(1).strip()
             try:
                 remaining = float(credit_match.group(2))

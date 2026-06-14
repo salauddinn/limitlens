@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     },
     "amp": {
         "enabled": True,
+        "individual_credits": True,
     },
     "antigravity": {
         "enabled": True,
