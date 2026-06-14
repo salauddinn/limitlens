@@ -94,7 +94,13 @@ def limitlens_config_path():
 
 def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
     for key, value in config.items():
-        if path == "custom_tools.tools." or path == "pioneer." or path == "agentrouter.":
+        if (
+            path == "custom_tools.tools."
+            or path == "pioneer."
+            or path == "agentrouter."
+            or path.endswith("model_parents.")
+            or path.endswith("parents.")
+        ):
             continue
 
         if key not in schema_ref:

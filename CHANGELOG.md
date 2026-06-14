@@ -4,11 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-06-14
+
+### Added
+- Add Claude Code local session usage tracking.
+- Add secure OS keychain token storage for Pioneer and Command Code.
+- Add interactive `limitlens-switch` tool launcher.
+- Add first-run provider auto-detection and an operations runbook.
+- Add time-to-exhaustion metadata to waste reports.
+
+### Changed
+- Make menubar refresh and notification thresholds configurable.
+- Use consistent deterministic tool icons across CLI, menubar, and iTerm widget.
+- Improve Antigravity model display by grouping model families and labeling 5-hour vs weekly limits.
+
 ### Security
 - Fixed a race condition where temporary files were momentarily readable by other users before `os.chmod` was applied. `usage_tracker`, `waste_tracker`, and `antigravity` now use `tempfile.mkstemp` to create files securely with `0o600` permissions.
+- Restrict Antigravity TLS-verification fallback to localhost endpoints and log security warnings.
+- Avoid token exposure in process arguments by prompting for `--store-token` values or accepting them via `--store-token-stdin`.
 
 ### Fixed
 - Fixed a `KeyError` in `config.apply_env_overrides` when custom provider keys (like `pioneer.plan`) were used in the config but missing from `DEFAULT_CONFIG`.
+- Allow custom `model_parents` mappings in observed-usage provider configs.
+- Respect ignored Antigravity accounts in the switcher.
+- Include top-level Claude usage in `--usage --tool claude` analytics.
+- Make the iTerm widget gracefully fall back when shared icon helpers are not importable.
 
 ## [1.3.2] - 2026-06-10
 

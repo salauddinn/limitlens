@@ -59,13 +59,10 @@ def log_error(e, context=""):
 def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more")
     try:
-        from importlib.metadata import version as _pkg_version, PackageNotFoundError as _PNF
-        try:
-            _ver = _pkg_version("limitlens")
-        except _PNF:
-            from . import __version__ as _ver
-    except ImportError:
         from . import __version__ as _ver
+    except ImportError:
+        from importlib.metadata import version as _pkg_version
+        _ver = _pkg_version("limitlens")
     parser.add_argument("--version", action="version", version=f"limitlens {_ver}")
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
