@@ -46,8 +46,10 @@ Based on the market analysis, LimitLens sits in a highly strategic, underserved 
 1. **Zero-Dependency Python:** Unlike CodexBar (Swift) or OpenUsage (Go), LimitLens is written in pure Python. It runs seamlessly on Linux, older macOS versions, and Windows without needing compiled binaries. It is highly hackable for data scientists and Python devs.
 2. **Omni-Channel Presence:** It bridges the gap between CLI and GUI. It provides the terminal reporting of OpenUsage AND the macOS Menubar presence of CodexBar, plus a unique iTerm2 status bar widget.
 3. **Smart Tool Recommendations:** LimitLens doesn't just show data; it acts on it. The `--reco` flag analyzes current quotas and suggests the most cost-effective tool currently available based on remaining headroom.
-4. **SaaS Waste & Sunk Cost Analytics:** The `--waste` command plays back snapshots to compute how much subscription quota you let go to waste before resets. No competitor (CodexBar, OpenUsage, or gateways) tracks your "sunk subscription cost," helping you decide whether to downgrade or adjust your workflows.
-5. **Absolute Privacy:** It parses local SQLite databases, config files, and standard APIs. It reads usage *metadata* locally without transmitting keys.
+4. **SaaS Waste & Sunk Cost Analytics:** The `--waste` command plays back snapshots to compute how much subscription quota you let go to waste before resets. No competitor (CodexBar, OpenUsage, or gateways) tracks your "sunk subscription cost," helping you decide whether to downgrade or adjust your workflows. LimitLens also calculates Time-To-Exhaustion (TTX) based on your consumption rate.
+5. **Zero-Config Auto-Detection:** LimitLens works out-of-the-box by automatically scanning default system paths for active installations and configs without requiring manual setup.
+6. **Secure OS Keychain Integration:** Avoids plaintext credential storage by natively integrating with the OS Keychain (macOS, Linux, Windows) to securely hold API tokens.
+7. **Absolute Privacy:** It parses local SQLite databases, config files, and standard APIs. It reads usage *metadata* locally without transmitting keys.
 
 
 ---
@@ -66,32 +68,32 @@ Based on the market analysis, LimitLens sits in a highly strategic, underserved 
 
 ---
 
-## 4. Strategic Recommendations
+## 4. Strategic Capabilities (Implemented Roadmap)
 
-To solidify this PMF against direct competitors like CodexBar and OpenUsage, LimitLens should prioritize the following detailed roadmap features:
+To solidify this PMF against direct competitors like CodexBar and OpenUsage, LimitLens has implemented the following key strategic features:
 
-### 1. Zero-Config Onboarding (Auto-Detection & Installation Pipeline)
+### 1. Zero-Config Onboarding (Auto-Detection & Installation Pipeline) [✅ Implemented]
 - **Objective:** Match OpenUsage's near-frictionless onboarding experience.
 - **Details:** The moment a user runs `limitlens` for the first time, it should automatically:
   - Scan default system paths for active installations and configs (Cursor, Claude Code, GitHub Copilot, env tokens).
   - Automate the setup of the iTerm2 widget. During `install.sh` execution, detect if iTerm2 is installed and automatically copy/symlink `iterm_widget.py` directly into `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/` while configuring `USER_LIMITLENS_DIR` dynamically.
 - **Outcome:** A working dashboard and terminal widget set up in under 2 seconds without requiring manual JSON configuration or copy-paste setup steps.
 
-### 2. Enhanced Smart Routing Engine (`--reco`)
+### 2. Enhanced Smart Routing Engine (`--reco`) [✅ Implemented]
 - **Objective:** Evolve from a passive monitoring tool to an active workflow routing utility.
 - **Details:** Expand the `--reco` command logic to evaluate multiple routing parameters:
   - **Time-to-Reset:** Prioritize using a tool whose quota is close to resetting (e.g., *"Cursor fast requests reset in 10 minutes; exhaust those first before using other models"*).
   - **Model & Task Capability Match:** Align the tool recommendation with the user's current task (e.g., *"Use Amp for boilerplate/repetitive edits, save your premium Codex/Cursor quota for complex logical refactoring"*).
   - **Unit Economics (Dollar-Cost vs. Subscription Status):** Compare the cost-efficiency of using BYOK credits vs. subscription quotas.
 
-### 3. Proactive OS Notifications & Alerts
+### 3. Proactive OS Notifications & Alerts (TTX) [✅ Implemented]
 - **Objective:** Alert users before they hit a rate limit, preventing workflow disruption.
 - **Details:** 
   - Provide a threshold-based alert system (e.g., triggering a system notification when a quota drops below 10%).
   - Implement a **"Time to Exhaustion"** metric (similar to `onWatch`) that projects how much time/requests remain at the current rate of consumption.
   - Trigger desktop notifications natively (integrating with macOS Notification Center or using standard desktop notify tools) in addition to the menubar color changes.
 
-### 4. Secure OS Keychain Integration
+### 4. Secure OS Keychain Integration [✅ Implemented]
 - **Objective:** Securely store API keys and session tokens.
 - **Details:** Instead of requiring users to define plaintext keys in profile files (`PIONEER_API_TOKEN` in `.zshrc`), provide the ability to securely write to and read from the OS Keychain.
 - **Outcome:** Zero-dependency wrapper using standard CLI commands (like `/usr/bin/security` on macOS or `secret-tool` on Linux) to retrieve keys securely on demand.

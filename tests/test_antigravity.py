@@ -13,6 +13,8 @@ from limitlens.providers import antigravity as ag_mod
 from limitlens.providers.antigravity import (
     _fetch_single_profile,
     is_agy_cli_process_command,
+    profile_is_ignored,
+    filter_antigravity_profiles,
 )
 
 
@@ -748,11 +750,6 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         
         args.no_color = True
         ag_mod.display_antigravity_text(data, args)
-
-from limitlens.providers.antigravity import (
-    profile_is_ignored,
-    filter_antigravity_profiles,
-)
 
 
 class TestAntigravityIgnoredAccounts(unittest.TestCase):

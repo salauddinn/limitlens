@@ -28,9 +28,12 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 - **📊 Unified Dashboard:** Instantly view remaining headroom, reset times, and limits across all your installed accounts and profiles.
 - **🧠 Smart Recommendations:** Automatically suggests the best tool for the job based on remaining quotas to prevent wasting premium fast requests.
 - **⚡ Zero-Dependency CLI:** Written purely in standard Python with absolutely no runtime package dependencies required.
+- **🪄 Zero-Config Auto-Detection:** Automatically scans system paths for active tools and configs on first run—no manual setup required.
 - **🍎 macOS Menubar App:** A sleek native menubar app that lives in your system tray and warns you when you run low.
 - **📟 iTerm2 Widget:** Native background script that powers a live, real-time widget directly in your terminal's status bar.
+- **⏱️ Time-To-Exhaustion (TTX):** Analyzes your consumption rate to project exactly when you will run out of quota.
 - **🔒 Privacy First:** Never transmits or stores API keys or session cookies. Local outputs automatically redact sensitive paths and emails.
+- **🔑 Secure Keychain:** Use native OS keychains to store API tokens securely instead of plaintext files.
 
 ---
 
@@ -95,9 +98,10 @@ limitlens            # Show full status across all tracked AI tools
 limitlens --tool codex  # Filter output to a specific tool
 limitlens --watch    # Keep alive and refresh every 5 seconds
 limitlens --reco     # Only print the smart AI tool recommendation
-limitlens --waste    # Show waste report (% of quota wasted over 7 days)
+limitlens --waste    # Show waste report and Time-To-Exhaustion (TTX) projections
 limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
+limitlens --store-token pioneer <token> # Securely store an API token in the OS keychain
 limitlens-switch     # Switch context interactively and execute a tool in place
 limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with args
 ```
@@ -143,8 +147,10 @@ Bring real-time quota visibility to your terminal window.
 
 ## ⚙️ Configuration & Privacy
 
-No configuration is required by default, but LimitLens is highly customizable.
-Create a config file at `~/.config/limitlens/config.json`. You can completely disable any supported provider by setting its `"enabled"` property to `false`:
+**Zero-Config Auto-Detection:** On its first run, LimitLens automatically scans your system paths (like `~/.codex-*` or `~/.cursor`) to detect installed tools and creates a default config.
+
+No manual configuration is required by default, but LimitLens is highly customizable.
+You can edit the config file at `~/.config/limitlens/config.json` to completely disable any supported provider by setting its `"enabled"` property to `false`:
 
 ```json
 {

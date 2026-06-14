@@ -1,5 +1,4 @@
 import subprocess
-import os
 import sys
 
 SERVICE_NAME = "limitlens"
