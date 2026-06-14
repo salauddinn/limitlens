@@ -27,7 +27,7 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 
 - **📊 Unified Dashboard:** Instantly view remaining headroom, reset times, and limits across all your installed accounts and profiles.
 - **🧠 Smart Recommendations:** Automatically suggests the best tool for the job based on remaining quotas to prevent wasting premium fast requests.
-- **⚡ Zero-Dependency CLI:** Written purely in standard Python with absolutely no runtime package dependencies required.
+- **⚡ Lightweight CLI:** Written in Python with minimal runtime dependencies and no external services required.
 - **🪄 Zero-Config Auto-Detection:** Automatically scans system paths for active tools and configs on first run—no manual setup required.
 - **🍎 macOS Menubar App:** A sleek native menubar app that lives in your system tray and warns you when you run low.
 - **📟 iTerm2 Widget:** Native background script that powers a live, real-time widget directly in your terminal's status bar.
