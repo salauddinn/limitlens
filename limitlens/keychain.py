@@ -7,7 +7,7 @@ def set_keychain_token(account: str, token: str) -> bool:
     """Store a token in the OS keychain securely."""
     if sys.platform == "darwin":
         # macOS
-        cmd = ["/usr/bin/security", "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account, "-w", token]
+        cmd = ["security", "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account, "-w", token]
         try:
             subprocess.run(cmd, check=True, capture_output=True)
             return True
@@ -27,7 +27,7 @@ def get_keychain_token(account: str) -> str:
     """Retrieve a token from the OS keychain securely."""
     if sys.platform == "darwin":
         # macOS
-        cmd = ["/usr/bin/security", "find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"]
+        cmd = ["security", "find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"]
         try:
             result = subprocess.run(cmd, check=True, capture_output=True, text=True)
             return result.stdout.strip()

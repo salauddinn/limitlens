@@ -181,7 +181,7 @@ def main():
         
     print_c(f"\n  ⚡ Switching context: executing `{full_command}` in place...\n", "\033[1;32m", no_color)
     
-    shell = os.environ.get("SHELL", "/bin/zsh")
+    shell = os.environ.get("SHELL", "sh")
     try:
         os.execvp(shell, [shell, "-c", full_command])
     except Exception as e:

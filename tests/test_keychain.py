@@ -15,7 +15,7 @@ class TestKeychain(unittest.TestCase):
         self.assertTrue(set_keychain_token("test_acc", "test_tok"))
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
-        self.assertEqual(args[0], "/usr/bin/security")
+        self.assertEqual(args[0], "security")
 
     @patch("limitlens.keychain.sys.platform", "linux")
     @patch("limitlens.keychain.subprocess.run")
