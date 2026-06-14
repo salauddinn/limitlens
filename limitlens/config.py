@@ -43,6 +43,14 @@ DEFAULT_CONFIG = {
         "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
         "days": [1, 7],
     },
+    "claude": {
+        "enabled": True,
+        "sessions_dir": "~/.claude/projects",
+        "days": [1, 7],
+        "providers": [],
+        "ignored_models": [],
+        "model_parents": {},
+    },
     "pioneer": {
         "enabled": False,
         "team_id": "",
@@ -50,6 +58,7 @@ DEFAULT_CONFIG = {
     },
     "agentrouter": {
         "enabled": False,
+        "provider": "agentrouter",
         "quota_url": "https://agentrouter.org/api/user/self",
         "unit_label": "units",
     },
@@ -284,13 +293,21 @@ def reset_custom_tool_spend(config_path):
 
     dir_path = os.path.dirname(config_path)
     os.makedirs(dir_path, exist_ok=True)
+    tmp_path = None
     try:
         fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(user_config, f, indent=2)
         os.replace(tmp_path, config_path)
+        tmp_path = None
     except OSError as e:
         raise ConfigValidationError(f"Cannot write {config_path}: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
     return True
 
 
@@ -299,11 +316,16 @@ def auto_detect_providers(path):
     import sys
     import shutil
     
-    detected = {}
+    detected = copy.deepcopy(DEFAULT_CONFIG)
+    for k in detected:
+        if isinstance(detected[k], dict) and "enabled" in detected[k]:
+            detected[k]["enabled"] = False
+            
     found_names = []
+    available = {}
 
     def check(key, found):
-        detected[key] = {"enabled": bool(found)}
+        available[key] = bool(found)
         if found:
             found_names.append(key)
 
@@ -328,6 +350,48 @@ def auto_detect_providers(path):
     check("agentrouter", safe_exists("~/.config/agentrouter"))
     check("opencode", safe_exists("~/.local/share/opencode"))
     check("copilot_cli", safe_exists("~/.cache/limitlens/copilot-otel.jsonl") or safe_exists("~/.config/github-copilot"))
+    check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))
+    check("commandcode", False)
+
+    is_interactive = "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
+
+    if is_interactive:
+        sys.stderr.write("\033[36m[LimitLens]\033[0m First run setup.\n")
+        if found_names:
+            sys.stderr.write("We detected the following tools on your system:\n")
+            for name in found_names:
+                sys.stderr.write(f"  - {name}\n")
+        else:
+            sys.stderr.write("We didn't detect any tools automatically.\n")
+            
+        sys.stderr.write("\nLet's configure which tools you want to enable in your dashboard:\n")
+        
+        for key in list(DEFAULT_CONFIG.keys()):
+            if not isinstance(DEFAULT_CONFIG[key], dict) or "enabled" not in DEFAULT_CONFIG[key]:
+                continue
+                
+            is_avail = available.get(key, False)
+            default_y = "Y/n" if is_avail else "y/N"
+            is_detected = " (detected)" if is_avail else ""
+            
+            try:
+                ans = input(f"Enable {key}{is_detected}? [{default_y}]: ").strip().lower()
+                if not ans:
+                    detected[key]["enabled"] = is_avail
+                else:
+                    detected[key]["enabled"] = ans in ("y", "yes", "true", "1")
+            except (EOFError, KeyboardInterrupt):
+                sys.stderr.write("\nSetup aborted. Using auto-detected configuration.\n")
+                # fallback to auto-detect
+                for k in available:
+                    if k in detected:
+                        detected[k]["enabled"] = available[k]
+                break
+        sys.stderr.write("\n")
+    else:
+        for key in available:
+            if key in detected:
+                detected[key]["enabled"] = available[key]
 
     try:
         dir_path = os.path.dirname(path)
@@ -337,8 +401,7 @@ def auto_detect_providers(path):
             json.dump(detected, f, indent=2)
             
         if "--json" not in sys.argv:
-            sys.stderr.write(f"\033[36m[LimitLens]\033[0m First run setup. Auto-enabled providers: \033[1m{', '.join(found_names) if found_names else 'none'}\033[0m\n")
-            sys.stderr.write(f"Config written to: {path}\n\n")
+            sys.stderr.write(f"\033[36m[LimitLens]\033[0m Config written to: {path}\n\n")
     except OSError:
         pass
         

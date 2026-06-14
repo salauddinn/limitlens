@@ -12,6 +12,7 @@ from limitlens.core import (
     configured_days,
     print_c,
     _fmt_tokens,
+    file_lock,
 )
 
 # ── Observed usage helpers ──────────────────────────────────────────────────
@@ -20,51 +21,64 @@ SPEND_RESETS_PATH = os.environ.get("LIMITLENS_SPEND_RESETS_PATH") or os.path.exp
 
 def get_spend_reset_time(tool_name):
     try:
-        with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if not isinstance(data, dict):
-                data = {}
-            ts = data.get(tool_name)
-            if ts:
-                return datetime.fromisoformat(ts)
+        with file_lock(SPEND_RESETS_PATH + ".lock"):
+            if not os.path.exists(SPEND_RESETS_PATH):
+                return None
+            with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if not isinstance(data, dict):
+                    data = {}
+                ts = data.get(tool_name)
+                if ts:
+                    return datetime.fromisoformat(ts)
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         pass
     return None
 
 def mark_spend_reset(tool_name=None, extra_data=None):
     try:
-        data = {}
-        if os.path.exists(SPEND_RESETS_PATH):
+        with file_lock(SPEND_RESETS_PATH + ".lock"):
+            data = {}
+            if os.path.exists(SPEND_RESETS_PATH):
+                try:
+                    with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if not isinstance(data, dict):
+                        data = {}
+                except (json.JSONDecodeError, OSError):
+                    pass
+            
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if tool_name:
+                data[tool_name] = now_iso
+            else:
+                for t in ["opencode", "pi", "copilot_cli", "claude"]:
+                    data[t] = now_iso
+                    
+            if extra_data:
+                for k, v in extra_data.items():
+                    if v is None:
+                        data.pop(k, None)
+                    else:
+                        data[k] = v
+                    
+            import tempfile
+            dir_path = os.path.dirname(SPEND_RESETS_PATH)
+            os.makedirs(dir_path, mode=0o700, exist_ok=True)
+            tmp_path = None
             try:
-                with open(SPEND_RESETS_PATH, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if not isinstance(data, dict):
-                    data = {}
-            except (json.JSONDecodeError, OSError):
-                pass
-        
-        now_iso = datetime.now(timezone.utc).isoformat()
-        if tool_name:
-            data[tool_name] = now_iso
-        else:
-            for t in ["opencode", "pi", "copilot_cli"]:
-                data[t] = now_iso
-                
-        if extra_data:
-            for k, v in extra_data.items():
-                if v is None:
-                    data.pop(k, None)
-                else:
-                    data[k] = v
-                
-        import tempfile
-        dir_path = os.path.dirname(SPEND_RESETS_PATH)
-        os.makedirs(dir_path, mode=0o700, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="spend_resets_", suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f)
-        os.replace(tmp_path, SPEND_RESETS_PATH)
-        return True
+                fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="spend_resets_", suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+                os.replace(tmp_path, SPEND_RESETS_PATH)
+                tmp_path = None
+                return True
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
     except OSError:
         return False
 
@@ -524,13 +538,26 @@ def get_pi_usage(config):
     min_since_ts = min(win["since"].timestamp() for win in windows.values())
 
     files = []
+    def scan_dir(dir_path, depth):
+        try:
+            with os.scandir(dir_path) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file():
+                            if entry.name.endswith(".jsonl"):
+                                if entry.stat().st_mtime >= min_since_ts:
+                                    files.append(Path(entry.path))
+                        elif entry.is_dir():
+                            if entry.stat().st_mtime >= min_since_ts:
+                                if depth < 3:
+                                    scan_dir(entry.path, depth + 1)
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+
     try:
-        for path in root.rglob("*.jsonl"):
-            try:
-                if path.stat().st_mtime >= min_since_ts:
-                    files.append(path)
-            except OSError:
-                continue
+        scan_dir(str(root), 1)
     except OSError as e:
         return {"error": f"Pi sessions read error: {e}"}
 
@@ -587,10 +614,138 @@ def get_pi_usage(config):
         ],
     }
 
+def claude_usage_tokens(usage):
+    if not isinstance(usage, dict):
+        return {}
+    input_t = usage.get("input_tokens") or 0
+    output_t = usage.get("output_tokens") or 0
+    cache_read = usage.get("cache_read_input_tokens") or 0
+    cache_write = usage.get("cache_creation_input_tokens") or 0
+    total_t = input_t + output_t + cache_read + cache_write
+    return {
+        "total": total_t,
+        "input": input_t,
+        "output": output_t,
+        "reasoning": 0,
+        "cache_read": cache_read,
+        "cache_write": cache_write,
+    }
+
+def get_claude_usage(config):
+    cfg = config.get("claude", {})
+    if not cfg.get("enabled", True):
+        return {"disabled": True}
+    
+    claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    if claude_dir:
+        sessions_dir = os.path.join(claude_dir, "projects")
+    else:
+        sessions_dir = cfg.get("sessions_dir") or "~/.claude/projects"
+        if not os.path.exists(os.path.expanduser(sessions_dir)) and os.path.exists(os.path.expanduser("~/.config/claude/projects")):
+            sessions_dir = "~/.config/claude/projects"
+
+    root = Path(os.path.expanduser(sessions_dir))
+    if not root.exists():
+        return {"error": f"Claude Code sessions dir not found: {redact_path(sessions_dir)}"}
+
+    providers = set(cfg.get("providers") or [])
+    ignored_models = cfg.get("ignored_models") or []
+    model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
+    days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("claude")
+    windows = {
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
+        for days in days_list
+    }
+    min_since_ts = min(win["since"].timestamp() for win in windows.values())
+
+    files = []
+    def scan_dir(dir_path, depth):
+        try:
+            with os.scandir(dir_path) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file():
+                            if entry.name.endswith(".jsonl"):
+                                if entry.stat().st_mtime >= min_since_ts:
+                                    files.append(Path(entry.path))
+                        elif entry.is_dir():
+                            if entry.stat().st_mtime >= min_since_ts:
+                                if depth < 3:
+                                    scan_dir(entry.path, depth + 1)
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+
+    try:
+        scan_dir(str(root), 1)
+    except OSError as e:
+        return {"error": f"Claude Code sessions read error: {e}"}
+
+    for path in files:
+        try:
+            f = path.open(encoding="utf-8")
+        except OSError:
+            continue
+        with f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                
+                msg = rec.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                if msg.get("role") != "assistant":
+                    continue
+                    
+                usage = msg.get("usage") or {}
+                tokens = claude_usage_tokens(usage)
+                if token_total_value(tokens) <= 0:
+                    continue
+                    
+                ts = parse_otel_timestamp(rec.get("timestamp"))
+                if ts is None:
+                    continue
+                    
+                provider = "anthropic"
+                model = msg.get("model") or "unknown"
+                if providers and provider not in providers:
+                    continue
+                if model_is_ignored(provider, model, ignored_models):
+                    continue
+                    
+                for win in windows.values():
+                    if ts < win["since"]:
+                        continue
+                    key = (provider, model)
+                    totals = win["by_key"].setdefault(key, empty_usage_totals())
+                    parent = model_parent_label(provider, model, model_parents)
+                    if parent:
+                        totals["parent"] = parent
+                    add_usage(totals, cost=0.0, tokens=tokens)
+
+    return {
+        "sessions_dir": redact_path(sessions_dir),
+        "windows": [
+            {
+                "days": win["days"],
+                "since": win["since"].isoformat(),
+                "models": usage_summary_rows(win["by_key"]),
+            }
+            for win in windows.values()
+        ],
+    }
+
 def get_opencode_data(args, config):
     return {
         "opencode": get_opencode_usage(config),
         "pi": get_pi_usage(config),
+        "claude": get_claude_usage(config),
         "copilot_cli": get_copilot_cli_usage(config),
     }
 
@@ -599,6 +754,12 @@ def get_pi_data(args, config):
 
 def display_pi_text(data, args):
     display_opencode_text({"pi": data}, args)
+
+def get_claude_data(args, config):
+    return get_claude_usage(config)
+
+def display_claude_text(data, args):
+    display_opencode_text({"claude": data}, args)
 
 def display_usage_rows(rows, args):
     if not rows:
@@ -725,9 +886,12 @@ def display_opencode_text(data, args):
     op = data.get("opencode") or {}
     pi = data.get("pi") or {}
     co = data.get("copilot_cli") or {}
-    sources = [("opencode", op), ("pi", pi), ("copilot-cli", co)]
+    cc = data.get("claude") or {}
+    sources = [("opencode", op), ("pi", pi), ("copilot-cli", co), ("claude", cc)]
     if getattr(args, 'tool', None) == "pi":
         sources = [("pi", pi)]
+    elif getattr(args, 'tool', None) == "claude":
+        sources = [("claude", cc)]
     
     if not (getattr(args, "verbose", False) or getattr(args, "all", False)):
         has_data = False

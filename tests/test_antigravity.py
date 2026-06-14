@@ -608,6 +608,34 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             ag_mod.make_ag_request_with_tls_fallback(1234, "tok", "M", {})
 
+    def test_is_localhost(self):
+        self.assertTrue(ag_mod.is_localhost("127.0.0.1"))
+        self.assertTrue(ag_mod.is_localhost("localhost"))
+        self.assertTrue(ag_mod.is_localhost("::1"))
+        self.assertFalse(ag_mod.is_localhost("example.com"))
+        self.assertFalse(ag_mod.is_localhost("8.8.8.8"))
+        self.assertFalse(ag_mod.is_localhost(None))
+
+    @patch("urllib.request.urlopen")
+    def test_make_ag_request_restrict_tls_bypass(self, mock_urlopen):
+        with self.assertRaises(ValueError):
+            ag_mod.make_ag_request(1234, "tok", "Method", {}, verify_tls=False, host="example.com")
+
+    @patch("limitlens.providers.antigravity.make_ag_request")
+    def test_make_ag_request_with_tls_fallback_restricted(self, mock_req):
+        mock_req.side_effect = ssl.SSLCertVerificationError()
+        with self.assertRaises(ssl.SSLError):
+            ag_mod.make_ag_request_with_tls_fallback(1234, "tok", "M", {}, host="example.com")
+
+    @patch("limitlens.providers.antigravity.make_ag_request")
+    @patch("limitlens.providers.antigravity.log_security_warning")
+    def test_make_ag_request_with_tls_fallback_allowed_with_warning(self, mock_warn, mock_req):
+        mock_req.side_effect = [ssl.SSLCertVerificationError(), {"ok": 2}]
+        res, insecure = ag_mod.make_ag_request_with_tls_fallback(1234, "tok", "M", {}, host="127.0.0.1")
+        self.assertEqual(res, {"ok": 2})
+        self.assertTrue(insecure)
+        mock_warn.assert_called_once()
+
     @patch("limitlens.providers.antigravity._tcp_port_open", return_value=True)
     @patch("limitlens.providers.antigravity.make_ag_request_with_tls_fallback")
     def test_probe_ag_port_exceptions(self, mock_req, mock_tcp):

@@ -226,12 +226,14 @@ def record_snapshot(result):
     rows = _flatten_snapshot(result)
     if not rows:
         return
+    from limitlens.core import file_lock
     try:
         os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
-        _maybe_prune_old_snapshots()
-        with open(SNAPSHOT_PATH, "a", encoding="utf-8") as f:
-            f.write("".join(json.dumps(row) + "\n" for row in rows))
-        os.chmod(SNAPSHOT_PATH, 0o600)
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            _maybe_prune_old_snapshots()
+            with open(SNAPSHOT_PATH, "a", encoding="utf-8") as f:
+                f.write("".join(json.dumps(row) + "\n" for row in rows))
+            os.chmod(SNAPSHOT_PATH, 0o600)
     except OSError:
         pass
 
@@ -253,113 +255,135 @@ def _parse_ts(s):
 def _load_snapshots(since=None):
     if not os.path.exists(SNAPSHOT_PATH):
         return []
-    rows = []
+    from limitlens.core import file_lock
     try:
-        with open(SNAPSHOT_PATH, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                ts = _parse_ts(row.get("ts"))
-                if ts is None:
-                    continue
-                if since and ts < since:
-                    continue
-                row["_ts"] = ts
-                rows.append(row)
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            rows = []
+            with open(SNAPSHOT_PATH, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(row, dict):
+                        continue
+                    ts = _parse_ts(row.get("ts"))
+                    if ts is None:
+                        continue
+                    if since and ts < since:
+                        continue
+                    row["_ts"] = ts
+                    rows.append(row)
+            return rows
     except OSError:
         return []
-    return rows
 
 
 def _load_snapshots_with_anchor(since=None):
-    rows = _load_snapshots()
-    if not since:
-        return rows
+    from limitlens.core import file_lock
+    try:
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            rows = _load_snapshots()
+            if not since:
+                return rows
 
-    rows.sort(key=lambda r: r["_ts"])
+            rows.sort(key=lambda r: r["_ts"])
 
-    anchors = {}
-    valid_rows = []
+            anchors = {}
+            valid_rows = []
 
-    for row in rows:
-        ts = row.get("_ts")
-        if not ts:
-            continue
-        key = row.get("key")
-        if ts < since:
-            anchors[key] = row
-        else:
-            valid_rows.append(row)
+            for row in rows:
+                ts = row.get("_ts")
+                if not ts:
+                    continue
+                key = row.get("key")
+                if ts < since:
+                    anchors[key] = row
+                else:
+                    valid_rows.append(row)
 
-    final_rows = list(anchors.values()) + valid_rows
-    final_rows.sort(key=lambda r: r["_ts"])
-    return final_rows
+            final_rows = list(anchors.values()) + valid_rows
+            final_rows.sort(key=lambda r: r["_ts"])
+            return final_rows
+    except OSError:
+        return []
 
 
 def merge_snapshots(new_rows):
     if not isinstance(new_rows, list):
         return False
 
-    existing = _load_snapshots()
-
-    parsed_new = []
-    for r in new_rows:
-        if not isinstance(r, dict):
-            continue
-        row_copy = r.copy()
-        if "_ts" not in row_copy:
-            row_copy["_ts"] = _parse_ts(row_copy.get("ts"))
-        if row_copy["_ts"] is not None:
-            parsed_new.append(row_copy)
-
-    all_rows = existing + parsed_new
-
-    seen = set()
-    deduped = []
-
-    for row in all_rows:
-        ts_str = row.get("ts")
-        key = row.get("key")
-        tool = row.get("tool")
-        pct_left = row.get("pct_left")
-        remaining = row.get("remaining")
-        reset_at = row.get("reset_at")
-
-        sig = tuple(str(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))
-        if sig not in seen:
-            seen.add(sig)
-            deduped.append(row)
-
-    deduped.sort(key=lambda r: r["_ts"])
-
+    from limitlens.core import file_lock
     try:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
-        tmp_path = SNAPSHOT_PATH + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            for row in deduped:
-                out = row.copy()
-                out.pop("_ts", None)
-                f.write(json.dumps(out) + "\n")
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, SNAPSHOT_PATH)
-        return True
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            existing = _load_snapshots()
+
+            parsed_new = []
+            for r in new_rows:
+                if not isinstance(r, dict):
+                    continue
+                row_copy = r.copy()
+                if "_ts" not in row_copy:
+                    row_copy["_ts"] = _parse_ts(row_copy.get("ts"))
+                if row_copy["_ts"] is not None:
+                    parsed_new.append(row_copy)
+
+            all_rows = existing + parsed_new
+
+            seen = set()
+            deduped = []
+
+            for row in all_rows:
+                ts_str = row.get("ts")
+                key = row.get("key")
+                tool = row.get("tool")
+                pct_left = row.get("pct_left")
+                remaining = row.get("remaining")
+                reset_at = row.get("reset_at")
+
+                sig = tuple(str(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))
+                if sig not in seen:
+                    seen.add(sig)
+                    deduped.append(row)
+
+            deduped.sort(key=lambda r: r["_ts"])
+
+            tmp_path = None
+            try:
+                os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+                tmp_path = SNAPSHOT_PATH + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    for row in deduped:
+                        out = row.copy()
+                        out.pop("_ts", None)
+                        f.write(json.dumps(out) + "\n")
+                try:
+                    os.chmod(tmp_path, 0o600)
+                except OSError:
+                    pass
+                os.replace(tmp_path, SNAPSHOT_PATH)
+                tmp_path = None
+                return True
+            except OSError:
+                return False
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
     except OSError:
         return False
 
 
 def reset_snapshots():
     """Delete the entire snapshot history. Returns True on success."""
+    from limitlens.core import file_lock
     try:
-        if os.path.exists(SNAPSHOT_PATH):
-            os.remove(SNAPSHOT_PATH)
-        return True
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            if os.path.exists(SNAPSHOT_PATH):
+                os.remove(SNAPSHOT_PATH)
+            return True
     except OSError:
         return False
 
@@ -368,19 +392,32 @@ def prune_old_snapshots():
     """Optional: drop rows older than SNAPSHOT_PRUNE_DAYS to keep file small."""
     if not os.path.exists(SNAPSHOT_PATH):
         return
-    cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_PRUNE_DAYS)
-    rows = _load_snapshots(since=cutoff)
+    from limitlens.core import file_lock
     try:
-        tmp_path = SNAPSHOT_PATH + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            for row in rows:
-                row.pop("_ts", None)
-                f.write(json.dumps(row) + "\n")
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, SNAPSHOT_PATH)
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_PRUNE_DAYS)
+            rows = _load_snapshots(since=cutoff)
+            tmp_path = None
+            try:
+                tmp_path = SNAPSHOT_PATH + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    for row in rows:
+                        row.pop("_ts", None)
+                        f.write(json.dumps(row) + "\n")
+                try:
+                    os.chmod(tmp_path, 0o600)
+                except OSError:
+                    pass
+                os.replace(tmp_path, SNAPSHOT_PATH)
+                tmp_path = None
+            except OSError:
+                pass
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
     except OSError:
         pass
 
@@ -516,7 +553,6 @@ def format_ttx(ttx_hours):
 
 
 def compute_waste(days=7, config=None):
-
     """
     Return dict[key] -> waste data.
 
@@ -526,71 +562,76 @@ def compute_waste(days=7, config=None):
     Unlimited-model keys (Flash etc.) are filtered out — they may exist in
     historical snapshots from before the exclusion was added.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = _load_snapshots_with_anchor(since)
-    if not rows:
-        return {}
+    from limitlens.core import file_lock
+    try:
+        with file_lock(SNAPSHOT_PATH + ".lock"):
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            rows = _load_snapshots_with_anchor(since)
+            if not rows:
+                return {}
 
-    by_key = {}
-    for row in rows:
-        # Filter legacy rows for unlimited models (e.g. recorded before exclusion).
-        key = row["key"]
-        label = key.split("::", 1)[-1] if "::" in key else ""
-        if _is_unlimited_model(label):
-            continue
-        # Respect current Codex account ignores for historical rows too. The
-        # snapshot log is append-only, so ignored accounts may still exist in
-        # old data even though live collection no longer returns them.
-        if _snapshot_key_is_config_ignored(key, config):
-            continue
-        by_key.setdefault(key, []).append(row)
-
-    out = {}
-    for key, series in by_key.items():
-        series.sort(key=lambda r: r["_ts"])
-        if any(r.get("tool") == "amp" for r in series):
-            amp_waste = _compute_amp_replenish_waste(series, since)
-            if amp_waste:
-                ttx = compute_ttx(rows, key)
-                amp_waste["ttx_hours"] = ttx
-                amp_waste["ttx_label"] = format_ttx(ttx)
-                out[key] = amp_waste
-            continue
-
-        is_antigravity = any(r.get("tool") == "antigravity" for r in series)
-        events = []
-        for prev, curr in zip(series, series[1:]):
-            # Rows before `since` are anchors only: they provide prior context
-            # for detecting the first in-window reset, but are never counted as
-            # events themselves.
-            curr_ts = curr.get("_ts")
-            if curr_ts is None or curr_ts < since:
-                continue
-            if _is_reset_event(prev, curr):
-                wasted = float(prev["pct_left"] or 0)
-                # Antigravity's bottom-end pct is unreliable; don't count
-                # "waste" of <=20% — it was probably actually exhausted.
-                if is_antigravity and wasted <= ANTIGRAVITY_WASTE_MIN_PCT:
+            by_key = {}
+            for row in rows:
+                # Filter legacy rows for unlimited models (e.g. recorded before exclusion).
+                key = row["key"]
+                label = key.split("::", 1)[-1] if "::" in key else ""
+                if _is_unlimited_model(label):
                     continue
-                events.append({
-                    "at": curr["ts"],
-                    "wasted_pct": wasted,
-                })
-        if not events:
-            continue
-        wastes = [e["wasted_pct"] for e in events]
-        ttx = compute_ttx(rows, key)
-        out[key] = {
-            "reset_count": len(events),
-            "avg_wasted_pct": sum(wastes) / len(wastes),
-            "max_wasted_pct": max(wastes),
-            "last_seen_pct": series[-1]["pct_left"],
-            "last_seen_at": series[-1]["ts"],
-            "events": events,
-            "ttx_hours": ttx,
-            "ttx_label": format_ttx(ttx),
-        }
-    return out
+                # Respect current Codex account ignores for historical rows too. The
+                # snapshot log is append-only, so ignored accounts may still exist in
+                # old data even though live collection no longer returns them.
+                if _snapshot_key_is_config_ignored(key, config):
+                    continue
+                by_key.setdefault(key, []).append(row)
+
+            out = {}
+            for key, series in by_key.items():
+                series.sort(key=lambda r: r["_ts"])
+                if any(r.get("tool") == "amp" for r in series):
+                    amp_waste = _compute_amp_replenish_waste(series, since)
+                    if amp_waste:
+                        ttx = compute_ttx(rows, key)
+                        amp_waste["ttx_hours"] = ttx
+                        amp_waste["ttx_label"] = format_ttx(ttx)
+                        out[key] = amp_waste
+                    continue
+
+                is_antigravity = any(r.get("tool") == "antigravity" for r in series)
+                events = []
+                for prev, curr in zip(series, series[1:]):
+                    # Rows before `since` are anchors only: they provide prior context
+                    # for detecting the first in-window reset, but are never counted as
+                    # events themselves.
+                    curr_ts = curr.get("_ts")
+                    if curr_ts is None or curr_ts < since:
+                        continue
+                    if _is_reset_event(prev, curr):
+                        wasted = float(prev["pct_left"] or 0)
+                        # Antigravity's bottom-end pct is unreliable; don't count
+                        # "waste" of <=20% — it was probably actually exhausted.
+                        if is_antigravity and wasted <= ANTIGRAVITY_WASTE_MIN_PCT:
+                            continue
+                        events.append({
+                            "at": curr["ts"],
+                            "wasted_pct": wasted,
+                        })
+                if not events:
+                    continue
+                wastes = [e["wasted_pct"] for e in events]
+                ttx = compute_ttx(rows, key)
+                out[key] = {
+                    "reset_count": len(events),
+                    "avg_wasted_pct": sum(wastes) / len(wastes),
+                    "max_wasted_pct": max(wastes),
+                    "last_seen_pct": series[-1]["pct_left"],
+                    "last_seen_at": series[-1]["ts"],
+                    "events": events,
+                    "ttx_hours": ttx,
+                    "ttx_label": format_ttx(ttx),
+                }
+            return out
+    except OSError:
+        return {}
 
 
 def _verdict(avg_pct):

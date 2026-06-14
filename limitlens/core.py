@@ -9,6 +9,9 @@ and waste_tracker.
 import os
 import re
 from datetime import datetime, timezone
+import contextlib
+import time
+import threading
 
 # ── Redaction helpers ───────────────────────────────────────────────────────
 
@@ -125,6 +128,78 @@ def _fmt_tokens(n):
         return f"{n/1_000:.1f}K"
     return str(n)
 
+# ── Icon/Emoji helpers ───────────────────────────────────────────────────────
+
+TOOL_ICONS = {
+    "antigravity": "🪐",
+    "antigrav": "🪐",
+    "codex": "⚡",
+    "amp": "🔥",
+    "pioneer": "🧭",
+    "agentrouter": "🔶",
+    "kilo": "🔶",
+    "commandcode": "🖥️",
+    "claude": "🤖",
+    "copilot": "✈️",
+    "cursor": "🖱️",
+}
+
+CUSTOM_KEYWORDS = [
+    ("claude",      "🧠"),
+    ("anthropic",   "🧠"),
+    ("gpt",         "🌀"),
+    ("openai",      "🌀"),
+    ("gemini",      "💎"),
+    ("google",      "💎"),
+    ("mistral",     "🌪️"),
+    ("llama",       "🦙"),
+    ("ollama",      "🦙"),
+    ("groq",        "⚙️"),
+    ("perplexity",  "🔍"),
+    ("cohere",      "🔵"),
+    ("deepseek",    "🐋"),
+    ("qwen",        "🌸"),
+    ("local",       "🏠"),
+    ("code",        "💻"),
+    ("chat",        "💬"),
+    ("agent",       "🤖"),
+    ("api",         "🔌"),
+]
+
+_FALLBACK_POOL = ["🟣", "🟤", "🔺", "🔸", "🔹", "⭐", "🎯", "🧩", "🪩", "🎲"]
+
+def get_tool_icon(tool_key="", name="", section=""):
+    """Return a unique emoji: known tool → fixed icon, custom → keyword
+    match on name, or deterministic pool pick based on name adler32 hash."""
+    # 1. Known LimitLens tools — match on tool_key, name, or section
+    # 1a. Exact match on tool_key first (for short/ambiguous keys like "claude")
+    EXACT_TOOL_KEYS = {
+        "claude", "pi",
+    }
+    if tool_key and tool_key.lower() in TOOL_ICONS and tool_key.lower() in EXACT_TOOL_KEYS:
+        return TOOL_ICONS[tool_key.lower()]
+
+    # 1b. Substring match on tool_key, name, section for other known tools
+    for source in (tool_key, name, section):
+        key = (source or "").lower()
+        for k, icon in TOOL_ICONS.items():
+            if k in EXACT_TOOL_KEYS:
+                continue  # already handled above; skip substring match
+            if k in key:
+                return icon
+
+    # 2. Custom tool — try keyword match on the name
+    name_lower = (name or "").lower()
+    for keyword, icon in CUSTOM_KEYWORDS:
+        if keyword in name_lower:
+            return icon
+
+    # 3. Deterministic fallback: same name always gets same icon
+    import zlib
+    idx = zlib.adler32(name_lower.encode('utf-8')) % len(_FALLBACK_POOL)
+    return _FALLBACK_POOL[idx]
+
+
 # ── Terminal display helpers ────────────────────────────────────────────────
 
 def print_c(text, color_code, no_color=False, end="\n"):
@@ -170,6 +245,63 @@ def should_show_warning(message, args):
 
 def should_show_detail(args):
     return is_verbose(args)
+
+_thread_local_locks = threading.local()
+
+def _get_active_locks():
+    if not hasattr(_thread_local_locks, "active"):
+        _thread_local_locks.active = set()
+    return _thread_local_locks.active
+
+@contextlib.contextmanager
+def file_lock(lock_path, timeout=5.0, delay=0.05):
+    """A reentrant file-based directory lock using os.mkdir with timeout and cleanup."""
+    active = _get_active_locks()
+    if lock_path in active:
+        yield
+        return
+
+    start_time = time.time()
+    acquired = False
+    while True:
+        try:
+            os.mkdir(lock_path)
+            acquired = True
+            active.add(lock_path)
+            break
+        except FileNotFoundError:
+            parent_dir = os.path.dirname(lock_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
+        except FileExistsError:
+            if time.time() - start_time > timeout:
+                try:
+                    mtime = os.path.getmtime(lock_path)
+                    if time.time() - mtime > 10.0:
+                        try:
+                            os.rmdir(lock_path)
+                        except OSError:
+                            pass
+                        try:
+                            os.mkdir(lock_path)
+                            acquired = True
+                            active.add(lock_path)
+                            break
+                        except FileExistsError:
+                            pass
+                except OSError:
+                    pass
+                raise TimeoutError(f"Could not acquire lock on {lock_path} within {timeout} seconds")
+            time.sleep(delay)
+    try:
+        yield
+    finally:
+        if acquired:
+            active.discard(lock_path)
+            try:
+                os.rmdir(lock_path)
+            except OSError:
+                pass
 
 from .config import (  # noqa: F401, E402
     DEFAULT_CONFIG,

@@ -449,15 +449,49 @@ def is_tls_verification_error(err):
         return isinstance(reason, ssl.SSLCertVerificationError)
     return False
 
-def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeout=3):
+def is_localhost(host):
+    if not host:
+        return False
+    host = host.lower()
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return True
+    try:
+        # Resolve host to IP addresses and check if they are loopback addresses
+        infos = socket.getaddrinfo(host, None)
+        for info in infos:
+            ip = info[4][0]
+            if ip in ("127.0.0.1", "::1") or ip.startswith("127."):
+                return True
+    except Exception:
+        pass
+    return False
+
+def log_security_warning(message):
+    import sys
+    log_dir = os.path.expanduser("~/.cache/limitlens")
+    log_file = os.path.join(log_dir, "limitlens.log")
+    timestamp = datetime.now().isoformat()
+    log_message = f"[{timestamp}] SECURITY WARNING: {message}\n"
+    sys.stderr.write(f"SECURITY WARNING: {message}\n")
+    sys.stderr.flush()
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(log_message)
+    except Exception:
+        pass
+
+def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeout=3, host="127.0.0.1"):
     if verify_tls:
         ctx = ssl.create_default_context()
     else:
+        if not is_localhost(host):
+            raise ValueError(f"Cannot disable TLS verification for non-localhost host: {host}")
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
 
-    url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/{method}"
+    url = f"https://{host}:{port}/exa.language_server_pb.LanguageServerService/{method}"
     data = json.dumps(body_dict).encode("utf-8")
 
     req = urllib.request.Request(url, data=data, method="POST")
@@ -468,16 +502,19 @@ def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeou
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:  # nosec B310
         return json.loads(resp.read().decode("utf-8"))
 
-def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3):
+def make_ag_request_with_tls_fallback(port, csrf_token, method, body_dict, timeout=3, host="127.0.0.1"):
     try:
         return make_ag_request(
-            port, csrf_token, method, body_dict, verify_tls=True, timeout=timeout
+            port, csrf_token, method, body_dict, verify_tls=True, timeout=timeout, host=host
         ), False
     except (urllib.error.URLError, ssl.SSLError, TimeoutError, socket.timeout) as e:
         if not is_tls_verification_error(e):
             raise
+        if not is_localhost(host):
+            raise ssl.SSLError(f"Bypassing TLS verification is restricted to localhost/127.0.0.1. Refusing fallback for host: {host}") from e
+        log_security_warning(f"TLS verification failed for {host}:{port}. Bypassing verification for local endpoint.")
         resp = make_ag_request(
-            port, csrf_token, method, body_dict, verify_tls=False, timeout=timeout
+            port, csrf_token, method, body_dict, verify_tls=False, timeout=timeout, host=host
         )
         return resp, True
 

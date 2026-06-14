@@ -292,3 +292,77 @@ def test_main():
         mock_app.fetch_data.assert_called_once()
         mock_app.check_updates.assert_called_once_with(None)
         mock_app.run.assert_called_once()
+
+
+def test_fetch_data_logging(app):
+    import os
+    import shutil
+    log_dir = os.path.expanduser("~/.cache/limitlens")
+    log_file = os.path.join(log_dir, "limitlens.log")
+    
+    backup_log_file = log_file + ".bak"
+    if os.path.exists(log_file):
+        shutil.copy2(log_file, backup_log_file)
+        os.remove(log_file)
+        
+    try:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.stderr = "some process failure error"
+        
+        with patch("threading.Thread") as mock_thread, \
+             patch("subprocess.run", return_value=mock_proc):
+             
+            def mock_thread_init(target, daemon):
+                target()
+                return MagicMock()
+            mock_thread.side_effect = mock_thread_init
+            
+            app.fetch_data()
+            
+        assert os.path.exists(log_file)
+        with open(log_file, "r") as f:
+            content = f.read()
+            assert "Menubar command failure" in content
+            assert "some process failure error" in content
+            
+        os.remove(log_file)
+        
+        with patch("threading.Thread") as mock_thread, \
+             patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
+             
+            def mock_thread_init(target, daemon):
+                target()
+                return MagicMock()
+            mock_thread.side_effect = mock_thread_init
+            
+            app.fetch_data()
+            
+        assert os.path.exists(log_file)
+        with open(log_file, "r") as f:
+            content = f.read()
+            assert "Menubar subprocess timeout" in content
+            
+        os.remove(log_file)
+        
+        with patch("threading.Thread") as mock_thread, \
+             patch("subprocess.run", side_effect=ValueError("another bad error")):
+             
+            def mock_thread_init(target, daemon):
+                target()
+                return MagicMock()
+            mock_thread.side_effect = mock_thread_init
+            
+            app.fetch_data()
+            
+        assert os.path.exists(log_file)
+        with open(log_file, "r") as f:
+            content = f.read()
+            assert "Menubar exception" in content
+            assert "another bad error" in content
+            
+    finally:
+        if os.path.exists(log_file):
+            os.remove(log_file)
+        if os.path.exists(backup_log_file):
+            shutil.move(backup_log_file, log_file)

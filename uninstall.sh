@@ -107,6 +107,20 @@ if [[ -d "$CONFIG_DIR" ]]; then
   fi
 fi
 
+# ── Optionally remove cache folder ──────────────────────────────────────────────
+CACHE_DIR="$HOME/.cache/limitlens"
+if [[ -d "$CACHE_DIR" ]]; then
+  echo ""
+  read -r -p "$(echo -e "${BOLD}Remove cache folder ($CACHE_DIR)? [y/N]:${RESET} ")" REMOVE_CACHE
+  REMOVE_CACHE="${REMOVE_CACHE:-N}"
+  if [[ "$REMOVE_CACHE" =~ ^[Yy]$ ]]; then
+    rm -rf "$CACHE_DIR"
+    success "Cache folder removed."
+  else
+    warn "Cache kept at $CACHE_DIR"
+  fi
+fi
+
 # ── Done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}LimitLens has been uninstalled.${RESET}"

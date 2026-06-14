@@ -27,7 +27,9 @@ classifiers = [
     "Topic :: Utilities",
 ]
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "keyring",
+]
 keywords = ["ai", "quota", "codex", "amp", "antigravity", "cli", "developer-tools"]
 
 [project.optional-dependencies]

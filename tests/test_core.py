@@ -171,5 +171,28 @@ class TestDisplayConfig(unittest.TestCase):
         self.assertEqual(cfg["amp_usable_pct"], 30.0)
 
 
+class TestGetToolIcon(unittest.TestCase):
+    def test_known_tool(self):
+        from limitlens.core import get_tool_icon
+        self.assertEqual(get_tool_icon(tool_key="antigravity"), "🪐")
+        self.assertEqual(get_tool_icon(name="antigrav"), "🪐")
+        self.assertEqual(get_tool_icon(section="codex"), "⚡")
+
+    def test_custom_keyword(self):
+        from limitlens.core import get_tool_icon
+        self.assertEqual(get_tool_icon(name="my-claude-tool"), "🧠")
+        self.assertEqual(get_tool_icon(name="openai-gpt-4"), "🌀")
+
+    def test_deterministic_fallback(self):
+        import zlib
+        from limitlens.core import get_tool_icon, _FALLBACK_POOL
+        name = "custom-unmatched-tool"
+        expected_idx = zlib.adler32(name.lower().encode('utf-8')) % len(_FALLBACK_POOL)
+        expected_emoji = _FALLBACK_POOL[expected_idx]
+        self.assertEqual(get_tool_icon(name=name), expected_emoji)
+        # Verify it is consistent
+        self.assertEqual(get_tool_icon(name=name), get_tool_icon(name=name))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,25 +18,37 @@ ANALYTICS_VERSION = 1
 def _load_imported_data():
     if not os.path.exists(IMPORTED_USAGE_PATH):
         return {}
+    from limitlens.core import file_lock
     try:
-        with open(IMPORTED_USAGE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with file_lock(IMPORTED_USAGE_PATH + ".lock"):
+            with open(IMPORTED_USAGE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
     except (json.JSONDecodeError, OSError):
         return {}
 
 def _save_imported_data(data):
+    tmp_path = None
+    from limitlens.core import file_lock
     try:
-        os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), mode=0o700, exist_ok=True)
-        tmp_path = IMPORTED_USAGE_PATH + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, IMPORTED_USAGE_PATH)
+        with file_lock(IMPORTED_USAGE_PATH + ".lock"):
+            os.makedirs(os.path.dirname(IMPORTED_USAGE_PATH), mode=0o700, exist_ok=True)
+            tmp_path = IMPORTED_USAGE_PATH + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            try:
+                os.chmod(tmp_path, 0o600)
+            except OSError:
+                pass
+            os.replace(tmp_path, IMPORTED_USAGE_PATH)
+            tmp_path = None
     except OSError:
         pass
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 def _snapshot_float(row, field):
     try:
@@ -326,55 +338,59 @@ def record_usage(result):
     pass
 
 def export_usage(export_path):
-    rows = waste_tracker._load_snapshots()
-    export_rows = []
-    for r in rows:
-        row_copy = r.copy()
-        row_copy.pop("_ts", None)
-        export_rows.append(row_copy)
-
-    export_data = {
-        "version": 3,
-        "snapshots": export_rows,
-        # Backward-compatible merged history for scripts that still consume
-        # version-2 exports. Importers should not add this on top of snapshots.
-        "history": _get_merged_history(days=None),
-        # Raw legacy imports that cannot be reconstructed from snapshots.
-        "imported_history": _load_imported_data(),
-    }
+    from limitlens.core import file_lock
     try:
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(export_data, f, indent=2)
-        return True
+        with file_lock(IMPORTED_USAGE_PATH + ".lock"):
+            rows = waste_tracker._load_snapshots()
+            export_rows = []
+            for r in rows:
+                row_copy = r.copy()
+                row_copy.pop("_ts", None)
+                export_rows.append(row_copy)
+
+            export_data = {
+                "version": 3,
+                "snapshots": export_rows,
+                # Backward-compatible merged history for scripts that still consume
+                # version-2 exports. Importers should not add this on top of snapshots.
+                "history": _get_merged_history(days=None),
+                # Raw legacy imports that cannot be reconstructed from snapshots.
+                "imported_history": _load_imported_data(),
+            }
+            with open(export_path, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2)
+            return True
     except OSError:
         return False
 
 def import_usage(import_path):
+    from limitlens.core import file_lock
     try:
-        with open(import_path, "r", encoding="utf-8") as f:
-            new_data = json.load(f)
+        with file_lock(IMPORTED_USAGE_PATH + ".lock"):
+            with open(import_path, "r", encoding="utf-8") as f:
+                new_data = json.load(f)
 
-        snapshots_ok = True
-        if "snapshots" in new_data:
-            snapshots_ok = waste_tracker.merge_snapshots(new_data["snapshots"])
+            snapshots_ok = True
+            if "snapshots" in new_data:
+                snapshots_ok = waste_tracker.merge_snapshots(new_data["snapshots"])
 
-        incoming_history = new_data.get("imported_history", {})
-        if not incoming_history and "snapshots" not in new_data:
-            incoming_history = new_data.get("history", {})
-        if not incoming_history and not new_data.get("version"):
-            if any(isinstance(v, dict) for v in new_data.values()):
-                incoming_history = new_data
+            incoming_history = new_data.get("imported_history", {})
+            if not incoming_history and "snapshots" not in new_data:
+                incoming_history = new_data.get("history", {})
+            if not incoming_history and not new_data.get("version"):
+                if any(isinstance(v, dict) for v in new_data.values()):
+                    incoming_history = new_data
 
-        imported = _load_imported_data()
+            imported = _load_imported_data()
 
-        for date_str, daily_usage in incoming_history.items():
-            if date_str not in imported:
-                imported[date_str] = {}
-            for k, v in daily_usage.items():
-                imported[date_str][k] = round(max(imported[date_str].get(k, 0.0), v), 2)
+            for date_str, daily_usage in incoming_history.items():
+                if date_str not in imported:
+                    imported[date_str] = {}
+                for k, v in daily_usage.items():
+                    imported[date_str][k] = round(max(imported[date_str].get(k, 0.0), v), 2)
 
-        _save_imported_data(imported)
-        return snapshots_ok
+            _save_imported_data(imported)
+            return snapshots_ok
     except (json.JSONDecodeError, OSError):
         return False
 

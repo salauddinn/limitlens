@@ -336,10 +336,65 @@ def test_get_opencode_data():
     assert "opencode" in data
     assert "pi" in data
     assert "copilot_cli" in data
+    assert "claude" in data
 
 def test_get_pi_data():
-    data = get_pi_data({}, {})
-    assert isinstance(data, dict)
+    from limitlens.providers.observed import get_pi_data
+    # just tests the proxy function
+    assert "error" in get_pi_data({}, {"pi": {"sessions_dir": "/non/ex"}})
+
+def test_claude_usage_tokens():
+    from limitlens.providers.observed import claude_usage_tokens
+    assert claude_usage_tokens({}) == {"total": 0, "input": 0, "output": 0, "reasoning": 0, "cache_read": 0, "cache_write": 0}
+    res = claude_usage_tokens({"input_tokens": 10, "output_tokens": 5, "cache_creation_input_tokens": 100})
+    assert res["total"] == 115
+    assert res["cache_write"] == 100
+
+@pytest.fixture
+def claude_sessions():
+    path = tempfile.mkdtemp()
+    
+    # Claude Code has timestamp at root level usually, but we fall back to both.
+    now_ms = millis_from_dt(datetime.now(timezone.utc))
+    valid_record = {
+        "timestamp": now_ms,
+        "message": {
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3-5-sonnet-20241022",
+            "usage": {"input_tokens": 1000, "output_tokens": 500}
+        }
+    }
+    
+    with open(os.path.join(path, "session.jsonl"), "w") as f:
+        f.write(json.dumps(valid_record) + "\n")
+        f.write("invalid json\n")
+        
+    yield path
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.rmdir(path)
+
+def test_get_claude_usage(claude_sessions):
+    from limitlens.providers.observed import get_claude_usage
+    config = {
+        "claude": {
+            "enabled": True,
+            "sessions_dir": claude_sessions
+        }
+    }
+    usage = get_claude_usage(config)
+    assert "error" not in usage
+    models = usage["windows"][0]["models"]
+    if models:
+        assert models[0]["model"] == "claude-3-5-sonnet-20241022"
+        assert models[0]["tokens"]["input"] == 1000
+
+    assert get_claude_usage({"claude": {"enabled": False}}) == {"disabled": True}
+    assert "error" in get_claude_usage({"claude": {"sessions_dir": "/nonexistent/claude/dir"}})
 
 # Output tests
 class DummyArgs:

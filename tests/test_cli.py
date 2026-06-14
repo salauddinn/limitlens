@@ -770,5 +770,65 @@ class TestCLI(unittest.TestCase):
         mock_display_pi.assert_called_once()
 
 
+class TestCLIThreadPool(unittest.TestCase):
+    @patch("limitlens.cli.ThreadPoolExecutor")
+    def test_cli_threadpool_scaling(self, mock_executor):
+        from limitlens.cli import _main
+        test_args = ["limitlens", "--tool", "all", "--no-record"]
+        test_config = {
+            "codex": {"enabled": True},
+            "amp": {"enabled": True},
+            "antigravity": {"enabled": True},
+            "opencode": {"enabled": True},
+        }
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=test_config), \
+             redirect_stdout(io.StringIO()):
+            try:
+                _main()
+            except Exception:
+                pass
+        
+        mock_executor.assert_called()
+        _, kwargs = mock_executor.call_args
+        self.assertEqual(kwargs.get("max_workers"), 16)
+
+
+class TestCLIDebugAndLogging(unittest.TestCase):
+    def test_cli_debug_flag_prints_traceback_and_logs(self):
+        import shutil
+        from limitlens.cli import main
+        
+        test_args = ["limitlens", "--debug"]
+        log_dir = os.path.expanduser("~/.cache/limitlens")
+        log_file = os.path.join(log_dir, "limitlens.log")
+        
+        backup_log_file = log_file + ".bak"
+        if os.path.exists(log_file):
+            shutil.copy2(log_file, backup_log_file)
+            os.remove(log_file)
+        
+        err_output = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli._main", side_effect=ValueError("Test Debug Exception")), \
+             patch("sys.stderr", err_output), \
+             self.assertRaises(SystemExit) as cm:
+            main()
+            
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("Test Debug Exception", err_output.getvalue())
+        self.assertIn("traceback", err_output.getvalue().lower())
+        
+        self.assertTrue(os.path.exists(log_file))
+        with open(log_file, "r") as f:
+            content = f.read()
+            self.assertIn("Test Debug Exception", content)
+            self.assertIn("Traceback", content)
+            
+        os.remove(log_file)
+        if os.path.exists(backup_log_file):
+            shutil.move(backup_log_file, log_file)
+
+
 if __name__ == "__main__":
     unittest.main()

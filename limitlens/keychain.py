@@ -3,8 +3,27 @@ import sys
 
 SERVICE_NAME = "limitlens"
 
+_keyring_available = False
+try:
+    import keyring
+    import keyring.errors
+    # If the active keyring is the FailKeyring, no viable backend is available.
+    backend = keyring.get_keyring()
+    if backend and backend.__class__.__name__ != 'FailKeyring':
+        _keyring_available = True
+except Exception:
+    pass
+
 def set_keychain_token(account: str, token: str) -> bool:
     """Store a token in the OS keychain securely."""
+    if _keyring_available:
+        try:
+            keyring.set_password(SERVICE_NAME, account, token)
+            return True
+        except Exception:
+            # Fall back to subprocess
+            pass
+
     if sys.platform == "darwin":
         # macOS
         cmd = ["security", "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account, "-w", token]
@@ -25,6 +44,15 @@ def set_keychain_token(account: str, token: str) -> bool:
 
 def get_keychain_token(account: str) -> str:
     """Retrieve a token from the OS keychain securely."""
+    if _keyring_available:
+        try:
+            val = keyring.get_password(SERVICE_NAME, account)
+            if val is not None:
+                return val
+        except Exception:
+            # Fall back to subprocess
+            pass
+
     if sys.platform == "darwin":
         # macOS
         cmd = ["security", "find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"]

@@ -82,10 +82,24 @@ class LimitLensApp(rumps.App):
             self._refresh_interval = max(30, int(_dcfg.get("menubar_refresh_seconds", 300)))
             self._notify_warn_pct = float(_dcfg.get("notify_warn_pct", 30.0))
             self._notify_critical_pct = float(_dcfg.get("notify_critical_pct", 10.0))
-        except Exception:  # pragma: no cover - config failures must not crash the app
+        except Exception as e:  # pragma: no cover - config failures must not crash the app
             self._refresh_interval = 300
             self._notify_warn_pct = 30.0
             self._notify_critical_pct = 10.0
+            try:
+                import os
+                import traceback
+                from datetime import datetime
+                log_dir = os.path.expanduser("~/.cache/limitlens")
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, "limitlens.log")
+                with open(log_file, "a", encoding="utf-8") as f:
+                    timestamp = datetime.now().isoformat()
+                    f.write(f"[{timestamp}] Menubar config load failure: {e}\n")
+                    traceback.print_exc(file=f)
+                    f.write("\n")
+            except Exception:
+                pass
 
         self._start_refresh_timer()
 
@@ -141,64 +155,12 @@ class LimitLensApp(rumps.App):
         except (TypeError, ValueError):
             return None
 
-    # Icons for known LimitLens tools (consistent across menubar + iTerm)
-    TOOL_ICONS = {
-        "antigravity": "🪐", "antigrav": "🪐",   # Antigravity
-        "codex":        "⚡",                      # OpenAI Codex
-        "amp":          "🔥",                      # Amp
-        "pioneer":      "🧭",                      # Pioneer
-        "agentrouter":  "🔶",  "kilo": "🔶",      # Kilo Code / AgentRouter
-        "commandcode":  "🖥️",                     # Command Code
-        "copilot":      "✈️",                     # GitHub Copilot
-        "cursor":       "🖱️",                     # Cursor IDE
-    }
-
-    # Keyword → icon for smart custom tool name matching
-    CUSTOM_KEYWORDS = [
-        ("claude",      "🧠"),
-        ("anthropic",   "🧠"),
-        ("gpt",         "🌀"),
-        ("openai",      "🌀"),
-        ("gemini",      "💎"),
-        ("google",      "💎"),
-        ("mistral",     "🌪️"),
-        ("llama",       "🦙"),
-        ("ollama",      "🦙"),
-        ("groq",        "⚙️"),
-        ("perplexity",  "🔍"),
-        ("cohere",      "🔵"),
-        ("deepseek",    "🐋"),
-        ("qwen",        "🌸"),
-        ("local",       "🏠"),
-        ("code",        "💻"),
-        ("chat",        "💬"),
-        ("agent",       "🤖"),
-        ("api",         "🔌"),
-    ]
-
-    # Fallback pool — deterministic per tool name so same tool = same icon always
-    _FALLBACK_POOL = ["🟣", "🟤", "🔺", "🔸", "🔹", "⭐", "🎯", "🧩", "🪩", "🎲"]
-
     @classmethod
     def _tool_icon(cls, tool_key="", name="", section=""):
         """Return a unique emoji: known tool → fixed icon, custom → keyword
-        match on name, or deterministic pool pick based on name hash."""
-        # 1. Known LimitLens tools — match on tool_key, name, or section
-        for source in (tool_key, name, section):
-            key = (source or "").lower()
-            for k, icon in cls.TOOL_ICONS.items():
-                if k in key:
-                    return icon
-
-        # 2. Custom tool — try keyword match on the name
-        name_lower = (name or "").lower()
-        for keyword, icon in cls.CUSTOM_KEYWORDS:
-            if keyword in name_lower:
-                return icon
-
-        # 3. Deterministic fallback: same name always gets same icon
-        idx = hash(name_lower) % len(cls._FALLBACK_POOL)
-        return cls._FALLBACK_POOL[idx]
+        match on name, or deterministic pool pick based on name adler32 hash."""
+        from .core import get_tool_icon
+        return get_tool_icon(tool_key=tool_key, name=name, section=section)
 
     @staticmethod
     def _emoji(pct):
@@ -590,10 +552,50 @@ class LimitLensApp(rumps.App):
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
                     self._pending_title = f"⚠️ {err_msg[:20]}"
-            except subprocess.TimeoutExpired:
+                    try:
+                        import os
+                        from datetime import datetime
+                        log_dir = os.path.expanduser("~/.cache/limitlens")
+                        os.makedirs(log_dir, exist_ok=True)
+                        log_file = os.path.join(log_dir, "limitlens.log")
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            timestamp = datetime.now().isoformat()
+                            f.write(f"[{timestamp}] Menubar command failure: return code {proc.returncode}\n")
+                            f.write(f"Stderr: {proc.stderr}\n\n")
+                    except Exception:
+                        pass
+            except subprocess.TimeoutExpired as e:
                 self._pending_title = "⚠️ Timeout"
+                try:
+                    import os
+                    import traceback
+                    from datetime import datetime
+                    log_dir = os.path.expanduser("~/.cache/limitlens")
+                    os.makedirs(log_dir, exist_ok=True)
+                    log_file = os.path.join(log_dir, "limitlens.log")
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        timestamp = datetime.now().isoformat()
+                        f.write(f"[{timestamp}] Menubar subprocess timeout: {e}\n")
+                        traceback.print_exc(file=f)
+                        f.write("\n")
+                except Exception:
+                    pass
             except Exception as e:
                 self._pending_title = f"⚠️ {str(e)[:15]}"
+                try:
+                    import os
+                    import traceback
+                    from datetime import datetime
+                    log_dir = os.path.expanduser("~/.cache/limitlens")
+                    os.makedirs(log_dir, exist_ok=True)
+                    log_file = os.path.join(log_dir, "limitlens.log")
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        timestamp = datetime.now().isoformat()
+                        f.write(f"[{timestamp}] Menubar exception: {e}\n")
+                        traceback.print_exc(file=f)
+                        f.write("\n")
+                except Exception:
+                    pass
             finally:
                 self._is_fetching = False
 

@@ -47,6 +47,7 @@
   },
   "agentrouter": {
     "enabled": false,
+    "provider": "agentrouter",
     "quota_url": "https://agentrouter.org/api/user/self",
     "unit_label": "units"
   },

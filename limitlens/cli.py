@@ -29,6 +29,7 @@ from .providers import (
     get_amp_data, display_amp_text,
     get_antigravity_data, display_antigravity_text,
     get_opencode_data, display_opencode_text,
+    get_claude_data, display_claude_text,
     get_pi_data, display_pi_text,
     get_pioneer_data, display_pioneer_text,
     get_agentrouter_data, display_agentrouter_text,
@@ -38,6 +39,22 @@ from .providers import (
 )
 from .providers.observed import display_at_glance
 from .providers.agentrouter import is_agentrouter_enabled
+
+def log_error(e, context=""):
+    import os
+    import traceback
+    from datetime import datetime
+    try:
+        log_dir = os.path.expanduser("~/.cache/limitlens")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "limitlens.log")
+        with open(log_file, "a", encoding="utf-8") as f:
+            timestamp = datetime.now().isoformat()
+            f.write(f"[{timestamp}] {context}Error: {type(e).__name__}: {e}\n")
+            traceback.print_exc(file=f)
+            f.write("\n")
+    except Exception:
+        pass
 
 def _main():
     parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more")
@@ -49,12 +66,13 @@ def _main():
             from . import __version__ as _ver
     except ImportError:
         from . import __version__ as _ver
-    parser.add_argument("--version", action="version", version=f"%(prog)s {_ver}")
+    parser.add_argument("--version", action="version", version=f"limitlens {_ver}")
+    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "claude", "pioneer", "agentrouter", "commandcode", "custom", "cursor", "all"], default="all", help="Check specific tool")
     parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -81,16 +99,17 @@ def _main():
         parser.error("--interval must be greater than 0")
 
     tool_label = {
-        "codex": "Codex",
-        "amp": "Amp",
+        "codex": "Codex quota",
+        "amp": "Amp API",
         "antigravity": "Antigravity",
         "opencode": "observed usage",
-        "pi": "Pi usage",
-        "pioneer": "Pioneer",
-        "agentrouter": "Kilo Code (AgentRouter)",
-        "commandcode": "Command Code",
-        "custom": "custom tool",
-        "cursor": "Cursor",
+        "pi": "Pi sessions",
+        "claude": "Claude Code usage",
+        "pioneer": "Pioneer team quota",
+        "agentrouter": "AgentRouter credits",
+        "commandcode": "CommandCode credits",
+        "custom": "custom tools",
+        "cursor": "Cursor usage",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -128,8 +147,31 @@ def _main():
 
     def collect_results():
         result = {}
+        enabled_count = 0
+        if args.tool == "codex" or (args.tool == "all" and is_provider_enabled(config, "codex", default=True)):
+            enabled_count += 1
+        if args.tool == "amp" or (args.tool == "all" and is_provider_enabled(config, "amp", default=True)):
+            enabled_count += 1
+        if args.tool == "antigravity" or (args.tool == "all" and is_provider_enabled(config, "antigravity", default=True)):
+            enabled_count += 1
+        if args.tool == "opencode" or (args.tool == "all" and is_provider_enabled(config, "opencode", default=True)):
+            enabled_count += 1
+        if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
+            enabled_count += 1
+        if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
+            enabled_count += 1
+        if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
+            enabled_count += 1
+        if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
+            enabled_count += 1
+        if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
+            enabled_count += 1
+        if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
+            enabled_count += 1
+
+        max_workers = max(16, enabled_count)
         fetchers = {}
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             if args.tool == "codex" or (args.tool == "all" and is_provider_enabled(config, "codex", default=True)):
                 fetchers["codex"] = executor.submit(get_codex_data, args, config)
             if args.tool == "amp" or (args.tool == "all" and is_provider_enabled(config, "amp", default=True)):
@@ -138,6 +180,8 @@ def _main():
                 fetchers["antigravity"] = executor.submit(get_antigravity_data, args, config)
             if args.tool == "opencode" or (args.tool == "all" and is_provider_enabled(config, "opencode", default=True)):
                 fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
+            if args.tool == "claude" or (args.tool == "all" and is_provider_enabled(config, "claude", default=True)):
+                fetchers["claude"] = executor.submit(get_claude_data, args, config)
             if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
@@ -154,6 +198,11 @@ def _main():
                 try:
                     result[key] = fut.result()
                 except Exception as e:
+                    import sys
+                    import traceback
+                    if getattr(args, "debug", False):
+                        traceback.print_exc(file=sys.stderr)
+                    log_error(e, f"Provider {key} ")
                     result[key] = _provider_error_payload(key, e)
         return result
 
@@ -213,6 +262,11 @@ def _main():
             else:
                 print_c(f"  ⚠ Failed to store token for '{provider}' in keychain.", "\033[31m", args.no_color)
         except Exception as e:
+            import sys
+            import traceback
+            if getattr(args, "debug", False):
+                traceback.print_exc(file=sys.stderr)
+            log_error(e, "Store token ")
             print_c(f"  ⚠ Error storing token: {e}", "\033[31m", args.no_color)
         return
 
@@ -234,7 +288,7 @@ def _main():
 
     if args.usage:
         if getattr(args, "days", None):
-            for k in ["opencode", "pi", "copilot_cli"]:
+            for k in ["opencode", "pi", "copilot_cli", "claude"]:
                 if k not in config:
                     config[k] = {}
                 config[k]["days"] = [args.days]
@@ -244,12 +298,17 @@ def _main():
             result = fetch_and_refresh()
             _record(result)
         except Exception as e:
+            import sys
+            import traceback
+            if getattr(args, "debug", False):
+                traceback.print_exc(file=sys.stderr)
+            log_error(e, "Usage fetch ")
             if not args.json:
                 print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
 
         data = {}
         opencode_result = result.get("opencode")
-        if isinstance(opencode_result, dict) and any(k in opencode_result for k in ("opencode", "pi", "copilot_cli")):
+        if isinstance(opencode_result, dict) and any(k in opencode_result for k in ("opencode", "pi", "copilot_cli", "claude")):
             data.update(opencode_result)
         elif isinstance(opencode_result, dict):
             data["opencode"] = opencode_result
@@ -398,8 +457,11 @@ def _main():
 
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
-        elif "pi" in result:
-            display_pi_text(result["pi"], args)
+        else:
+            if "claude" in result:
+                display_claude_text(result["claude"], args)
+            if "pi" in result:
+                display_pi_text(result["pi"], args)
 
         # Removed bottom border
         if args.watch:
@@ -452,7 +514,13 @@ def main():
         pass
     except Exception as e:
         import sys
-        print("\n  \033[31m[LimitLens] An unexpected error occurred.\033[0m")
-        print(f"  \033[90mDetails:\033[0m {e}")
-        print("  \033[90mIf this persists, please open an issue on GitHub.\033[0m\n")
+        import traceback
+        debug_enabled = "--debug" in sys.argv or "-d" in sys.argv
+        if debug_enabled:
+            traceback.print_exc(file=sys.stderr)
+        else:
+            print("\n  \033[31m[LimitLens] An unexpected error occurred.\033[0m")
+            print(f"  \033[90mDetails:\033[0m {e}")
+            print("  \033[90mIf this persists, please open an issue on GitHub.\033[0m\n")
+        log_error(e, "Top-level ")
         sys.exit(1)
