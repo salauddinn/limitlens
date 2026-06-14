@@ -47,21 +47,21 @@ def mark_spend_reset(tool_name=None, extra_data=None):
                         data = {}
                 except (json.JSONDecodeError, OSError):
                     pass
-            
+
             now_iso = datetime.now(timezone.utc).isoformat()
             if tool_name:
                 data[tool_name] = now_iso
             else:
                 for t in ["opencode", "pi", "copilot_cli", "claude"]:
                     data[t] = now_iso
-                    
+
             if extra_data:
                 for k, v in extra_data.items():
                     if v is None:
                         data.pop(k, None)
                     else:
                         data[k] = v
-                    
+
             import tempfile
             dir_path = os.path.dirname(SPEND_RESETS_PATH)
             os.makedirs(dir_path, mode=0o700, exist_ok=True)
@@ -635,7 +635,7 @@ def get_claude_usage(config):
     cfg = config.get("claude", {})
     if not cfg.get("enabled", True):
         return {"disabled": True}
-    
+
     claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
     if claude_dir:
         sessions_dir = os.path.join(claude_dir, "projects")
@@ -696,29 +696,29 @@ def get_claude_usage(config):
                     continue
                 if not isinstance(rec, dict):
                     continue
-                
+
                 msg = rec.get("message")
                 if not isinstance(msg, dict):
                     continue
                 if msg.get("role") != "assistant":
                     continue
-                    
+
                 usage = msg.get("usage") or {}
                 tokens = claude_usage_tokens(usage)
                 if token_total_value(tokens) <= 0:
                     continue
-                    
+
                 ts = parse_otel_timestamp(rec.get("timestamp"))
                 if ts is None:
                     continue
-                    
+
                 provider = "anthropic"
                 model = msg.get("model") or "unknown"
                 if providers and provider not in providers:
                     continue
                 if model_is_ignored(provider, model, ignored_models):
                     continue
-                    
+
                 for win in windows.values():
                     if ts < win["since"]:
                         continue
@@ -882,7 +882,7 @@ def display_usage_source(name, data, args):
 def display_opencode_text(data, args):
     if getattr(args, 'tool', None) not in ("opencode", "pi", "claude", "all"):
         return
-        
+
     op = data.get("opencode") or {}
     pi = data.get("pi") or {}
     co = data.get("copilot_cli") or {}
@@ -892,7 +892,7 @@ def display_opencode_text(data, args):
         sources = [("pi", pi)]
     elif getattr(args, 'tool', None) == "claude":
         sources = [("claude", cc)]
-    
+
     if not (getattr(args, "verbose", False) or getattr(args, "all", False)):
         has_data = False
         for name, source in sources:

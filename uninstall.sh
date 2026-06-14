@@ -3,7 +3,7 @@
 # LimitLens Uninstaller
 # ────────────────────────────────────────────────────────────────────────────────
 # Completely removes LimitLens and all associated files.
-# 
+#
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall.sh | bash
 #

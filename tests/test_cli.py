@@ -554,7 +554,7 @@ class TestCLI(unittest.TestCase):
              patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG):
             main()
         mock_display_recs.assert_called_once()
-        
+
         test_args_json = ["limitlens", "--reco", "--json", "--tool", "codex", "--no-record"]
         buf = io.StringIO()
         with patch.object(sys, "argv", test_args_json), \
@@ -641,7 +641,7 @@ class TestCLI(unittest.TestCase):
         mock_sleep.assert_called_once_with(1.0)
         self.assertTrue(any("refreshing every" in str(c) for c in mock_print.mock_calls))
         self.assertTrue(any("Press Ctrl+C to stop" in str(c) for c in mock_print.mock_calls))
-        
+
     @patch("limitlens.cli.display_codex_text")
     @patch("limitlens.providers.codex.refresh_accounts")
     @patch("limitlens.cli.time.sleep")
@@ -654,18 +654,18 @@ class TestCLI(unittest.TestCase):
             {"accounts": [{"name": "stale_me", "home": "~", "limits": [{"is_stale": True}]}]}, # loop 2 (cooldown expired)
             {"accounts": [{"name": "stale_me", "home": "~", "limits": [{"is_stale": True}]}]}  # result of refresh
         ]
-        
+
         def sleep_effect(*args):
             if mock_sleep.call_count == 2:
                 raise KeyboardInterrupt
         mock_sleep.side_effect = sleep_effect
-        
+
         test_args = ["limitlens", "--watch", "--interval", "1", "--tool", "codex", "--no-record", "--no-recommend"]
         with patch.object(sys, "argv", test_args), \
              patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
              redirect_stdout(io.StringIO()):
             main()
-            
+
         self.assertEqual(mock_refresh_accounts.call_count, 2)
 
     @patch("limitlens.cli.load_limitlens_config", side_effect=KeyboardInterrupt)
@@ -699,14 +699,14 @@ class TestCLI(unittest.TestCase):
                 }
             }, f)
             config_path = f.name
-            
+
         try:
             test_args = ["limitlens", "--reset-spend"]
             with patch.object(sys, "argv", test_args), \
                  patch("limitlens.cli.limitlens_config_path", return_value=config_path), \
                  redirect_stdout(io.StringIO()):
                 main()
-                
+
             with open(config_path, encoding="utf-8") as f:
                 updated = json.load(f)
             self.assertEqual(updated["custom_tools"]["tools"][0]["used"], 0)
@@ -722,13 +722,13 @@ class TestCLI(unittest.TestCase):
     })
     def test_reset_spend_warns_and_clears_baseline_on_agentrouter_error(self, mock_config, mock_agentrouter, mock_mark_reset):
         mock_agentrouter.return_value = {"error": "Connection timed out"}
-        
+
         test_args = ["limitlens", "--reset-spend"]
         buf = io.StringIO()
         with patch.object(sys, "argv", test_args), \
              redirect_stdout(buf):
             main()
-        
+
         self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
         self.assertIn("Connection timed out", buf.getvalue())
         mock_mark_reset.assert_called_once()
@@ -743,13 +743,13 @@ class TestCLI(unittest.TestCase):
     })
     def test_reset_spend_warns_and_clears_baseline_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter, mock_mark_reset):
         mock_agentrouter.return_value = {"tiers": []}
-        
+
         test_args = ["limitlens", "--reset-spend"]
         buf = io.StringIO()
         with patch.object(sys, "argv", test_args), \
              redirect_stdout(buf):
             main()
-        
+
         self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
         mock_mark_reset.assert_called_once()
         extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
@@ -790,7 +790,7 @@ class TestCLIThreadPool(unittest.TestCase):
                 _main()
             except Exception:
                 pass
-        
+
         mock_executor.assert_called()
         _, kwargs = mock_executor.call_args
         self.assertEqual(kwargs.get("max_workers"), 16)
@@ -800,33 +800,33 @@ class TestCLIDebugAndLogging(unittest.TestCase):
     def test_cli_debug_flag_prints_traceback_and_logs(self):
         import shutil
         from limitlens.cli import main
-        
+
         test_args = ["limitlens", "--debug"]
         log_dir = os.path.expanduser("~/.cache/limitlens")
         log_file = os.path.join(log_dir, "limitlens.log")
-        
+
         backup_log_file = log_file + ".bak"
         if os.path.exists(log_file):
             shutil.copy2(log_file, backup_log_file)
             os.remove(log_file)
-        
+
         err_output = io.StringIO()
         with patch.object(sys, "argv", test_args), \
              patch("limitlens.cli._main", side_effect=ValueError("Test Debug Exception")), \
              patch("sys.stderr", err_output), \
              self.assertRaises(SystemExit) as cm:
             main()
-            
+
         self.assertEqual(cm.exception.code, 1)
         self.assertIn("Test Debug Exception", err_output.getvalue())
         self.assertIn("traceback", err_output.getvalue().lower())
-        
+
         self.assertTrue(os.path.exists(log_file))
         with open(log_file, "r") as f:
             content = f.read()
             self.assertIn("Test Debug Exception", content)
             self.assertIn("Traceback", content)
-            
+
         os.remove(log_file)
         if os.path.exists(backup_log_file):
             shutil.move(backup_log_file, log_file)

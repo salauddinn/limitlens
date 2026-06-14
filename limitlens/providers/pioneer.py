@@ -165,7 +165,7 @@ def get_pioneer_data(args, config=None):
             token = get_keychain_token("pioneer")
         except ImportError:
             pass
-            
+
     if not token:
         if _has_config_balance(cfg):
             return parse_pioneer_billing(cfg, args)
@@ -263,7 +263,7 @@ def display_pioneer_text(data, args):
         b_val = pct_used if pct_used is not None else 0.0
         b = bar(b_val, no_color=getattr(args, 'no_color', False))
         unit = tier.get("unit") or data.get("unit") or "$"
-        
+
         t_tot = tier.get("total")
         t_rem = tier.get("remaining", 0.0)
         t_used = tier.get("used", 0.0)
@@ -274,9 +274,9 @@ def display_pioneer_text(data, args):
         else:
             amount = f"{t_rem:.2f}/{t_tot:.2f} {unit}" if t_tot is not None else f"{t_rem:.2f} {unit}"
             used_str = f"{t_used:.2f} {unit} used"
-            
+
         pct_str = f"{pct_left:5.1f}% left" if pct_left is not None else "    ?% left"
-        
+
         if getattr(args, 'no_color', False):
             print(f"    {short:<16} {b}  {pct_str}  {amount}  {used_str}")
         else:

@@ -263,7 +263,7 @@ def _main():
             else:
                 import getpass
                 token = getpass.getpass(f"Enter token for {provider}: ").strip()
-            
+
             if not token:
                 print_c(f"  ⚠ No token provided for '{provider}'.", "\033[31m", getattr(args, "no_color", False))
                 return

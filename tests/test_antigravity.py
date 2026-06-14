@@ -118,7 +118,7 @@ class TestAntigravityStatus(unittest.TestCase):
         with patch("os.path.expanduser", return_value=default_dir):
             name = ag_mod.get_profile_name_from_config_dir(default_dir)
             self.assertEqual(name, "agy-cli")
-            
+
             # Custom dir
             custom_dir = "/Users/testuser/agy-profile-work/.gemini/antigravity-cli"
             name = ag_mod.get_profile_name_from_config_dir(custom_dir)
@@ -147,7 +147,7 @@ class TestAntigravityStatus(unittest.TestCase):
     def test_get_config_dir_for_pid_linux_env(self):
         import builtins
         original_open = builtins.open
-        
+
         def mock_open(file, *args, **kwargs):
             if "/proc/99999/environ" in str(file):
                 m = unittest.mock.mock_open(read_data=b"PATH=/bin\x00HOME=/home/testuser/agy-work-profile\x00USER=test\x00")()
@@ -192,7 +192,7 @@ class TestAntigravityStatus(unittest.TestCase):
     def test_get_antigravity_data_multiple_profiles(self, mock_save_cache, mock_fetch, mock_load_cache, mock_named_profs, mock_discover_cli, mock_platform):
         # 1 active CLI, 1 cached stale CLI, 1 IDE profile
         mock_named_profs.return_value = (["work-ide"], None)
-        
+
         mock_discover_cli.return_value = {
             "agy-work": {
                 "pid": "12345",
@@ -229,7 +229,7 @@ class TestAntigravityStatus(unittest.TestCase):
         mock_fetch.side_effect = mock_fetch_impl
 
         res = ag_mod.get_antigravity_data(unittest.mock.Mock(no_color=False, verbose=False))
-        
+
         profiles = {p["name"]: p for p in res["profiles"]}
         self.assertIn("work-ide", profiles)
         self.assertIn("ide", profiles)
@@ -257,16 +257,16 @@ class TestMoreAntigravity(unittest.TestCase):
     def test_get_antigravity_named_profiles(self, mock_run, mock_isdir, mock_glob):
         mock_glob.return_value = ["/path/prof1", "/path/__default__profile__"]
         mock_isdir.return_value = True
-        
+
         mock_proc = MagicMock()
         mock_proc.returncode = 0
         mock_proc.stdout = "123 agy\n456 /path/AntigravityProfiles/prof2/something\n"
         mock_run.return_value = mock_proc
-        
+
         profs, err = ag_mod.get_antigravity_named_profiles("Darwin")
         self.assertEqual(err, None)
         self.assertEqual(profs, ["prof1", "prof2"])
-        
+
         mock_run.side_effect = OSError("boom")
         profs, err = ag_mod.get_antigravity_named_profiles("Darwin")
         self.assertIn("boom", err)
@@ -277,11 +277,11 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_proc.returncode = 0
         mock_proc.stdout = "LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:((\"node\",pid=123,fd=18))\n"
         mock_run.return_value = mock_proc
-        
+
         ports, err = ag_mod.collect_listening_ports(["123"], "Linux")
         self.assertEqual(ports, [8080])
         self.assertIsNone(err)
-        
+
         mock_proc.returncode = 1
         mock_proc.stderr = "error"
         ports, err = ag_mod.collect_listening_ports(["123"], "Linux")
@@ -294,7 +294,7 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_proc.returncode = 0
         mock_proc.stdout = "node 123 user 18u IPv4 0x... 0t0 TCP *:8080 (LISTEN)\n"
         mock_run.return_value = mock_proc
-        
+
         ports, err = ag_mod.collect_listening_ports(["123"], "Darwin")
         self.assertEqual(ports, [8080])
         self.assertIsNone(err)
@@ -316,7 +316,7 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_proc.returncode = 0
         mock_proc.stdout = "100 Electron AntigravityProfiles/myprof/\n101 language_server_macos AntigravityProfiles/myprof/ --https_server_port 1234 --csrf_token abc\n"
         mock_run.return_value = mock_proc
-        
+
         token, ports, err, tokens = ag_mod.find_language_server_for_profile("myprof", "Darwin")
         self.assertEqual(token, "abc")
         self.assertEqual(ports, [1234])
@@ -329,7 +329,7 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_proc.returncode = 0
         mock_proc.stdout = "100 1 Electron\n101 100 language_server_macos /extensions/antigravity/bin/ --https_server_port 1234 --csrf_token abc\n"
         mock_run.return_value = mock_proc
-        
+
         token, ports, err, tokens = ag_mod.find_language_server_for_main_profile("Darwin", [])
         self.assertEqual(token, "abc")
         self.assertEqual(ports, [1234])
@@ -341,16 +341,16 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_proc.returncode = 0
         mock_proc.stdout = "100 agy\n"
         mock_run.return_value = mock_proc
-        
+
         with patch("limitlens.providers.antigravity.collect_listening_ports", return_value=([1234], None)):
             token, ports, err, tokens = ag_mod.find_language_server_for_cli("Darwin")
             self.assertEqual(ports, [1234])
-            
+
     def test_format_ag_error(self):
         self.assertEqual(ag_mod.format_ag_error(TimeoutError()), "request timed out")
         self.assertEqual(ag_mod.format_ag_error(socket.timeout()), "request timed out")
         self.assertEqual(ag_mod.format_ag_error(ssl.SSLCertVerificationError()), "TLS certificate verification failed for local Antigravity endpoint")
-        
+
         err = urllib.error.URLError(ssl.SSLCertVerificationError())
         self.assertEqual(ag_mod.format_ag_error(err), "TLS certificate verification failed for local Antigravity endpoint")
 
@@ -366,17 +366,17 @@ class TestMoreAntigravity(unittest.TestCase):
         mock_resp.read.return_value = b'{"status": "ok"}'
         mock_resp.__enter__.return_value = mock_resp
         mock_urlopen.return_value = mock_resp
-        
+
         res = ag_mod.make_ag_request(1234, "tok", "Method", {})
         self.assertEqual(res, {"status": "ok"})
-        
+
     @patch("limitlens.providers.antigravity.make_ag_request")
     def test_make_ag_request_with_tls_fallback(self, mock_req):
         mock_req.return_value = {"ok": 1}
         res, insecure = ag_mod.make_ag_request_with_tls_fallback(1234, "tok", "M", {})
         self.assertEqual(res, {"ok": 1})
         self.assertFalse(insecure)
-        
+
         mock_req.side_effect = [ssl.SSLCertVerificationError(), {"ok": 2}]
         res, insecure = ag_mod.make_ag_request_with_tls_fallback(1234, "tok", "M", {})
         self.assertEqual(res, {"ok": 2})
@@ -407,7 +407,7 @@ class TestMoreAntigravity(unittest.TestCase):
     def test_cache(self):
         with patch("os.path.exists", return_value=False):
             self.assertEqual(ag_mod.load_antigravity_cache(), {"profiles": {}})
-            
+
         m = mock_open(read_data='{"profiles": {"a": 1}}')
         with patch("builtins.open", m), patch("os.path.exists", return_value=True):
             self.assertEqual(ag_mod.load_antigravity_cache(), {"profiles": {"a": 1}})
@@ -438,15 +438,15 @@ class TestMoreAntigravity(unittest.TestCase):
     def test_get_antigravity_data_no_profiles(self, mock_as_completed, mock_cli, mock_named):
         res = ag_mod.get_antigravity_data(MagicMock())
         self.assertIn("error", res)
-        
+
     def test_display_antigravity_text(self):
         args = MagicMock()
         args.verbose = True
         args.no_color = True
-        
+
         # Error case
         ag_mod.display_antigravity_text({"error": "some err"}, args)
-        
+
         # Valid data
         data = {
             "profiles": [
@@ -483,7 +483,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         ports, err = ag_mod.collect_listening_ports(["123"], "Linux")
         self.assertEqual(ports, [])
         self.assertIn("ss failed", err)
-        
+
         # lsof exception
         mock_run.side_effect = OSError("lsof failed")
         ports, err = ag_mod.collect_listening_ports(["123"], "Darwin")
@@ -513,11 +513,11 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         mock_proc1 = MagicMock()
         mock_proc1.returncode = 0
         mock_proc1.stdout = "100 Electron AntigravityProfiles/prof/\n"
-        
+
         mock_proc2 = MagicMock()
         mock_proc2.returncode = 0
         mock_proc2.stdout = "101 100 Helper\n102 101 language_server_macos --https_server_port 1234 --csrf_token abc\n"
-        
+
         mock_run.side_effect = [mock_proc1, mock_proc2]
         token, ports, err, tokens = ag_mod.find_language_server_for_profile("prof", "Darwin")
         self.assertEqual(token, "abc")
@@ -528,7 +528,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         mock_run.side_effect = OSError("ps failed")
         token, ports, err, tokens = ag_mod.find_language_server_for_main_profile("Darwin", [])
         self.assertIn("ps failed", err)
-        
+
         mock_run.side_effect = None
         mock_proc = MagicMock()
         mock_proc.returncode = 0
@@ -554,7 +554,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         # Linux OS Error
         with patch("builtins.open", side_effect=OSError), patch("os.listdir", side_effect=OSError):
             self.assertIsNone(ag_mod.get_config_dir_for_pid("123", "Linux"))
-        
+
         # Mac OS Error
         with patch("subprocess.run", side_effect=OSError):
             self.assertIsNone(ag_mod.get_config_dir_for_pid("123", "Darwin"))
@@ -563,7 +563,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
     def test_discover_active_cli_profiles_exceptions(self, mock_run):
         mock_run.side_effect = OSError("ps failed")
         self.assertEqual(ag_mod.discover_active_cli_profiles("Darwin"), {})
-        
+
         # short parts
         mock_proc = MagicMock()
         mock_proc.returncode = 0
@@ -598,7 +598,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         mock_resp.read.return_value = b'{"status": "ok"}'
         mock_resp.__enter__.return_value = mock_resp
         mock_urlopen.return_value = mock_resp
-        
+
         res = ag_mod.make_ag_request(1234, "tok", "Method", {}, verify_tls=False)
         self.assertEqual(res, {"status": "ok"})
 
@@ -643,7 +643,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         port, tok, err, ins = ag_mod.probe_ag_port([1234], "tok")
         self.assertIsNone(port)
         self.assertIn("request timed out", err)
-        
+
         mock_tcp.return_value = False
         port, tok, err, ins = ag_mod.probe_ag_port([1234], "tok")
         self.assertIn("TCP closed", err)
@@ -663,23 +663,23 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         mock_req.side_effect = mock_err2
         models, err, ins = ag_mod.get_ag_model_quotas(1234, "tok")
         self.assertEqual(err, "internal error")
-        
+
         # General URLError
         mock_req.side_effect = TimeoutError()
         models, err, ins = ag_mod.get_ag_model_quotas(1234, "tok")
         self.assertEqual(err, "request timed out")
-        
+
         # Message code with token
         mock_req.side_effect = None
         mock_req.return_value = ({"code": 1, "message": "token expired"}, False)
         models, err, ins = ag_mod.get_ag_model_quotas(1234, "tok")
         self.assertEqual(err, "not_signed_in")
-        
+
         # Message code general
         mock_req.return_value = ({"code": 1, "message": "general error"}, False)
         models, err, ins = ag_mod.get_ag_model_quotas(1234, "tok")
         self.assertEqual(err, "general error")
-        
+
         # TypeError in parsing
         mock_req.return_value = ({"userStatus": {"cascadeModelConfigData": "invalid"}}, False)
         models, err, ins = ag_mod.get_ag_model_quotas(1234, "tok")
@@ -689,7 +689,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         m = mock_open(read_data='invalid json')
         with patch("builtins.open", m), patch("os.path.exists", return_value=True):
             self.assertEqual(ag_mod.load_antigravity_cache(), {"profiles": {}})
-            
+
         m2 = mock_open(read_data='["not a dict"]')
         with patch("builtins.open", m2), patch("os.path.exists", return_value=True):
             self.assertEqual(ag_mod.load_antigravity_cache(), {"profiles": {}})
@@ -712,20 +712,20 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         mock_cli.return_value = ("tok", [1], None, {})
         prof_data, cache = ag_mod._fetch_single_profile("cli_prof", "Darwin", {}, source="cli")
         self.assertEqual(prof_data["status"], "stopped")
-        
+
         # 2. source="cli" with cli_info
         cli_info = {"ports": [1234], "config_dir": "/path"}
         mock_probe.return_value = (1234, "tok", None, False)
         mock_quota.return_value = ([{"label": "gemini", "pct_left": 10}], None, False)
         prof_data, cache = ag_mod._fetch_single_profile("cli_prof", "Darwin", {}, source="cli", cli_info=cli_info)
         self.assertEqual(prof_data["status"], "running")
-        
+
         # 3. is_main
         mock_main.return_value = ("tok", [1234], None, {})
         mock_probe.return_value = (None, None, "probe err", False)
         prof_data, cache = ag_mod._fetch_single_profile("ide", "Darwin", {}, is_main=True)
         self.assertEqual(prof_data["status"], "stopped")
-        
+
         # 4. generic profile
         mock_prof.return_value = ("tok", [1234], None, {})
         mock_probe.return_value = (1234, "tok", None, True) # insecure tls
@@ -739,7 +739,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         prof_data, cache = ag_mod._fetch_single_profile("prof", "Darwin", {})
         self.assertEqual(prof_data["status"], "running")
         self.assertEqual(prof_data["error"], "quota err")
-        
+
         # generic profile empty models
         mock_quota.return_value = ([], None, False)
         prof_data, cache = ag_mod._fetch_single_profile("prof", "Darwin", {})
@@ -756,16 +756,16 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         args.no_color = False
         args.all = False
         args.tool = None
-        
+
         # Error with warning sign
         ag_mod.display_antigravity_text({"error": "⚠ oops"}, args)
         mock_warn.assert_called()
-        
+
         # Stale profile without verbose
         data = {"profiles": [{"name": "p1", "status": "stale"}]}
         ag_mod.display_antigravity_text(data, args)
         mock_printc.assert_called_with("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", False)
-        
+
         # Stale with verbose
         args.verbose = True
         data = {"profiles": [
@@ -775,7 +775,7 @@ class TestMoreAntigravityExtra(unittest.TestCase):
             {"name": "p4", "status": "running", "models": [{"label": "m1", "pct_left": 10, "visible": False, "reset_time": "1 day"}]}
         ], "warning": "global warn"}
         ag_mod.display_antigravity_text(data, args)
-        
+
         args.no_color = True
         ag_mod.display_antigravity_text(data, args)
 

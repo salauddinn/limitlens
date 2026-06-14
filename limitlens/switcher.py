@@ -81,7 +81,7 @@ def collect_results(config, args):
             fetchers["custom"] = executor.submit(get_custom_data, args, config)
         if args.tool == "cursor" or (args.tool == "all" and str(config.get("cursor", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
             fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
-        
+
         for key, fut in fetchers.items():
             try:
                 result[key] = fut.result()
@@ -100,27 +100,27 @@ def main():
     parser = argparse.ArgumentParser(description="Interactive tool switcher based on LimitLens quotas")
     parser.add_argument("-t", "--tool", help="Directly switch context to a tool by name/command (e.g. amp, codex, agy)")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output")
-    
+
     args, forwarded = parser.parse_known_args()
     no_color = args.no_color
     config = load_limitlens_config()
     switch_args = SwitchArgs(no_color=no_color)
-    
+
     print_c("  ⟲  fetching quotas and checking recommendations...", "\033[90m", no_color)
     result = collect_results(config, switch_args)
     recs = compute_recommendations(result, parse_to_utc, fmt_reset)
     cands = recs["all_candidates"]
-    
+
     # Filter out candidates that do not have a runnable CLI command
     runnable_candidates = [
         c for c in cands
         if c.get("command") and not c["command"].startswith("use ")
     ]
-    
+
     if not runnable_candidates:
         print_c("  ⚠ no runnable CLI tools discovered.", "\033[31m", no_color)
         sys.exit(1)
-        
+
     target_cand = None
     if args.tool:
         tool_query = args.tool.lower()
@@ -134,12 +134,12 @@ def main():
             for c in runnable_candidates:
                 print(f"    - {c['tool']}  (command: {c['command']})")
             sys.exit(1)
-            
+
     if not target_cand:
         print("\033[2J\033[H", end="") # Clear screen
         print_c("  ═══ AI Tool Context Switcher ═══", "\033[1;36m", no_color)
         print_c("  Select a tool to switch context and execute it in place.\n", "\033[90m", no_color)
-        
+
         print_c("  💡 Recommendations from LimitLens:", "\033[1;32m", no_color)
         for tier in ("hard", "quick", "cli"):
             picks = recs[tier]
@@ -150,7 +150,7 @@ def main():
                     tier_label = {"hard": "Hard Tasks", "quick": "Quick Edits", "cli": "CLI/Pairing"}[tier]
                     print(f"    • {tier_label:12}: {top_pick['name']} ({top_pick['headroom_pct']:.0f}% quota left)")
         print()
-        
+
         print_c("  Available tools:", "\033[1m", no_color)
         for idx, c in enumerate(runnable_candidates, 1):
             pct = c["headroom_pct"]
@@ -162,13 +162,13 @@ def main():
                 pct_str = f"\033[33m{pct:.0f}%\033[0m"
             else:
                 pct_str = f"\033[31m{pct:.0f}%\033[0m"
-                
+
             note_str = f" · {c['note']}" if c.get('note') else ""
             print(f"  [{idx}] {c['name']}")
             print_c(f"      Quota:   {pct_str} left{note_str}", "\033[90m", no_color)
             print_c(f"      Command: {c['command']}", "\033[90m", no_color)
             print()
-            
+
         default_idx = 1
         cli_picks = [p for p in recs["cli"] if p.get("command") and not p["command"].startswith("use ")]
         if cli_picks:
@@ -176,7 +176,7 @@ def main():
                 if c["command"] == cli_picks[0]["command"]:
                     default_idx = idx
                     break
-                    
+
         prompt_msg = f"  Select a tool [1-{len(runnable_candidates)}] (default: {default_idx}): "
         try:
             user_input = input(prompt_msg).strip()
@@ -192,18 +192,18 @@ def main():
         except ValueError:
             print_c("  ⚠ invalid selection.", "\033[31m", no_color)
             sys.exit(1)
-            
+
         target_cand = runnable_candidates[choice_idx - 1]
-        
+
     cmd_str = target_cand["command"]
     if forwarded:
         args_str = " ".join(shlex.quote(a) for a in forwarded)
         full_command = f"{cmd_str} {args_str}"
     else:
         full_command = cmd_str
-        
+
     print_c(f"\n  ⚡ Switching context: executing `{full_command}` in place...\n", "\033[1;32m", no_color)
-    
+
     shell = os.environ.get("SHELL", "sh")
     try:
         os.execvp(shell, [shell, "-c", full_command])  # nosec B606

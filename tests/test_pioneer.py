@@ -50,9 +50,9 @@ def test_pioneer_money():
 def test_parse_pioneer_billing(mock_disp, mock_redact):
     mock_disp.return_value = {"auto_hide_enabled": True}
     mock_redact.return_value = "te**@example.com"
-    
+
     assert parse_pioneer_billing(None, DummyArgs()) == {"error": "Unexpected response format"}
-    
+
     data = {
         "email": "test@example.com",
         "team_id": "team_1",
@@ -89,19 +89,19 @@ def test_parse_pioneer_billing(mock_disp, mock_redact):
             }
         ]
     }
-    
+
     args = DummyArgs()
     res = parse_pioneer_billing(data, args)
-    
+
     assert res["email"] == "te**@example.com"
     assert res["team_id"] == "team_1"
     assert res["team_name"] == "Team"
     assert res["plan"] == "Pro"
     assert res["used_today"] == 100.5
     assert res["inferences_today"] == 10
-    
+
     assert len(res["tiers"]) == 3  # Empty tier should be skipped
-    
+
     t1 = res["tiers"][0]
     assert t1["remaining"] == 50.0
     assert t1["total"] == 100.0
@@ -115,12 +115,12 @@ def test_parse_pioneer_billing(mock_disp, mock_redact):
     assert t2["total"] is None
     assert t2["used"] == 0.0
     assert t2["pct_left"] is None
-    
+
     t3 = res["tiers"][2]
     assert t3["remaining"] == 50.0
     assert t3["total"] == 100.0
     assert t3["used"] == 50.0  # max(0, total - remaining)
-    
+
     # Test auto hide visible false
     data["tiers"] = [{"label": "Hidden", "remaining": 5, "total": 100, "used": 95}]
     res = parse_pioneer_billing(data, DummyArgs())
@@ -141,7 +141,7 @@ def test_parse_pioneer_billing_no_tiers_but_credit_limit(mock_disp):
     assert t["total"] == 10.0
     assert t["remaining"] == 5.0
     assert t["used"] == 5.0
-    
+
     data = {
         "credit_limit": 0,
         "free_tier_remaining": 500,
@@ -209,7 +209,7 @@ def test_get_pioneer_data_no_token(mock_keychain, mock_cfg):
     mock_cfg.return_value = {}
     res = get_pioneer_data(DummyArgs())
     assert res["error"] == "PIONEER_API_TOKEN environment variable not set and no keychain token found"
-    
+
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "test", "remaining": 10, "total": 100, "used": 90}]}}
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
@@ -226,7 +226,7 @@ def test_get_pioneer_data_success(mock_keychain, mock_open, mock_cfg):
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
     mock_open.return_value.__enter__.return_value = cm
-    
+
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs(redact=False))
         assert res["email"] == "test@pioneer"
@@ -256,7 +256,7 @@ def test_get_pioneer_data_with_team(mock_keychain, mock_open, mock_cfg):
     cm = MagicMock()
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
     mock_open.return_value.__enter__.return_value = cm
-    
+
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs(redact=False))
         assert res["email"] == "test@pioneer"
@@ -282,7 +282,7 @@ def test_get_pioneer_data_http_error(mock_keychain, mock_open, mock_cfg):
 @patch.dict(os.environ, {"PIONEER_API_TOKEN": "test_token"}, clear=True)
 def test_get_pioneer_data_fallback_config(mock_open, mock_cfg):
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "fallback", "remaining": 10, "total": 100, "used": 90}]}}
-    
+
     mock_open.side_effect = urllib.error.URLError("error")
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
@@ -305,7 +305,7 @@ def test_get_pioneer_data_fallback_config(mock_open, mock_cfg):
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
         assert res["tiers"][0]["label"] == "fallback"
-        
+
     cm.read.return_value = json.dumps({"data": {"email": "test@pioneer"}}).encode("utf-8")
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):
         res = get_pioneer_data(DummyArgs())
@@ -319,8 +319,8 @@ def test_display_pioneer_text_error(mock_section, mock_print_error):
     display_pioneer_text({"error": "test error"}, DummyArgs())
     mock_section.assert_called_with("Pioneer", ANY)
     mock_print_error.assert_called_with("test error", ANY)
-    
-    
+
+
 @patch("limitlens.providers.pioneer.print_c")
 @patch("limitlens.providers.pioneer.identity_line")
 @patch("limitlens.providers.pioneer.section")
@@ -363,11 +363,11 @@ def test_display_pioneer_text(mock_print, mock_section, mock_identity_line, mock
         "used_today": 10.5,
         "inferences_today": 5,
     }
-    
+
     # default color
     args = DummyArgs(verbose=False, all=False, no_color=False)
     display_pioneer_text(data, args)
-    
+
     # no color
     args = DummyArgs(verbose=False, all=False, no_color=True)
     display_pioneer_text(data, args)

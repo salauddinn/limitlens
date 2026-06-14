@@ -496,7 +496,7 @@ def compute_ttx(snapshots, key):
         if s.get("key") == key and s.get("pct_left") is not None and s.get("ts")
     ]
     key_snaps.sort(key=lambda s: s.get("ts", ""))
-    
+
     valid_snaps = []
     for snap in reversed(key_snaps):
         if not valid_snaps:
@@ -507,11 +507,11 @@ def compute_ttx(snapshots, key):
             valid_snaps.append(snap)
             if len(valid_snaps) == 6:
                 break
-                
+
     valid_snaps.reverse()
     if len(valid_snaps) < 2:
         return None
-        
+
     first, last = valid_snaps[0], valid_snaps[-1]
     t_first = _parse_ts(first["ts"])
     t_last = _parse_ts(last["ts"])

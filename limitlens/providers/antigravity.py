@@ -139,14 +139,14 @@ def find_language_server_for_profile(profile, sys_name):
     cmd_ports = set()
     port_tokens = {}
     ls_bin = "language_server_macos" if sys_name == "Darwin" else "language_server_linux"
-    
+
     for line in ps_result.stdout.splitlines():
         if ls_bin not in line:
             continue
         direct_match = f"AntigravityProfiles/{profile}/" in line
         if not direct_match:
             continue
-        
+
         token_match = re.search(r"--csrf_token[=\s]+(\S+)", line)
         if token_match:
             csrf_token = token_match.group(1)
@@ -215,7 +215,7 @@ def find_language_server_for_main_profile(sys_name, known_profiles):
         return None, None, f"Failed to list processes: {e}", {}
 
     ls_bin = "language_server_macos" if sys_name == "Darwin" else "language_server_linux"
-    
+
     profile_electron_pids = set()
     for line in ps_result.stdout.splitlines():
         if "Electron" in line and "AntigravityProfiles/" in line:
@@ -240,25 +240,25 @@ def find_language_server_for_main_profile(sys_name, known_profiles):
     pids = []
     cmd_ports = set()
     port_tokens = {}
-    
+
     for line in ps_result.stdout.splitlines():
         if ls_bin not in line:
             continue
-            
+
         parts = line.strip().split(None, 2)
         if len(parts) < 3:
             continue
-            
+
         pid = parts[0]
         ppid = parts[1]
         cmd = parts[2]
-        
+
         if "/extensions/antigravity/bin/" not in cmd and "--app_data_dir antigravity" not in cmd:
             continue
-            
+
         if "AntigravityProfiles/" in cmd:
             continue
-            
+
         if ppid in profile_tree_pids:
             continue
 
@@ -721,7 +721,7 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
                 ls_err = "agy CLI not configured"
             port_tokens = {}
             config_dir = cached_config_dir
-        
+
         if config_dir:
             home = os.path.dirname(os.path.dirname(config_dir))
             user_home = os.path.expanduser("~")
@@ -780,7 +780,7 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         if any(hidden in label.lower() for hidden in HIDDEN_AG_MODELS):
             continue
         base_name = re.sub(r'\s*\((High|Medium|Low|Thinking)\)', '', label, flags=re.IGNORECASE).strip()
-        
+
         lbl_lower = base_name.lower()
         if "gemini" in lbl_lower:
             family = "gemini"
@@ -792,7 +792,7 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
             family = lbl_lower
 
         sig = (family, m["pct_left"], m.get("reset_time"))
-        
+
         if sig not in groups:
             m_copy = dict(m)
             m_copy["label"] = base_name
@@ -801,12 +801,12 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
             m_copy = dict(m)
             m_copy["label"] = base_name
             groups[sig].append(m_copy)
-            
+
     filtered_models = []
     for sig, group in groups.items():
         best_model = min(group, key=lambda x: get_priority(x["label"]))
         filtered_models.append(best_model)
-        
+
     models = filtered_models
 
     if not models:
@@ -887,7 +887,7 @@ def get_antigravity_data(args, config=None):
         if not profile_is_ignored("ide", ignored):
             fut = executor.submit(_fetch_single_profile, "ide", sys_name, cache, is_main=True, known_profiles=known_profiles)
             futures[fut] = "ide"
-        
+
         for cli_prof in known_cli_profiles:
             info = active_cli.get(cli_prof)
             fut = executor.submit(_fetch_single_profile, cli_prof, sys_name, cache, source="cli", cli_info=info)
@@ -1017,7 +1017,7 @@ def display_antigravity_text(data, args):
                 print(f"    {fam}")
             else:
                 print(f"    \033[1m{fam}\033[0m")
-                
+
             # Sort so 5h limit comes before weekly limit
             def sort_key(x):
                 try:
@@ -1032,7 +1032,7 @@ def display_antigravity_text(data, args):
                 pct_left = m["pct_left"]
                 pct_used = 100.0 - pct_left
                 rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
-                
+
                 limit_label = "unknown limit"
                 try:
                     rt = parse_to_utc(m.get("reset_time"))
@@ -1043,11 +1043,10 @@ def display_antigravity_text(data, args):
                         limit_label = "5h limit"
                 except Exception:
                     pass  # nosec B110
-                    
+
                 b = bar(pct_used, no_color=getattr(args, 'no_color', False))
                 pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
                 if getattr(args, 'no_color', False):
                     print(f"      {limit_label:<14} {b}  {pct_fmt} left  {rst}")
                 else:
                     print(f"      {limit_label:<14} {b}  {pct_fmt} left  \033[90m{rst}\033[0m")
-

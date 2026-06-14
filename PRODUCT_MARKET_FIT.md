@@ -88,7 +88,7 @@ To solidify this PMF against direct competitors like CodexBar and OpenUsage, Lim
 
 ### 3. Proactive OS Notifications & Alerts (TTX) [✅ Implemented]
 - **Objective:** Alert users before they hit a rate limit, preventing workflow disruption.
-- **Details:** 
+- **Details:**
   - Provide a threshold-based alert system (e.g., triggering a system notification when a quota drops below 10%).
   - Implement a **"Time to Exhaustion"** metric (similar to `onWatch`) that projects how much time/requests remain at the current rate of consumption.
   - Trigger desktop notifications natively (integrating with macOS Notification Center or using standard desktop notify tools) in addition to the menubar color changes.

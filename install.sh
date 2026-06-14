@@ -3,7 +3,7 @@
 # LimitLens Installer
 # ────────────────────────────────────────────────────────────────────────────────
 # Automatically installs LimitLens and all dependencies on macOS & Linux.
-# 
+#
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/install.sh | bash
 #

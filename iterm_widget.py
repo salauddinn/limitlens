@@ -14,7 +14,7 @@ import subprocess
 
 async def main(connection):
     print("Starting LimitLens registration v4...")
-    
+
     component = iterm2.StatusBarComponent(
         short_description="LimitLens Widget",
         detailed_description="Shows the best AI tool to avoid quota waste",
@@ -26,7 +26,7 @@ async def main(connection):
 
     # ==============================================================================
     # CONFIGURATION
-    # If you copy this script to your iTerm2 Scripts folder, you MUST set this 
+    # If you copy this script to your iTerm2 Scripts folder, you MUST set this
     # to the absolute path of your limitlens clone!
     # E.g., USER_LIMITLENS_DIR = "/Users/name/Projects/limitlens"
     # ==============================================================================
@@ -34,7 +34,7 @@ async def main(connection):
 
     # Auto-detect if running directly from the repository (or via symlink)
     LIMITLENS_DIR = os.path.dirname(os.path.realpath(__file__))
-    
+
     # Fallback for when the script is copied into iTerm2's application support directory
     if "Scripts" in LIMITLENS_DIR or "iterm2" in LIMITLENS_DIR.lower():
         LIMITLENS_DIR = os.path.expanduser(USER_LIMITLENS_DIR)
@@ -88,15 +88,15 @@ async def main(connection):
     def fetch_status_sync():
         import shutil
         limitlens_bin = shutil.which("limitlens")
-        
+
         # Fallback for pipx installs when iTerm GUI doesn't inherit shell PATH
         if not limitlens_bin and os.path.exists(os.path.expanduser("~/.local/bin/limitlens")):
             limitlens_bin = os.path.expanduser("~/.local/bin/limitlens")
-            
+
         if limitlens_bin:
             cmd = [limitlens_bin, "--json"]
             return subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            
+
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
         return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
 

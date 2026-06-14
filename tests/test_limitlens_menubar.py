@@ -35,7 +35,7 @@ def test_refresh_and_on_refresh(app):
     with patch.object(app, 'fetch_data') as mock_fetch:
         app.refresh()
         mock_fetch.assert_called_once_with()
-        
+
         mock_fetch.reset_mock()
         app._on_refresh(None)
         mock_fetch.assert_called_once_with(sync_codex=True)
@@ -44,20 +44,20 @@ def test_check_updates(app):
     app._pending_title = "New Title"
     app.menu = MagicMock()
     app._pending_menu_items = ["Item 1", "Item 2"]
-    
+
     app.check_updates(None)
-    
+
     assert app.title == "New Title"
     assert app._pending_title is None
     assert app._pending_menu_items is None
     app.menu.clear.assert_called_once()
     app.menu.add.assert_any_call("Item 1")
     app.menu.add.assert_any_call("Item 2")
-    
+
     app._pending_menu_items = []
     app.menu.clear.reset_mock()
     app.menu.add.reset_mock()
-    
+
     app.check_updates(None)
     # The 'No active quotas found' logic is in _refresh_sync,
     # check_updates simply loops pending_menu_items. Since it's empty, it won't add it directly here.
@@ -89,14 +89,14 @@ def test_fetch_data_success_empty(app):
 
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", return_value=mock_proc):
-         
+
         def mock_thread_init(target, daemon):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
-        
+
         app.fetch_data()
-        
+
         assert app._pending_title == "⚪ No quota"
         assert app._pending_menu_items == []
         assert not app._is_fetching
@@ -105,11 +105,11 @@ def test_fetch_data_success_with_quotas(app):
     mock_data = {
         "recommendations": {
             "hard": [
-                {"tool": "antigravity", "headroom_pct": 25, "name": "ag-prof:model"}, 
-                {"tool": "antigravity", "headroom_pct": 10, "name": "ag2"}, 
-                {"tool": "codex", "headroom_pct": 5, "name": "codex-foo"}, 
-                {"tool": "codex", "headroom_pct": 15, "name": "codex-bar (info)"}, 
-                {"tool": "other", "headroom_pct": 15, "name": "profile:codex-xyz → the-model-name something"}, 
+                {"tool": "antigravity", "headroom_pct": 25, "name": "ag-prof:model"},
+                {"tool": "antigravity", "headroom_pct": 10, "name": "ag2"},
+                {"tool": "codex", "headroom_pct": 5, "name": "codex-foo"},
+                {"tool": "codex", "headroom_pct": 15, "name": "codex-bar (info)"},
+                {"tool": "other", "headroom_pct": 15, "name": "profile:codex-xyz → the-model-name something"},
             ]
         },
         "codex": {
@@ -126,13 +126,13 @@ def test_fetch_data_success_with_quotas(app):
         "antigravity": {
             "profiles": [
                 {
-                    "name": "prof1", 
-                    "status": "running", 
+                    "name": "prof1",
+                    "status": "running",
                     "models": [{"label": "m1", "pct_left": 20.0}]
                 },
                 {
-                    "name": "prof2", 
-                    "status": "stopped", 
+                    "name": "prof2",
+                    "status": "stopped",
                     "models": [{"label": "m2", "pct_left": 5.0}]
                 }
             ]
@@ -155,7 +155,7 @@ def test_fetch_data_success_with_quotas(app):
             ]
         }
     }
-    
+
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.stdout = json.dumps(mock_data)
@@ -163,20 +163,20 @@ def test_fetch_data_success_with_quotas(app):
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", return_value=mock_proc), \
          patch.object(app, 'notify') as mock_notify:
-         
+
         def mock_thread_init(target, daemon):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
         app._has_loaded_once = True
-        
+
         app.fetch_data()
-        
+
         assert "🪐25%" in app._pending_title
         assert "🪐10%" in app._pending_title
         assert "+3" in app._pending_title
         assert "ag-prof" not in app._pending_title  # title stays tiny; details are in dropdown
-        
+
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)
         assert "[Best available]" in menu
@@ -192,18 +192,18 @@ def test_fetch_data_success_with_quotas(app):
         assert "Pioneer" in menu_text and "P1" in menu_text and "2.0%" in menu_text
         assert "Cursor" in menu_text and "C1" in menu_text and "50.0%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
-        
+
         mock_notify.assert_any_call("LimitLens Quota Warning", "Codex (Acc1) Reqs is running low (5.0% left).")
         mock_notify.assert_any_call("LimitLens Quota Warning", "Tier1 is running low (8.0% left). ($1.50 remaining)")
         mock_notify.assert_any_call("LimitLens Quota Warning", "OpenCode (Limit2) is running low (5.0% left). (10.00 remaining)")
         mock_notify.assert_any_call("LimitLens Quota Warning", "P1 is running low (2.0% left).")
-        
+
         mock_notify.reset_mock()
         mock_data["codex"]["accounts"][0]["limits"][0]["left_percent"] = 20.0
         mock_proc.stdout = json.dumps(mock_data)
-        
+
         app.fetch_data()
-        
+
         mock_notify.assert_not_called()
         assert "codex-Acc1-Reqs" not in app._notified_set
 
@@ -247,36 +247,36 @@ def test_fetch_data_subprocess_error(app):
 
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", return_value=mock_proc):
-         
+
         def mock_thread_init(target, daemon):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
-        
+
         app.fetch_data()
         assert app._pending_title == "⚠️ last error line"
 
 def test_fetch_data_subprocess_timeout(app):
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
-         
+
         def mock_thread_init(target, daemon):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
-        
+
         app.fetch_data()
         assert app._pending_title == "⚠️ Timeout"
 
 def test_fetch_data_subprocess_exception(app):
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", side_effect=ValueError("some bad error")):
-         
+
         def mock_thread_init(target, daemon):
             target()
             return MagicMock()
         mock_thread.side_effect = mock_thread_init
-        
+
         app.fetch_data()
         assert app._pending_title == "⚠️ some bad error"
 
@@ -287,7 +287,7 @@ def test_main():
         mock_app_cls.return_value = mock_app
 
         limitlens.menubar.main()
-        
+
         mock_app_cls.assert_called_once()
         mock_app.fetch_data.assert_called_once()
         mock_app.check_updates.assert_called_once_with(None)
@@ -299,68 +299,68 @@ def test_fetch_data_logging(app):
     import shutil
     log_dir = os.path.expanduser("~/.cache/limitlens")
     log_file = os.path.join(log_dir, "limitlens.log")
-    
+
     backup_log_file = log_file + ".bak"
     if os.path.exists(log_file):
         shutil.copy2(log_file, backup_log_file)
         os.remove(log_file)
-        
+
     try:
         mock_proc = MagicMock()
         mock_proc.returncode = 1
         mock_proc.stderr = "some process failure error"
-        
+
         with patch("threading.Thread") as mock_thread, \
              patch("subprocess.run", return_value=mock_proc):
-             
+
             def mock_thread_init(target, daemon):
                 target()
                 return MagicMock()
             mock_thread.side_effect = mock_thread_init
-            
+
             app.fetch_data()
-            
+
         assert os.path.exists(log_file)
         with open(log_file, "r") as f:
             content = f.read()
             assert "Menubar command failure" in content
             assert "some process failure error" in content
-            
+
         os.remove(log_file)
-        
+
         with patch("threading.Thread") as mock_thread, \
              patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
-             
+
             def mock_thread_init(target, daemon):
                 target()
                 return MagicMock()
             mock_thread.side_effect = mock_thread_init
-            
+
             app.fetch_data()
-            
+
         assert os.path.exists(log_file)
         with open(log_file, "r") as f:
             content = f.read()
             assert "Menubar subprocess timeout" in content
-            
+
         os.remove(log_file)
-        
+
         with patch("threading.Thread") as mock_thread, \
              patch("subprocess.run", side_effect=ValueError("another bad error")):
-             
+
             def mock_thread_init(target, daemon):
                 target()
                 return MagicMock()
             mock_thread.side_effect = mock_thread_init
-            
+
             app.fetch_data()
-            
+
         assert os.path.exists(log_file)
         with open(log_file, "r") as f:
             content = f.read()
             assert "Menubar exception" in content
             assert "another bad error" in content
-            
+
     finally:
         if os.path.exists(log_file):
             os.remove(log_file)

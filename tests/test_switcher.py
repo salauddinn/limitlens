@@ -27,16 +27,16 @@ class TestSwitcher(unittest.TestCase):
     def test_collect_results_threadpool_workers(self):
         from unittest.mock import patch
         from limitlens.switcher import collect_results
-        
+
         config = {}
         args = SwitchArgs()
-        
+
         with patch("limitlens.switcher.ThreadPoolExecutor") as mock_executor:
             try:
                 collect_results(config, args)
             except Exception:
                 pass
-            
+
             mock_executor.assert_called_once()
             _, kwargs = mock_executor.call_args
             self.assertEqual(kwargs.get("max_workers"), 16)

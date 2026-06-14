@@ -24,7 +24,7 @@ def test_usage_window_start():
     dt = usage_window_start(1)
     now = datetime.now(timezone.utc)
     assert (now - dt).total_seconds() >= 86390 # roughly 1 day
-    
+
 # test millis_from_dt
 def test_millis_from_dt():
     dt = datetime(2023, 1, 1, tzinfo=timezone.utc)
@@ -91,7 +91,7 @@ def test_get_opencode_credit_limits():
     limits = get_opencode_credit_limits(cfg)
     assert len(limits) == 1
     assert limits[0]["total"] == 100
-    
+
     cfg2 = {"credit_limits": {"my_limit": {"credits_total": 10, "credits_remaining": 5}}}
     limits2 = get_opencode_credit_limits(cfg2)
     assert len(limits2) == 1
@@ -99,7 +99,7 @@ def test_get_opencode_credit_limits():
 
     cfg3 = {"credits_total": 50, "credits_remaining": 10}
     assert len(get_opencode_credit_limits(cfg3)) == 1
-    
+
     cfg4 = {"credit_limits": {"my_limit": 5, "credits_total": 100, "credits_remaining": 50}}
     assert len(get_opencode_credit_limits(cfg4)) == 1
 
@@ -144,7 +144,7 @@ def opencode_db():
     os.close(fd)
     conn = sqlite3.connect(path)
     conn.execute("CREATE TABLE message (id INTEGER, time_created INTEGER, data TEXT)")
-    
+
     # insert data
     now_ms = millis_from_dt(datetime.now(timezone.utc))
     valid_data = {
@@ -156,16 +156,16 @@ def opencode_db():
         "time": {"created": now_ms}
     }
     conn.execute("INSERT INTO message VALUES (1, ?, ?)", (now_ms, json.dumps(valid_data)))
-    
+
     invalid_data = "{"
     conn.execute("INSERT INTO message VALUES (2, ?, ?)", (now_ms, invalid_data))
-    
+
     no_tokens = {"role": "assistant"}
     conn.execute("INSERT INTO message VALUES (3, ?, ?)", (now_ms, json.dumps(no_tokens)))
-    
+
     conn.commit()
     conn.close()
-    
+
     yield path
     os.remove(path)
 
@@ -187,7 +187,7 @@ def test_get_opencode_usage(opencode_db):
     assert models[0]["model"] == "gpt-4"
     assert models[0]["parent"] == "gpt4-parent"
     assert models[0]["tokens"]["total"] == 100
-    
+
     # disabled
     assert get_opencode_usage({"opencode": {"enabled": False}}) == {"disabled": True}
     # missing db
@@ -201,12 +201,12 @@ def test_get_opencode_usage_with_reset(opencode_db):
             "providers": ["openai"]
         }
     }
-    
+
     future_reset = datetime.now(timezone.utc) + timedelta(days=1)
     with patch("limitlens.providers.observed.get_spend_reset_time", return_value=future_reset):
         usage = get_opencode_usage(config)
         assert len(usage["windows"][0]["models"]) == 0
-        
+
     past_reset = datetime.now(timezone.utc) - timedelta(days=1)
     with patch("limitlens.providers.observed.get_spend_reset_time", return_value=past_reset):
         usage = get_opencode_usage(config)
@@ -216,7 +216,7 @@ def test_get_opencode_usage_with_reset(opencode_db):
 def copilot_otel():
     fd, path = tempfile.mkstemp()
     os.close(fd)
-    
+
     now_ns = int(datetime.now(timezone.utc).timestamp() * 1e9)
     valid_record = {
         "timeUnixNano": now_ns,
@@ -225,12 +225,12 @@ def copilot_otel():
         "gen_ai.system": "github-copilot",
         "gen_ai.request.model": "gpt-4-copilot"
     }
-    
+
     with open(path, "w") as f:
         f.write(json.dumps(valid_record) + "\n")
         f.write("invalid json\n")
         f.write('{"timeUnixNano": 1}\n') # old
-        
+
     yield path
     os.remove(path)
 
@@ -249,7 +249,7 @@ def test_get_copilot_cli_usage(copilot_otel):
         assert models[0]["model"] == "gpt-4-copilot"
         assert models[0]["tokens"]["input"] == 50
         assert models[0]["tokens"]["output"] == 100
-        
+
     # test reset cutoff logic
     future_reset = datetime.now(timezone.utc) + timedelta(days=1)
     with patch("limitlens.providers.observed.get_spend_reset_time", return_value=future_reset):
@@ -277,7 +277,7 @@ def test_pi_usage_tokens():
 @pytest.fixture
 def pi_sessions():
     path = tempfile.mkdtemp()
-    
+
     now_ms = millis_from_dt(datetime.now(timezone.utc))
     valid_record = {
         "type": "message",
@@ -289,11 +289,11 @@ def pi_sessions():
             "usage": {"input": 100, "output": 50, "cost": 0.01}
         }
     }
-    
+
     with open(os.path.join(path, "session.jsonl"), "w") as f:
         f.write(json.dumps(valid_record) + "\n")
         f.write("invalid json\n")
-        
+
     yield path
     # clean up
     for root, dirs, files in os.walk(path, topdown=False):
@@ -353,7 +353,7 @@ def test_claude_usage_tokens():
 @pytest.fixture
 def claude_sessions():
     path = tempfile.mkdtemp()
-    
+
     # Claude Code has timestamp at root level usually, but we fall back to both.
     now_ms = millis_from_dt(datetime.now(timezone.utc))
     valid_record = {
@@ -365,11 +365,11 @@ def claude_sessions():
             "usage": {"input_tokens": 1000, "output_tokens": 500}
         }
     }
-    
+
     with open(os.path.join(path, "session.jsonl"), "w") as f:
         f.write(json.dumps(valid_record) + "\n")
         f.write("invalid json\n")
-        
+
     yield path
     for root, dirs, files in os.walk(path, topdown=False):
         for name in files:
@@ -407,7 +407,7 @@ def test_display_usage_rows(capsys):
     display_usage_rows(rows, DummyArgs(verbose=False, no_color=True))
     captured = capsys.readouterr()
     assert "m1" in captured.out
-    
+
     display_usage_rows([], DummyArgs(verbose=False, no_color=True))
     assert "no usage" in capsys.readouterr().out
 
@@ -439,20 +439,20 @@ def test_display_credit_limits(capsys):
 def test_display_usage_source(capsys):
     display_usage_source("test", {"disabled": True}, DummyArgs())
     assert capsys.readouterr().out == ""
-    
+
     display_usage_source("test", {"error": "err"}, DummyArgs(no_color=True, verbose=True))
     assert "err" in capsys.readouterr().out
-    
+
     data = {
         "windows": [{"days": 1, "since": "2023-01-01", "models": [{"provider": "p1", "model": "m1", "requests": 1, "cost": 1.0, "tokens": {"total": 100}, "parent": "p"}]}]
     }
     display_usage_source("test", data, DummyArgs(no_color=True, verbose=True))
     assert "m1" in capsys.readouterr().out
-    
+
     data_empty = {"windows": [{"days": 1, "since": "2023-01-01", "models": []}]}
     display_usage_source("test", data_empty, DummyArgs(no_color=True, verbose=False, all=False))
     assert capsys.readouterr().out == ""
-    
+
     display_usage_source("test", data_empty, DummyArgs(no_color=True, verbose=True, all=False))
     assert "no usage" in capsys.readouterr().out
 
@@ -462,7 +462,7 @@ def test_display_opencode_text(capsys):
     }
     display_opencode_text(data, DummyArgs(tool="all", no_color=True, verbose=True))
     assert "m1" in capsys.readouterr().out
-    
+
     data_empty = {"opencode": {"windows": []}}
     display_opencode_text(data_empty, DummyArgs(tool="all", no_color=True, verbose=False, all=False))
     assert capsys.readouterr().out == ""
@@ -493,6 +493,6 @@ def test_display_at_glance(capsys):
     assert "hard task" in captured.out
     assert "Opus" in captured.out
     assert "p/m" in captured.out
-    
+
     display_at_glance({}, {}, DummyArgs(no_color=True))
     assert "no usable option" in capsys.readouterr().out

@@ -96,10 +96,10 @@ def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
     for key, value in config.items():
         if path == "custom_tools.tools." or path == "pioneer." or path == "agentrouter.":
             continue
-        
+
         if key not in schema_ref:
             raise ConfigValidationError(f"Unknown configuration key: '{path}{key}'")
-        
+
         expected_type = type(schema_ref[key])
         if expected_type is dict:
             if not isinstance(value, dict):
@@ -162,7 +162,7 @@ def apply_env_overrides(config):
 def load_limitlens_config():
     path = limitlens_config_path()
     config = copy.deepcopy(DEFAULT_CONFIG)
-    
+
     if os.path.exists(path):
         try:
             with open(path, encoding="utf-8") as f:
@@ -171,17 +171,17 @@ def load_limitlens_config():
             raise ConfigValidationError(f"Invalid JSON in config file {path}: {e}")
         except OSError as e:
             raise ConfigValidationError(f"Failed to read config file {path}: {e}")
-            
+
         if not isinstance(user_config, dict):
             raise ConfigValidationError(f"Config file {path} must contain a JSON object.")
-            
+
         validate_config_types(user_config)
         config = deep_merge(config, user_config)
     else:
         auto_config = auto_detect_providers(path)
         if auto_config:
             config = deep_merge(config, auto_config)
-        
+
     apply_env_overrides(config)
     return config
 
@@ -318,12 +318,12 @@ def auto_detect_providers(path):
     """Scan the local system for installed providers and write an initial config."""
     import sys
     import shutil
-    
+
     detected = copy.deepcopy(DEFAULT_CONFIG)
     for k in detected:
         if isinstance(detected[k], dict) and "enabled" in detected[k]:
             detected[k]["enabled"] = False
-            
+
     found_names = []
     available = {}
 
@@ -366,17 +366,17 @@ def auto_detect_providers(path):
                 sys.stderr.write(f"  - {name}\n")
         else:
             sys.stderr.write("We didn't detect any tools automatically.\n")
-            
+
         sys.stderr.write("\nLet's configure which tools you want to enable in your dashboard:\n")
-        
+
         for key in list(DEFAULT_CONFIG.keys()):
             if not isinstance(DEFAULT_CONFIG[key], dict) or "enabled" not in DEFAULT_CONFIG[key]:
                 continue
-                
+
             is_avail = available.get(key, False)
             default_y = "Y/n" if is_avail else "y/N"
             is_detected = " (detected)" if is_avail else ""
-            
+
             try:
                 ans = input(f"Enable {key}{is_detected}? [{default_y}]: ").strip().lower()
                 if not ans:
@@ -402,10 +402,10 @@ def auto_detect_providers(path):
             os.makedirs(dir_path, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(detected, f, indent=2)
-            
+
         if "--json" not in sys.argv:
             sys.stderr.write(f"\033[36m[LimitLens]\033[0m Config written to: {path}\n\n")
     except OSError:
         pass
-        
+
     return detected

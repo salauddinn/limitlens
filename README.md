@@ -79,7 +79,7 @@ For deployment readiness, troubleshooting, and production guidelines, please ref
 
 ## 🔌 Supported Integrations
 
-LimitLens natively parses configs, SQLite databases, and APIs for leading tools. 
+LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 
 | Provider | Supported OS | Notes / Details |
 |:---|:---|:---|
