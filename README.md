@@ -107,7 +107,7 @@ limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report and Time-To-Exhaustion (TTX) projections
 limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
-limitlens --store-token pioneer <token> # Securely store an API token in the OS keychain
+limitlens --store-token pioneer # Securely store an API token in the OS keychain (prompts securely)
 limitlens-switch     # Switch context interactively and execute a tool in place
 limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with args
 ```

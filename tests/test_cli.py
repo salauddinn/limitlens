@@ -188,6 +188,7 @@ class TestCLI(unittest.TestCase):
             },
             "pi": {"disabled": True},
             "copilot_cli": {"disabled": True},
+            "claude": {},
         }
 
         test_args = ["limitlens", "--usage", "--json", "--days", "7", "--no-record"]
@@ -197,6 +198,7 @@ class TestCLI(unittest.TestCase):
              patch("limitlens.cli.get_codex_data", return_value={"accounts": []}), \
              patch("limitlens.cli.get_amp_data", return_value={}), \
              patch("limitlens.cli.get_antigravity_data", return_value={}), \
+             patch("limitlens.cli.get_claude_data", return_value={}), \
              patch("limitlens.cli.get_opencode_data", return_value=observed) as mock_observed, \
              patch("limitlens.usage_tracker.waste_tracker._load_snapshots_with_anchor") as mock_snapshots, \
              patch("limitlens.usage_tracker.waste_tracker.compute_waste", return_value={}), \

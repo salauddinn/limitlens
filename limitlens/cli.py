@@ -93,7 +93,8 @@ def _main():
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
     parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
-    parser.add_argument("--store-token", nargs=2, metavar=("PROVIDER", "TOKEN"), help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode)")
+    parser.add_argument("--store-token", metavar="PROVIDER", help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode). Prompts for token securely.")
+    parser.add_argument("--store-token-stdin", metavar="PROVIDER", help="Securely store an API token in the OS keychain reading from stdin")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
@@ -253,9 +254,20 @@ def _main():
             usage_tracker.record_usage(result)
 
 
-    if args.store_token:
-        provider, token = args.store_token
+    if args.store_token or getattr(args, "store_token_stdin", None):
+        provider = args.store_token or args.store_token_stdin
         try:
+            if getattr(args, "store_token_stdin", None):
+                import sys
+                token = sys.stdin.read().strip()
+            else:
+                import getpass
+                token = getpass.getpass(f"Enter token for {provider}: ").strip()
+            
+            if not token:
+                print_c(f"  ⚠ No token provided for '{provider}'.", "\033[31m", getattr(args, "no_color", False))
+                return
+
             from .keychain import set_keychain_token
             if set_keychain_token(provider, token):
                 print_c(f"  ✓ Token for '{provider}' stored securely in keychain.", "\033[32m", args.no_color)
@@ -316,6 +328,8 @@ def _main():
             data["pi"] = result["pi"]
         if isinstance(result.get("copilot_cli"), dict) and "copilot_cli" not in data:
             data["copilot_cli"] = result["copilot_cli"]
+        if isinstance(result.get("claude"), dict) and "claude" not in data:
+            data["claude"] = result["claude"]
 
         analytics = usage_tracker.compute_usage_analytics(args.days, observed=data, config=config)
         if args.json:

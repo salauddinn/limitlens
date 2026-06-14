@@ -66,7 +66,7 @@ def collect_results(config, args):
         if args.tool == "amp" or (args.tool == "all" and str(config.get("amp", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
             fetchers["amp"] = executor.submit(get_amp_data, args)
         if args.tool == "antigravity" or (args.tool == "all" and str(config.get("antigravity", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["antigravity"] = executor.submit(get_antigravity_data, args)
+            fetchers["antigravity"] = executor.submit(get_antigravity_data, args, config)
         if args.tool == "opencode" or (args.tool == "all" and str(config.get("opencode", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
             fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
         if args.tool == "pi" or (args.tool == "all" and str(config.get("pi", {}).get("enabled", False)).lower() not in ("false", "0", "no")):

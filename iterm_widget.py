@@ -106,8 +106,16 @@ async def main(connection):
         import sys
         if LIMITLENS_DIR and LIMITLENS_DIR not in sys.path:
             sys.path.insert(0, LIMITLENS_DIR)
-        from limitlens.core import get_tool_icon
-        return get_tool_icon(tool_key=tool_key, name=name)
+        try:
+            from limitlens.core import get_tool_icon
+            return get_tool_icon(tool_key=tool_key, name=name)
+        except ImportError:
+            # Fallback when installed via pipx and package is unresolvable
+            known = {
+                "antigravity": "🪐", "codex": "⚡", "amp": "🔥", "pioneer": "🧭",
+                "agentrouter": "🔶", "commandcode": "🖥️", "claude": "🤖", "copilot": "✈️"
+            }
+            return known.get(tool_key, "▪️")
 
     def _bar(pct):
         """Mini 3-char fill bar: ███ / ██░ / █░░ / ░░░"""
