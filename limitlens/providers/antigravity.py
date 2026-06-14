@@ -921,6 +921,11 @@ def get_antigravity_data(args, config=None):
         if cli_prof in results:
             data.append(results[cli_prof])
 
+    # Rename agy-p1:home to agy-p1 for display purposes
+    for prof in data:
+        if prof.get("name") == "agy-p1:home":
+            prof["name"] = "agy-p1"
+
     if not data:
         return {"error": "no profiles found"}
 

@@ -46,14 +46,27 @@ def redact_text(text):
 
 def bar(pct, width=20, no_color=False):
     pct = max(0.0, min(100.0, float(pct)))
-    used  = int((pct / 100) * width)
-    left  = width - used
+    filled_fraction = (pct / 100.0) * width
+    full_blocks = int(filled_fraction)
+    fraction = filled_fraction - full_blocks
+    
+    blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+    fraction_idx = int(fraction * 8)
+    
+    bar_str = "█" * full_blocks
+    if full_blocks < width:
+        extra_char = blocks[fraction_idx]
+        bar_str += extra_char
+        left = width - full_blocks - (1 if extra_char else 0)
+        if left > 0:
+            bar_str += "░" * left
+            
     color = ""
     reset = ""
     if not no_color:
         color = "\033[32m" if pct < 50 else "\033[33m" if pct < 85 else "\033[31m"
         reset = "\033[0m"
-    return f"{color}{'█' * used}{'░' * left}{reset}"
+    return f"{color}{bar_str}{reset}"
 
 def format_date_pretty(dt):
     day = dt.day

@@ -56,7 +56,8 @@ class LimitLensApp(rumps.App):
         super(LimitLensApp, self).__init__(
             "⏳ Loading...",
             icon=icon_path,
-            template=True if icon_path else None
+            template=True if icon_path else None,
+            quit_button=None
         )
 
         # Persistent items — stored on self so their callbacks are never lost
@@ -180,7 +181,7 @@ class LimitLensApp(rumps.App):
         filled = int((pct / 100.0) * width + 0.5)
         if pct > 0 and filled == 0:
             filled = 1
-        return "█" * filled + "░" * (width - filled)
+        return "▰" * filled + "▱" * (width - filled)
 
     @staticmethod
     def _compact(text, max_len=18):
@@ -323,29 +324,58 @@ class LimitLensApp(rumps.App):
         name = name.replace("codex-", "").strip()
         name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
         note = item.get("note") or item.get("reset_label") or item.get("command") or ""
-        note = f" · {self._compact(note, 22)}" if note else ""
-        return f"{self._tool_icon(item.get('tool', ''), name)} {self._emoji(pct)} {self._compact(name, 28)} · {pct:.1f}% · {self._bar(pct)}{note}"
+        
+        icon = self._tool_icon(item.get('tool', ''), name)
+        status_dot = self._emoji(pct)
+        bar = self._bar(pct)
+        
+        clean_name = self._compact(name, 22)
+        
+        if 0 < pct < 1:
+            pct_str = f"{pct:.1f}%"
+        else:
+            pct_str = f"{pct:.0f}%"
+            
+        extra_str = self._compact(note, 22)
+        return f"{icon} {status_dot} {clean_name:<24} [{bar}]  {pct_str:>4}   {extra_str}"
 
     def _format_usage_row(self, row):
         pct = row.get("pct_left")
-        pct_used = row.get("pct_used")
-        status = row.get("status")
-        left = "n/a" if pct is None else f"{pct:.1f}% left"
-        if pct_used is not None:
-            used = f"{pct_used:.1f}% used"
-        elif row.get("used") is not None:
-            used = f"{self._format_number(row['used'])} used"
+        name = self._compact(row["name"], 14)
+        label = self._compact(row["label"], 16)
+        section = self._compact(row["section"], 8)
+        
+        if section.lower() in name.lower() or name.lower() in section.lower():
+            title = f"{name} ({label})"
         else:
-            used = "used n/a"
-        ratio = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
-        status_suffix = f" · {status}" if status and status != "running" else ""
-        name = self._compact(row["name"], 18)
-        label = self._compact(row["label"], 24)
-        section = self._compact(row["section"], 12)
-        return (
-            f"{self._tool_icon(section=row['section'])} {self._emoji(pct)} {section} · {name} · {label} · "
-            f"{left} · {used} · {self._bar(pct)} · {ratio}{status_suffix}"
-        )
+            title = f"{section} {name} ({label})"
+            
+        icon = self._tool_icon(section=row['section'])
+        status_dot = self._emoji(pct)
+        bar = self._bar(pct)
+        
+        title_str = self._compact(title, 24)
+        
+        if pct is None:
+            pct_str = "n/a"
+        elif 0 < pct < 1:
+            pct_str = f"{pct:.1f}%"
+        else:
+            pct_str = f"{pct:.0f}%"
+            
+        if pct is None and row.get("used") is not None:
+            unit = str(row.get("unit") or "").strip()
+            suffix = f" {unit}" if unit else ""
+            ratio_str = f"{self._format_number(row['used'])}{suffix} used"
+        else:
+            ratio_str = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
+            
+        status = row.get("status")
+        status_suffix = f" [{status}]" if status and status != "running" else ""
+        
+        extra_str = f"({ratio_str}){status_suffix}" if ratio_str != "?" else status_suffix.strip()
+        
+        return f"{icon} {status_dot} {title_str:<24} [{bar}]  {pct_str:>4}   {extra_str}"
 
     def _collect_rows(self, data, check_low_quota):
         rows = []

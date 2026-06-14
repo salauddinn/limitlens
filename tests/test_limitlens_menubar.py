@@ -181,16 +181,16 @@ def test_fetch_data_success_with_quotas(app):
         menu_text = "\n".join(str(item) for item in menu)
         assert "[Best available]" in menu
         assert "ag-prof:model" in menu_text
-        assert "25.0%" in menu_text
+        assert "25%" in menu_text
         assert "[Usage overview]" in menu
-        assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5.0%" in menu_text
+        assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
         assert "Amp" in menu_text and "Tier1" in menu_text and "$1.50/$10.00" in menu_text
-        assert "Antigrav" in menu_text and "prof1" in menu_text and "m1" in menu_text and "20.0%" in menu_text
+        assert "Antigrav" in menu_text and "prof1" in menu_text and "m1" in menu_text and "20%" in menu_text
         assert "Antigrav" in menu_text and "prof2" in menu_text and "m2" in menu_text and "stopped" in menu_text
         assert "OpenCode" in menu_text and "Limit1" in menu_text and "$50.00/$100.00" in menu_text
         assert "OpenCode" in menu_text and "Limit2" in menu_text and "10/100 credits" in menu_text
-        assert "Pioneer" in menu_text and "P1" in menu_text and "2.0%" in menu_text
-        assert "Cursor" in menu_text and "C1" in menu_text and "50.0%" in menu_text
+        assert "Pioneer" in menu_text and "P1" in menu_text and "2%" in menu_text
+        assert "Cursor" in menu_text and "C1" in menu_text and "50%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
 
         mock_notify.assert_any_call("LimitLens Quota Warning", "Codex (Acc1) Reqs is running low (5.0% left).")
