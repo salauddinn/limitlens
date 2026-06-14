@@ -880,7 +880,7 @@ def display_usage_source(name, data, args):
             display_usage_rows(models, args)
 
 def display_opencode_text(data, args):
-    if getattr(args, 'tool', None) not in ("opencode", "pi", "all"):
+    if getattr(args, 'tool', None) not in ("opencode", "pi", "claude", "all"):
         return
         
     op = data.get("opencode") or {}
