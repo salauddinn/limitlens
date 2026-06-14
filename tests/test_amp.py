@@ -17,6 +17,13 @@ class TestAmpProvider(unittest.TestCase):
         self.args_all = argparse.Namespace(redact=False, verbose=False, all=True, no_color=False)
         self.args_no_color = argparse.Namespace(redact=False, verbose=False, all=False, no_color=True)
 
+        self.config_patcher = patch("limitlens.providers.amp.load_limitlens_config")
+        self.mock_limitlens_config = self.config_patcher.start()
+        self.mock_limitlens_config.return_value = {"amp": {"individual_credits": True}}
+
+    def tearDown(self):
+        self.config_patcher.stop()
+
     @patch("limitlens.providers.amp.load_display_config")
     @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_usage_parsing_success(self, mock_run, mock_config):

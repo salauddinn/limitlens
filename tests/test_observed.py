@@ -339,7 +339,6 @@ def test_get_opencode_data():
     assert "claude" in data
 
 def test_get_pi_data():
-    from limitlens.providers.observed import get_pi_data
     # just tests the proxy function
     assert "error" in get_pi_data({}, {"pi": {"sessions_dir": "/non/ex"}})
 
