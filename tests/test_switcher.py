@@ -2,7 +2,6 @@
 """Tests for limitlens.switcher."""
 
 import unittest
-from unittest.mock import patch, MagicMock
 
 from limitlens.switcher import SwitchArgs
 

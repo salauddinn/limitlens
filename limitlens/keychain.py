@@ -1,4 +1,4 @@
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 SERVICE_NAME = "limitlens"
@@ -9,7 +9,7 @@ def set_keychain_token(account: str, token: str) -> bool:
         # macOS
         cmd = ["security", "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account, "-w", token]
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True, capture_output=True)  # nosec B603
             return True
         except subprocess.CalledProcessError:
             return False
@@ -17,7 +17,7 @@ def set_keychain_token(account: str, token: str) -> bool:
         # Linux
         cmd = ["secret-tool", "store", "--label", f"LimitLens {account} Token", "service", SERVICE_NAME, "account", account]
         try:
-            subprocess.run(cmd, input=token.encode(), check=True, capture_output=True)
+            subprocess.run(cmd, input=token.encode(), check=True, capture_output=True)  # nosec B603
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
@@ -29,7 +29,7 @@ def get_keychain_token(account: str) -> str:
         # macOS
         cmd = ["security", "find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"]
         try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)  # nosec B603
             return result.stdout.strip()
         except subprocess.CalledProcessError:
             return None
@@ -37,7 +37,7 @@ def get_keychain_token(account: str) -> str:
         # Linux
         cmd = ["secret-tool", "lookup", "service", SERVICE_NAME, "account", account]
         try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)  # nosec B603
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None

@@ -3,7 +3,6 @@
 
 import unittest
 from unittest.mock import patch, MagicMock
-import sys
 
 from limitlens.keychain import set_keychain_token, get_keychain_token
 

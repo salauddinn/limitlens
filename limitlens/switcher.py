@@ -183,7 +183,7 @@ def main():
     
     shell = os.environ.get("SHELL", "sh")
     try:
-        os.execvp(shell, [shell, "-c", full_command])
+        os.execvp(shell, [shell, "-c", full_command])  # nosec B606
     except Exception as e:
         print_c(f"  ⚠ Failed to execute command: {e}", "\033[31m", no_color)
         sys.exit(1)

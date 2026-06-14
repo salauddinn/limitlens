@@ -71,6 +71,12 @@ curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall
 
 ---
 
+## 📚 Operations & Runbook
+
+For deployment readiness, troubleshooting, and production guidelines, please refer to the [Operations Runbook](OPERATIONS_RUNBOOK.md).
+
+---
+
 ## 🔌 Supported Integrations
 
 LimitLens natively parses configs, SQLite databases, and APIs for leading tools. 

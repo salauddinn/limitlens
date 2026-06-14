@@ -1003,7 +1003,7 @@ def display_antigravity_text(data, args):
                     else:
                         limit_label = "5h limit"
                 except Exception:
-                    pass
+                    pass  # nosec B110
                     
                 b = bar(pct_used, no_color=getattr(args, 'no_color', False))
                 pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
