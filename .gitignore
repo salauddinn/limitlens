@@ -40,3 +40,7 @@ dist/
 
 # Kiro
 .kiro/
+
+# Backups
+config-backup
+config-backup/

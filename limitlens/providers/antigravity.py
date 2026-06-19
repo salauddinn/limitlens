@@ -890,12 +890,8 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
             return 4
         return 5
 
-    # Group by (family, limit_type) so "weekly" and "5h window" are ALWAYS
-    # emitted as separate rows — matching the AGY CLI /usage layout:
-    #   (High)/(Medium) variants → weekly pool
-    #   (Low) variants          → 5h window pool
-    #   (Thinking)/unknown      → split by distinct quota/reset signatures and
-    #                             labelled via reset-window heuristic.
+    # Group by family, clustering distinct quota/reset signatures and
+    # mapping them via reset-window heuristic to avoid artificial duplication.
     by_limit: dict = {}   # (family, limit_type) → list of candidate model dicts
     unknown_by_quota: dict = {}  # family → {(pct_left, reset_time) → list of model dicts}
 
@@ -904,13 +900,6 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         if any(hidden in label.lower() for hidden in HIDDEN_AG_MODELS):
             continue
         base_name = re.sub(r'\s*\((High|Medium|Low|Thinking)\)', '', label, flags=re.IGNORECASE).strip()
-
-        if "(High)" in label or "(Medium)" in label:
-            limit_type = "weekly"
-        elif "(Low)" in label:
-            limit_type = "5h window"
-        else:
-            limit_type = "unknown"
 
         lbl_lower = base_name.lower()
         if "gemini" in lbl_lower:
@@ -924,25 +913,20 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
 
         m_copy = dict(m)
         m_copy["label"] = base_name
-        m_copy["limit_type"] = limit_type
+        
+        # Cluster by quota signature; models with the same family, percent,
+        # and reset are duplicate labels for the same underlying pool.
+        # Ignore (High)/(Low) hints in legacy data, as they are often
+        # duplicated identically by the legacy GetUserStatus endpoint.
+        quota_sig = (m.get("pct_left"), m.get("reset_time"))
+        unknown_by_quota.setdefault(family, {}).setdefault(
+            quota_sig, []
+        ).append(m_copy)
 
-        if limit_type == "unknown":
-            # Cluster by quota signature; models with the same family, percent,
-            # and reset are duplicate labels for the same underlying pool.
-            quota_sig = (m.get("pct_left"), m.get("reset_time"))
-            unknown_by_quota.setdefault(family, {}).setdefault(
-                quota_sig, []
-            ).append(m_copy)
-        else:
-            by_limit.setdefault((family, limit_type), []).append(m_copy)
-
-    # Resolve unknown-tagged models (e.g. Claude Thinking, GPT Medium):
+    # Resolve legacy models:
     # For each family, collect all distinct (pct_left, reset_time) pairs.
-    # Then always emit BOTH a "weekly" and a "5h window" row — matching
-    # the AGY CLI /usage which always shows both limits per model group.
-    # If the API returns only one window (same reset_time for all), we still
-    # synthesise both rows from the same data; the numbers will match but
-    # will diverge as the user's usage within each window differs.
+    # If there are multiple distinct windows, map them to 5h/weekly.
+    # If there is only one, use a heuristic to guess its window.
     now = datetime.now(timezone.utc)
     for family, quota_map in unknown_by_quota.items():
         # Collect the distinct (pct_left, reset_time) → best representative model
@@ -963,14 +947,20 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         if len(candidates) >= 2:
             # Two distinct windows → assign 5h/weekly by order
             five_h, weekly = candidates[0], candidates[-1]
-        else:
-            # Only one window from the API → use the same data for both rows
-            five_h = candidates[0]
-            weekly = candidates[0].copy()
-
-        for lt, candidate in (("5h window", five_h), ("weekly", weekly)):
+            for lt, candidate in (("5h window", five_h), ("weekly", weekly)):
+                if (family, lt) not in by_limit:
+                    mc = candidate.copy()
+                    mc["limit_type"] = lt
+                    by_limit[(family, lt)] = [mc]
+        elif len(candidates) == 1:
+            # Only one distinct window from the legacy API → emit just one row
+            # Guess limit type by heuristic (>24h = weekly, else 5h)
+            c = candidates[0]
+            secs = _secs_until(c.get("reset_time"))
+            lt = "weekly" if secs > 18000 else "5h window"
+            
             if (family, lt) not in by_limit:
-                mc = candidate.copy()
+                mc = c.copy()
                 mc["limit_type"] = lt
                 by_limit[(family, lt)] = [mc]
 
