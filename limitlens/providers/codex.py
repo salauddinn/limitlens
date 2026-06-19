@@ -7,6 +7,8 @@ import re
 import shutil
 import sqlite3
 import subprocess  # nosec B404
+import urllib.request
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -25,6 +27,32 @@ from limitlens.core import (
 
 
 # ── Codex helpers ───────────────────────────────────────────────────────────
+
+def fetch_reset_credits(codex_home):
+    auth_file = Path(codex_home) / "auth.json"
+    if not auth_file.exists():
+        return None
+    try:
+        auth = json.loads(auth_file.read_text(encoding="utf-8"))
+        tokens = auth.get("tokens", {})
+        token = tokens.get("access_token")
+        account = tokens.get("account_id")
+        if not token or not account:
+            return None
+
+        req = urllib.request.Request(
+            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "ChatGPT-Account-ID": account,
+                "OpenAI-Beta": "codex-1",
+                "originator": "Codex Desktop",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return json.loads(response.read().decode())
+    except Exception:
+        return None
 
 def discover_accounts():
     home = Path.home()
@@ -354,7 +382,11 @@ def get_codex_data(args, config=None):
         elif current_tokens:
             acc_data["tokens"] = current_tokens
             acc_data["tokens_label"] = "current session"
-            
+
+        credits_data = fetch_reset_credits(home)
+        if credits_data and credits_data.get("available_count", 0) > 0:
+            acc_data["reset_credits"] = credits_data
+
         if not limits:
             issue = status or find_log_issue(home)
             if issue:
@@ -445,6 +477,25 @@ def display_codex_text(data, args):
             print(f"\n  {label}  {acc['home']}")
         else:
             print(f"\n  \033[1m{label}\033[0m  \033[90m{acc['home']}\033[0m")
+
+        reset_credits = acc.get("reset_credits")
+        if reset_credits:
+            count = reset_credits.get("available_count", 0)
+            if count > 0:
+                expiries = []
+                for credit in reset_credits.get("credits", []):
+                    if credit.get("status") == "available" and credit.get("expires_at"):
+                        try:
+                            dt = parse_to_utc(credit["expires_at"])
+                            expiries.append(format_timestamp(dt))
+                        except ValueError:
+                            expiries.append(credit["expires_at"])
+                if expiries:
+                    exp_text = ", ".join(expiries)
+                    if getattr(args, 'no_color', False):
+                        print(f"    resets    [{count}] free resets available (expires: {exp_text})")
+                    else:
+                        print(f"    \033[1;36mresets\033[0m    [{count}] free resets available \033[90m(expires: {exp_text})\033[0m")
 
         if "error" in acc:
             if "not found" in acc["error"] or "✖" in acc["error"]:

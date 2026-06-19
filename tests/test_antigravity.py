@@ -112,6 +112,95 @@ class TestAntigravityStatus(unittest.TestCase):
         self.assertIn("Gemini Flash", labels)
         self.assertIn("Gemini Pro", labels)
 
+    def test_get_ag_quota_summary_parses_groups_and_buckets(self):
+        now = datetime.now(timezone.utc)
+        weekly_reset = (now + timedelta(days=1)).isoformat()
+        five_h_reset = (now + timedelta(hours=3)).isoformat()
+        response = {
+            "response": {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            {
+                                "displayName": "Weekly Limit",
+                                "window": "weekly",
+                                "remainingFraction": 0.42,
+                                "resetTime": weekly_reset,
+                            },
+                            {
+                                "displayName": "Five Hour Limit",
+                                "window": "5h",
+                                "remainingFraction": 0.9,
+                                "resetTime": five_h_reset,
+                            },
+                        ],
+                    },
+                    {
+                        "displayName": "Claude and GPT models",
+                        "buckets": [
+                            {
+                                "window": "weekly",
+                                "remainingFraction": 0.25,
+                                "resetTime": weekly_reset,
+                            }
+                        ],
+                    },
+                ]
+            }
+        }
+
+        with patch.object(ag_mod, "make_ag_request_with_tls_fallback", return_value=(response, False)):
+            models, err, insecure = ag_mod.get_ag_quota_summary(12345, "token")
+
+        self.assertIsNone(err)
+        self.assertFalse(insecure)
+        rows = {(m["group"], m["limit_type"]): m for m in models}
+        self.assertEqual(rows[("Gemini", "weekly")]["pct_left"], 42.0)
+        self.assertEqual(rows[("Gemini", "5h window")]["pct_left"], 90.0)
+        self.assertIn(("Claude & GPT", "weekly"), rows)
+
+    def test_fetch_single_profile_prefers_quota_summary(self):
+        summary_models = [
+            {
+                "label": "Gemini",
+                "group": "Gemini",
+                "pct_left": 90.0,
+                "reset_time": "2026-06-20T10:56:10Z",
+                "limit_type": "5h window",
+            },
+            {
+                "label": "Gemini",
+                "group": "Gemini",
+                "pct_left": 70.0,
+                "reset_time": "2026-06-21T10:56:10Z",
+                "limit_type": "weekly",
+            },
+            {
+                "label": "Claude & GPT",
+                "group": "Claude & GPT",
+                "pct_left": 50.0,
+                "reset_time": "2026-06-21T10:56:10Z",
+                "limit_type": "weekly",
+            },
+        ]
+
+        with patch.object(ag_mod, "find_language_server_for_main_profile", return_value=("token", [12345], None, {})), \
+             patch.object(ag_mod, "probe_ag_port", return_value=(12345, "token", None, False)), \
+             patch.object(ag_mod, "get_ag_quota_summary", return_value=(summary_models, None, False)), \
+             patch.object(ag_mod, "get_ag_model_quotas") as legacy_fetch:
+            prof_data, should_cache = _fetch_single_profile(
+                "ide",
+                "Darwin",
+                {"profiles": {}},
+                is_main=True,
+                known_profiles=[],
+            )
+
+        self.assertTrue(should_cache)
+        legacy_fetch.assert_not_called()
+        self.assertEqual(prof_data["models"], summary_models)
+
     def test_get_profile_name_from_config_dir(self):
         # Default dir
         default_dir = "/Users/testuser/.gemini/antigravity-cli"

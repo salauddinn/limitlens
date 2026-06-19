@@ -456,6 +456,13 @@ class LimitLensApp(rumps.App):
                 if model.get("visible", True) is False:
                     continue
                 label = model.get("label", "model")
+                # Each group exposes a 5h and a weekly bucket sharing the same
+                # label; append the window so rows (and notify ids) stay distinct.
+                limit_type = model.get("limit_type")
+                if limit_type == "5h window":
+                    label = f"{label} (5h)"
+                elif limit_type == "weekly":
+                    label = f"{label} (weekly)"
                 pct = self._safe_float(model.get("pct_left"))
                 rows.append(self._row(
                     "Antigrav", prof_name, label, pct,

@@ -613,6 +613,91 @@ def get_ag_model_quotas(port, csrf_token, verbose=False):
 
     return models, None, used_insecure_tls
 
+def _clean_quota_group_name(display_name):
+    """Turn an API group displayName into a short family label.
+
+    "Gemini Models"          -> "Gemini"
+    "Claude and GPT models"  -> "Claude & GPT"
+    """
+    name = (display_name or "").strip()
+    name = re.sub(r"\s+models?$", "", name, flags=re.IGNORECASE).strip()
+    name = re.sub(r"\s+and\s+", " & ", name, flags=re.IGNORECASE)
+    return name or "Models"
+
+def get_ag_quota_summary(port, csrf_token, verbose=False):
+    """Query RetrieveUserQuotaSummary for authoritative per-group 5h/weekly quota.
+
+    Unlike GetUserStatus (which reports one shared fraction per model with no
+    window split), this RPC returns each model group's distinct weekly and
+    5-hour buckets — exactly what the `agy` CLI `/usage` command displays.
+
+    Returns (models, error, used_insecure_tls). On success *models* is a list of
+    dicts shaped like the GetUserStatus path plus a ``group`` and ``limit_type``
+    field. An empty list (no error) signals "RPC unavailable / nothing to show"
+    so callers can fall back to the legacy path.
+    """
+    body = {
+        "metadata": {
+            "ideName": "antigravity",
+            "extensionName": "antigravity",
+            "ideVersion": "unknown",
+            "locale": "en",
+        }
+    }
+    try:
+        resp, used_insecure_tls = make_ag_request_with_tls_fallback(
+            port, csrf_token, "RetrieveUserQuotaSummary", body,
+            timeout=AG_MODEL_HTTP_TIMEOUT, verbose=verbose,
+        )
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
+        if "token" in err_body.lower() or "auth" in err_body.lower():
+            return None, "not_signed_in", False
+        # Older language servers lack this RPC (404/501) — let caller fall back.
+        return [], None, False
+    except (urllib.error.URLError, ssl.SSLError, json.JSONDecodeError, TimeoutError, socket.timeout) as e:
+        return None, format_ag_error(e), False
+
+    if "code" in resp and "message" in resp:
+        msg = resp.get("message", "")
+        if "token" in msg.lower() or "auth" in msg.lower() or "key not found" in msg.lower():
+            return None, "not_signed_in", used_insecure_tls
+        # Unknown/unsupported method → fall back to legacy path.
+        return [], None, used_insecure_tls
+
+    models = []
+    try:
+        payload = resp.get("response", resp)
+        groups = payload.get("groups", []) or []
+        for grp in groups:
+            group_label = _clean_quota_group_name(grp.get("displayName"))
+            for bucket in grp.get("buckets", []) or []:
+                window = (bucket.get("window") or "").lower()
+                if window == "weekly":
+                    limit_type = "weekly"
+                elif window in ("5h", "5hr", "5hour", "5-hour", "fivehour", "five_hour"):
+                    limit_type = "5h window"
+                else:
+                    limit_type = window or "unknown"
+
+                remaining_frac = float(bucket.get("remainingFraction", 0))
+                reset_time = bucket.get("resetTime") or bucket.get("quotaResetTime")
+                pct_left = remaining_frac * 100.0
+                if is_reset_passed(reset_time):
+                    pct_left = 100.0
+
+                models.append({
+                    "label": group_label,
+                    "group": group_label,
+                    "pct_left": pct_left,
+                    "reset_time": reset_time,
+                    "limit_type": limit_type,
+                })
+    except (TypeError, ValueError, AttributeError) as e:
+        return None, f"Error parsing quota summary: {e}", used_insecure_tls
+
+    return models, None, used_insecure_tls
+
 KEY_AG_MODELS = {"gemini", "claude", "gpt", "sonnet", "flash", "opus", "pro"}
 HIDDEN_AG_MODELS = ("gpt-oss 120b", "claude sonnet 4.6")
 
@@ -752,6 +837,33 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         apply_antigravity_cached_fallback(prof_data, cache, prof_data["error"])
         return prof_data, False
 
+    # Preferred path: RetrieveUserQuotaSummary returns authoritative, distinct
+    # weekly + 5h buckets per model group (what `agy /usage` shows). Only fall
+    # back to GetUserStatus (legacy heuristic split that duplicates one value
+    # into both rows) when this RPC is unavailable on older language servers.
+    summary_models, summary_err, summary_insecure_tls = get_ag_quota_summary(
+        port, selected_token, verbose=verbose
+    )
+    if summary_err == "not_signed_in":
+        if probe_insecure_tls or summary_insecure_tls:
+            prof_data["warning"] = "used insecure local TLS fallback"
+        prof_data["status"] = "running"
+        prof_data["error"] = "not signed in"
+        prof_data["models"] = []
+        return prof_data, True
+    if summary_models:
+        if probe_insecure_tls or summary_insecure_tls:
+            prof_data["warning"] = "used insecure local TLS fallback"
+        prof_data["status"] = "running"
+        visible = [
+            m for m in summary_models
+            if not any(hidden in m["label"].lower() for hidden in HIDDEN_AG_MODELS)
+        ]
+        key_models = [m for m in visible if is_key_model(m["label"])]
+        prof_data["models"] = key_models if key_models else visible
+        prof_data["checked_at"] = datetime.now(timezone.utc).isoformat()
+        return prof_data, True
+
     models, model_err, model_insecure_tls = get_ag_model_quotas(port, selected_token, verbose=verbose)
     if probe_insecure_tls or model_insecure_tls:
         prof_data["warning"] = "used insecure local TLS fallback"
@@ -778,12 +890,27 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
             return 4
         return 5
 
-    groups = {}
+    # Group by (family, limit_type) so "weekly" and "5h window" are ALWAYS
+    # emitted as separate rows — matching the AGY CLI /usage layout:
+    #   (High)/(Medium) variants → weekly pool
+    #   (Low) variants          → 5h window pool
+    #   (Thinking)/unknown      → split by distinct quota/reset signatures and
+    #                             labelled via reset-window heuristic.
+    by_limit: dict = {}   # (family, limit_type) → list of candidate model dicts
+    unknown_by_quota: dict = {}  # family → {(pct_left, reset_time) → list of model dicts}
+
     for m in models:
         label = m["label"]
         if any(hidden in label.lower() for hidden in HIDDEN_AG_MODELS):
             continue
         base_name = re.sub(r'\s*\((High|Medium|Low|Thinking)\)', '', label, flags=re.IGNORECASE).strip()
+
+        if "(High)" in label or "(Medium)" in label:
+            limit_type = "weekly"
+        elif "(Low)" in label:
+            limit_type = "5h window"
+        else:
+            limit_type = "unknown"
 
         lbl_lower = base_name.lower()
         if "gemini" in lbl_lower:
@@ -795,20 +922,62 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         else:
             family = lbl_lower
 
-        sig = (family, m["pct_left"], m.get("reset_time"))
+        m_copy = dict(m)
+        m_copy["label"] = base_name
+        m_copy["limit_type"] = limit_type
 
-        if sig not in groups:
-            m_copy = dict(m)
-            m_copy["label"] = base_name
-            groups[sig] = [m_copy]
+        if limit_type == "unknown":
+            # Cluster by quota signature; models with the same family, percent,
+            # and reset are duplicate labels for the same underlying pool.
+            quota_sig = (m.get("pct_left"), m.get("reset_time"))
+            unknown_by_quota.setdefault(family, {}).setdefault(
+                quota_sig, []
+            ).append(m_copy)
         else:
-            m_copy = dict(m)
-            m_copy["label"] = base_name
-            groups[sig].append(m_copy)
+            by_limit.setdefault((family, limit_type), []).append(m_copy)
+
+    # Resolve unknown-tagged models (e.g. Claude Thinking, GPT Medium):
+    # For each family, collect all distinct (pct_left, reset_time) pairs.
+    # Then always emit BOTH a "weekly" and a "5h window" row — matching
+    # the AGY CLI /usage which always shows both limits per model group.
+    # If the API returns only one window (same reset_time for all), we still
+    # synthesise both rows from the same data; the numbers will match but
+    # will diverge as the user's usage within each window differs.
+    now = datetime.now(timezone.utc)
+    for family, quota_map in unknown_by_quota.items():
+        # Collect the distinct (pct_left, reset_time) → best representative model
+        candidates: list = []
+        for (_pct_left, reset_time), group in quota_map.items():
+            best = min(group, key=lambda x: get_priority(x["label"])).copy()
+            best["reset_time"] = reset_time
+            candidates.append(best)
+
+        # Sort: shortest reset first (most likely 5h), longest last (weekly)
+        def _secs_until(rt):
+            try:
+                return (parse_to_utc(rt) - now).total_seconds()
+            except Exception:
+                return 0
+        candidates.sort(key=lambda c: _secs_until(c.get("reset_time")))
+
+        if len(candidates) >= 2:
+            # Two distinct windows → assign 5h/weekly by order
+            five_h, weekly = candidates[0], candidates[-1]
+        else:
+            # Only one window from the API → use the same data for both rows
+            five_h = candidates[0]
+            weekly = candidates[0].copy()
+
+        for lt, candidate in (("5h window", five_h), ("weekly", weekly)):
+            if (family, lt) not in by_limit:
+                mc = candidate.copy()
+                mc["limit_type"] = lt
+                by_limit[(family, lt)] = [mc]
 
     filtered_models = []
-    for sig, group in groups.items():
-        best_model = min(group, key=lambda x: get_priority(x["label"]))
+    for (family, limit_type), group in by_limit.items():
+        best_model = min(group, key=lambda x: get_priority(x["label"])).copy()
+        best_model["limit_type"] = limit_type
         filtered_models.append(best_model)
 
     models = filtered_models
@@ -1012,18 +1181,22 @@ def display_antigravity_text(data, args):
         if "warning" in prof and should_show_warning(prof["warning"], args):
             print_warning(prof["warning"], args)
 
-        # Group models by family
+        # Group models by family. RetrieveUserQuotaSummary supplies an explicit
+        # group name (e.g. "Claude & GPT" — a shared quota pool); honour it.
+        # Otherwise derive the family from the model label keyword (legacy path).
         families = {}
         for m in visible_models:
-            label = m["label"].lower()
-            if "gemini" in label:
-                fam = "Gemini"
-            elif "claude" in label or "sonnet" in label or "opus" in label:
-                fam = "Claude"
-            elif "gpt" in label or "o1" in label or "o3" in label:
-                fam = "GPT"
-            else:
-                fam = "Other"
+            fam = m.get("group")
+            if not fam:
+                label = m["label"].lower()
+                if "gemini" in label:
+                    fam = "Gemini"
+                elif "claude" in label or "sonnet" in label or "opus" in label:
+                    fam = "Claude"
+                elif "gpt" in label or "o1" in label or "o3" in label:
+                    fam = "GPT"
+                else:
+                    fam = "Other"
             families.setdefault(fam, []).append(m)
 
         for fam, fam_models in families.items():
@@ -1032,14 +1205,16 @@ def display_antigravity_text(data, args):
             else:
                 print(f"    \033[1m{fam}\033[0m")
 
-            # Sort so 5h limit comes before weekly limit
+            # Sort: 5h window first, then weekly — matching Codex display order
             def sort_key(x):
+                lt = x.get("limit_type", "unknown")
+                lt_rank = 0 if lt == "5h window" else (1 if lt == "weekly" else 2)
                 try:
                     rt = parse_to_utc(x.get("reset_time"))
-                    now = datetime.now(timezone.utc)
-                    return (rt - now).total_seconds()
+                    secs = (rt - datetime.now(timezone.utc)).total_seconds()
                 except Exception:
-                    return 0
+                    secs = 0
+                return (lt_rank, secs)
             fam_models.sort(key=sort_key)
 
             for m in fam_models:
@@ -1047,16 +1222,22 @@ def display_antigravity_text(data, args):
                 pct_used = 100.0 - pct_left
                 rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
 
-                limit_label = "unknown limit"
-                try:
-                    rt = parse_to_utc(m.get("reset_time"))
-                    now = datetime.now(timezone.utc)
-                    if (rt - now).total_seconds() > 86400:
-                        limit_label = "weekly limit"
-                    else:
-                        limit_label = "5h limit"
-                except Exception:
-                    pass  # nosec B110
+                limit_type = m.get("limit_type", "unknown")
+                if limit_type == "weekly":
+                    limit_label = "weekly"
+                elif limit_type == "5h window":
+                    limit_label = "5h window"
+                else:
+                    limit_label = "unknown limit"
+                    try:
+                        rt = parse_to_utc(m.get("reset_time"))
+                        now = datetime.now(timezone.utc)
+                        if (rt - now).total_seconds() > 86400:
+                            limit_label = "weekly"
+                        else:
+                            limit_label = "5h window"
+                    except Exception:
+                        pass  # nosec B110
 
                 b = bar(pct_used, no_color=getattr(args, 'no_color', False))
                 pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
