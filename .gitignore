@@ -28,8 +28,9 @@ ENV/
 *.swp
 *.swo
 
-# Local config overrides (if users create them here instead of ~/.config)
+# Local config overrides/backups (if users create them here instead of ~/.config)
 config.json
+config-backup
 
 # Packaging / Distribution
 *.egg-info/
