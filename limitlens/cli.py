@@ -57,32 +57,42 @@ def log_error(e, context=""):
         pass
 
 def _main():
-    parser = argparse.ArgumentParser(description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more")
+    parser = argparse.ArgumentParser(
+        description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Common commands:
+  limitlens suggest   Which AI should I use now?
+  limitlens usage     Show day-wise usage
+  limitlens all       Show hidden/empty providers too
+  limitlens watch     Refresh continuously
+""",
+    )
     try:
         from . import __version__ as _ver
     except ImportError:
         from importlib.metadata import version as _pkg_version
         _ver = _pkg_version("limitlens")
     parser.add_argument("--version", action="version", version=f"limitlens {_ver}")
+    parser.add_argument("command", nargs="?", choices=["suggest", "s", "usage", "u", "all", "a", "watch", "w"], help=argparse.SUPPRESS)
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
     parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "claude", "pioneer", "agentrouter", "commandcode", "custom", "cursor", "all"], default="all", help="Check specific tool")
-    parser.add_argument("--watch", action="store_true", help="Refresh continuously for live status updates")
+    parser.add_argument("-w", "--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
     parser.add_argument("--sync-codex", action="store_true", help="Refresh all Codex accounts before showing status")
     parser.add_argument("--refresh-codex", action="store_true", help="Refresh all discovered Codex accounts and exit (no status output)")
-    parser.add_argument("--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
+    parser.add_argument("-a", "--all", action="store_true", help="Show all limits, bypassing auto-hide rules")
     parser.add_argument("--no-recommend", action="store_true", help="Skip the recommendation block")
     parser.add_argument("--reco", action="store_true", help="Print only the recommendation block (skip full status)")
     parser.add_argument("--hard", action="store_true", help="One-line recommendation for hard tasks (multi-file, refactor)")
     parser.add_argument("--quick", action="store_true", help="One-line recommendation for quick edits / grunt work")
     parser.add_argument("--cli", action="store_true", help="One-line recommendation for CLI / scripting / pair-prog")
     parser.add_argument("--waste", action="store_true", help="Show waste report (%% of quota wasted at reset over last N days)")
-    parser.add_argument("--usage", action="store_true", help="Show usage tracking history")
+    parser.add_argument("-u", "--usage", action="store_true", help="Show usage tracking history")
     parser.add_argument("--export-usage", type=str, help="Export usage tracking history to JSON file")
     parser.add_argument("--import-usage", type=str, help="Import usage tracking history from JSON file")
     parser.add_argument("--days", type=int, default=7, help="Window for --waste report (default: 7)")
@@ -93,6 +103,14 @@ def _main():
     parser.add_argument("--store-token", metavar="PROVIDER", help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode). Prompts for token securely.")
     parser.add_argument("--store-token-stdin", metavar="PROVIDER", help="Securely store an API token in the OS keychain reading from stdin")
     args = parser.parse_args()
+    if args.command in ("suggest", "s"):
+        args.reco = True
+    elif args.command in ("usage", "u"):
+        args.usage = True
+    elif args.command in ("all", "a"):
+        args.all = True
+    elif args.command in ("watch", "w"):
+        args.watch = True
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
 

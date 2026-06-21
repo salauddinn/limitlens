@@ -222,6 +222,67 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(payload["consolidated_usage"], {"codex-default::weekly": 20.0})
         mock_observed.assert_called_once()
 
+    def test_usage_command_alias_routes_to_usage_mode(self):
+        config = dict(TEST_CONFIG)
+        config["pi"] = {"enabled": False}
+        config["cursor"] = {"enabled": False}
+        analytics = {
+            "metadata": {"days": 7, "generated_at": "2026-06-21T00:00:00+00:00"},
+            "snapshot_usage": {},
+            "history": {},
+            "waste": {},
+            "observed": {},
+            "totals": {},
+        }
+
+        test_args = ["limitlens", "usage", "--json", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=config), \
+             patch("limitlens.cli.get_codex_data", return_value={"accounts": []}), \
+             patch("limitlens.cli.get_amp_data", return_value={}), \
+             patch("limitlens.cli.get_antigravity_data", return_value={}), \
+             patch("limitlens.cli.get_opencode_data", return_value={}), \
+             patch("limitlens.cli.get_claude_data", return_value={}), \
+             patch("limitlens.usage_tracker.compute_usage_analytics", return_value=analytics) as mock_analytics, \
+             redirect_stdout(buf):
+            main()
+
+        self.assertEqual(json.loads(buf.getvalue())["version"], 4)
+        mock_analytics.assert_called_once()
+
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "codex": {"enabled": True},
+        "amp": {"enabled": True},
+        "antigravity": {"enabled": True},
+        "opencode": {"enabled": False},
+        "pi": {"enabled": False},
+        "claude": {"enabled": False},
+        "cursor": {"enabled": False},
+        "pioneer": {"enabled": False},
+        "agentrouter": {"enabled": False},
+        "commandcode": {"enabled": False},
+        "custom_tools": {"enabled": False},
+    })
+    @patch("limitlens.cli.get_codex_data", return_value={"accounts": []})
+    @patch("limitlens.cli.get_amp_data", return_value={})
+    @patch("limitlens.cli.get_antigravity_data", return_value={"profiles": []})
+    @patch("limitlens.waste_tracker.record_snapshot")
+    @patch("limitlens.recommendations.display_recommendations")
+    def test_suggest_command_alias_routes_to_recommendations(
+        self, mock_display, mock_record, mock_ag, mock_amp, mock_codex, mock_config
+    ):
+        test_args = ["limitlens", "s", "--no-color"]
+        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
+            main()
+
+        mock_display.assert_called_once()
+
+    def test_short_s_is_not_reserved_for_suggest(self):
+        test_args = ["limitlens", "-s"]
+        with patch.object(sys, "argv", test_args), self.assertRaises(SystemExit):
+            main()
+
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
