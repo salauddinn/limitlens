@@ -312,6 +312,42 @@ class TestCLI(unittest.TestCase):
         with patch.object(sys, "argv", test_args), self.assertRaises(SystemExit):
             main()
 
+    @patch("limitlens.cli.load_limitlens_config", return_value={
+        "codex": {"enabled": False},
+        "amp": {"enabled": True},
+        "antigravity": {"enabled": False},
+        "opencode": {"enabled": False},
+        "pi": {"enabled": False},
+        "claude": {"enabled": False},
+        "cursor": {"enabled": False},
+        "pioneer": {"enabled": False},
+        "agentrouter": {"enabled": False},
+        "commandcode": {"enabled": False},
+        "custom_tools": {"enabled": False},
+    })
+    @patch("limitlens.cli.get_amp_data", return_value={"error": "amp exploded"})
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_provider_error_visible_in_default_text_output(self, mock_record, mock_amp, mock_config):
+        test_args = ["limitlens", "--no-color", "--no-record", "--no-recommend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+            main()
+
+        self.assertIn("Amp", buf.getvalue())
+        self.assertIn("amp exploded", buf.getvalue())
+
+    @patch("limitlens.cli.load_limitlens_config", return_value={"amp": {"enabled": False}})
+    @patch("limitlens.cli.get_amp_data", return_value={"error": "disabled but requested"})
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_tool_specific_provider_runs_and_shows_error_when_disabled(self, mock_record, mock_amp, mock_config):
+        test_args = ["limitlens", "--tool", "amp", "--no-color", "--no-record", "--no-recommend"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), redirect_stdout(buf):
+            main()
+
+        mock_amp.assert_called_once()
+        self.assertIn("disabled but requested", buf.getvalue())
+
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
