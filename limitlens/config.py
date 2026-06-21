@@ -257,13 +257,52 @@ def is_provider_enabled(config, key, default=True):
     return str(raw).lower() not in ("false", "0", "no")
 
 
+def atomic_write_json(path, data):
+    """Atomically write JSON to path using a temp file in the same directory."""
+    import tempfile
+
+    dir_path = os.path.dirname(path) or "."
+    os.makedirs(dir_path, mode=0o700, exist_ok=True)
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, path)
+        tmp_path = None
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def backup_file(path):
+    """Create a timestamped backup next to path and return its path."""
+    import shutil
+    from datetime import datetime
+
+    if not os.path.exists(path):
+        return None
+    dir_path = os.path.dirname(path) or "."
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(dir_path, f"config.backup.{stamp}.json")
+    counter = 1
+    while os.path.exists(backup_path):
+        backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
+        counter += 1
+    shutil.copy2(path, backup_path)
+    return backup_path
+
+
 def reset_custom_tool_spend(config_path):
     """Zero out 'used' and 'request_count' for all custom_tools in config.json.
 
     Returns True if the file was updated, False if no update was needed or the
     file does not exist. Raises ConfigValidationError on parse/write failure.
     """
-    import tempfile
     if not os.path.exists(config_path):
         return False
     try:
@@ -301,23 +340,11 @@ def reset_custom_tool_spend(config_path):
     if not updated:
         return False
 
-    dir_path = os.path.dirname(config_path)
-    os.makedirs(dir_path, exist_ok=True)
-    tmp_path = None
     try:
-        fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="config_", suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(user_config, f, indent=2)
-        os.replace(tmp_path, config_path)
-        tmp_path = None
+        backup_file(config_path)
+        atomic_write_json(config_path, user_config)
     except OSError as e:
         raise ConfigValidationError(f"Cannot write {config_path}: {e}")
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
     return True
 
 

@@ -17,6 +17,7 @@ from limitlens.config import (
     ConfigValidationError,
     DEFAULT_CONFIG,
     apply_env_overrides,
+    atomic_write_json,
     configured_days,
     deep_merge,
     is_provider_enabled,
@@ -286,6 +287,49 @@ class TestResetCustomToolSpend(unittest.TestCase):
             self.assertEqual(tool["total"], 1000)  # unchanged
         finally:
             os.unlink(path)
+
+    def test_reset_custom_tool_spend_creates_backup_and_preserves_unrelated_keys(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "config.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "amp": {"enabled": False, "individual_credits": True},
+                    "custom_tools": {
+                        "enabled": True,
+                        "tools": {
+                            "demo": {"name": "Demo", "used": 12, "request_count": 3, "total": 100}
+                        },
+                    },
+                }, f)
+
+            self.assertTrue(reset_custom_tool_spend(path))
+
+            with open(path, encoding="utf-8") as f:
+                updated = json.load(f)
+            self.assertEqual(updated["amp"], {"enabled": False, "individual_credits": True})
+            self.assertEqual(updated["custom_tools"]["tools"]["demo"]["used"], 0)
+            self.assertEqual(updated["custom_tools"]["tools"]["demo"]["request_count"], 0)
+
+            backups = [name for name in os.listdir(temp_dir) if name.startswith("config.backup.")]
+            self.assertEqual(len(backups), 1)
+            with open(os.path.join(temp_dir, backups[0]), encoding="utf-8") as f:
+                backup = json.load(f)
+            self.assertEqual(backup["custom_tools"]["tools"]["demo"]["used"], 12)
+
+    def test_atomic_write_json_preserves_original_when_replace_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "config.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"amp": {"enabled": False}}, f)
+
+            with patch("limitlens.config.os.replace", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    atomic_write_json(path, {"amp": {"enabled": True}})
+
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f), {"amp": {"enabled": False}})
+            leftovers = [name for name in os.listdir(temp_dir) if name.endswith(".tmp")]
+            self.assertEqual(leftovers, [])
 
     def test_returns_false_when_already_zeroed(self):
         cfg = {
