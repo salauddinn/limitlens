@@ -261,7 +261,8 @@ def atomic_write_json(path, data):
     """Atomically write JSON to path using a temp file in the same directory."""
     import tempfile
 
-    dir_path = os.path.dirname(path) or "."
+    target_path = os.path.realpath(path)
+    dir_path = os.path.dirname(target_path) or "."
     os.makedirs(dir_path, mode=0o700, exist_ok=True)
     tmp_path = None
     try:
@@ -269,7 +270,7 @@ def atomic_write_json(path, data):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
-        os.replace(tmp_path, path)
+        os.replace(tmp_path, target_path)
         tmp_path = None
     finally:
         if tmp_path and os.path.exists(tmp_path):

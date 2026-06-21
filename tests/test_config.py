@@ -331,6 +331,22 @@ class TestResetCustomToolSpend(unittest.TestCase):
             leftovers = [name for name in os.listdir(temp_dir) if name.endswith(".tmp")]
             self.assertEqual(leftovers, [])
 
+    def test_atomic_write_json_preserves_config_symlink(self):
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlinks are not supported on this platform")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = os.path.join(temp_dir, "dotfiles-limitlens.json")
+            link_path = os.path.join(temp_dir, "config.json")
+            with open(target_path, "w", encoding="utf-8") as f:
+                json.dump({"amp": {"enabled": False}}, f)
+            os.symlink(target_path, link_path)
+
+            atomic_write_json(link_path, {"amp": {"enabled": True}})
+
+            self.assertTrue(os.path.islink(link_path))
+            with open(target_path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f), {"amp": {"enabled": True}})
+
     def test_returns_false_when_already_zeroed(self):
         cfg = {
             "custom_tools": {
