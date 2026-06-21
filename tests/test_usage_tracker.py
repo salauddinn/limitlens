@@ -1,4 +1,7 @@
 import unittest
+import io
+from types import SimpleNamespace
+from contextlib import redirect_stdout
 from unittest.mock import patch, mock_open
 from datetime import datetime, timezone, timedelta
 
@@ -147,6 +150,42 @@ class TestUsageTracker(unittest.TestCase):
         self.assertEqual(quota["unit"], "percent")
         self.assertEqual(analytics["totals"]["snapshot_usage"]["percent"], 30.0)
 
+    @patch('limitlens.usage_tracker._get_merged_history', return_value={"2026-06-21": {"codex-foo::weekly": 12.0, "amp::amp-pro": 0.5}})
+    @patch('limitlens.usage_tracker.compute_consolidated_usage', return_value={"codex-foo::weekly": 12.0})
+    @patch('limitlens.usage_tracker.waste_tracker.compute_waste', return_value={})
+    def test_compute_usage_analytics_includes_daily_breakdown(self, mock_waste, mock_usage, mock_history):
+        analytics = usage_tracker.compute_usage_analytics(days=7)
+
+        self.assertIn("daily", analytics)
+        self.assertTrue(analytics["daily"]["2026-06-21"]["approximate"])
+        self.assertEqual(
+            analytics["daily"]["2026-06-21"]["usage"],
+            {"amp::amp-pro": 0.5, "codex-foo::weekly": 12.0},
+        )
+
+    def test_display_consolidated_report_shows_daily_approx_block(self):
+        args = SimpleNamespace(days=7, no_color=True, verbose=False)
+        analytics = {
+            "snapshot_usage": {"codex-foo::weekly": {"used": 12.0}},
+            "waste": {},
+            "observed": {},
+            "daily": {"2026-06-21": {"approximate": True, "usage": {"codex-foo::weekly": 12.0}}},
+            "totals": {
+                "snapshot_usage": {"percent": 12.0, "usd": 0.0, "quota_keys": 1},
+                "waste": {"reset_count": 0},
+                "observed": {},
+            },
+        }
+        buf = io.StringIO()
+
+        with redirect_stdout(buf):
+            usage_tracker.display_consolidated_report(args, lambda text, color, no_color: print(text), analytics=analytics)
+
+        out = buf.getvalue()
+        self.assertIn("Daily (approx)", out)
+        self.assertIn("2026-06-21", out)
+        self.assertIn("Snapshot-derived quota usage is approximate", out)
+
     @patch('limitlens.usage_tracker._get_merged_history', return_value={"2023-10-01": {"codex": 50.0}})
     @patch('limitlens.usage_tracker.waste_tracker._load_snapshots')
     @patch('builtins.open', new_callable=mock_open)
@@ -159,6 +198,7 @@ class TestUsageTracker(unittest.TestCase):
         written = "".join(call[0][0] for call in mock_file().write.call_args_list)
         self.assertIn('"codex"', written)
         self.assertIn('"history"', written)
+        self.assertIn('"daily"', written)
         self.assertIn('"imported_history"', written)
         self.assertIn('"snapshots"', written)
         self.assertNotIn('_ts', written)

@@ -269,6 +269,19 @@ def _observed_totals(observed):
     return totals
 
 
+def _daily_breakdown(history):
+    """Normalize snapshot-derived daily usage for JSON/text reports."""
+    daily = {}
+    for date_str, usage in sorted((history or {}).items()):
+        if not isinstance(usage, dict):
+            continue
+        daily[date_str] = {
+            "approximate": True,
+            "usage": dict(sorted(usage.items())),
+        }
+    return daily
+
+
 def compute_usage_analytics(days=365, observed=None, config=None):
     """Return normalized usage analytics for CLI text and JSON reports."""
     snapshot_values = compute_consolidated_usage(days, config=config)
@@ -297,6 +310,7 @@ def compute_usage_analytics(days=365, observed=None, config=None):
         "keys": len(waste),
         "reset_count": sum(int(v.get("reset_count") or 0) for v in waste.values()),
     }
+    history = _get_merged_history(days=days, config=config)
     analytics = {
         "metadata": {
             "version": ANALYTICS_VERSION,
@@ -304,7 +318,8 @@ def compute_usage_analytics(days=365, observed=None, config=None):
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "snapshot_usage": snapshot_usage,
-        "history": _get_merged_history(days=days, config=config),
+        "history": history,
+        "daily": _daily_breakdown(history),
         "waste": waste,
         "observed": observed or {},
         "totals": {
@@ -345,12 +360,14 @@ def export_usage(export_path):
                 row_copy.pop("_ts", None)
                 export_rows.append(row_copy)
 
+            history = _get_merged_history(days=None)
             export_data = {
                 "version": 3,
                 "snapshots": export_rows,
                 # Backward-compatible merged history for scripts that still consume
                 # version-2 exports. Importers should not add this on top of snapshots.
-                "history": _get_merged_history(days=None),
+                "history": history,
+                "daily": _daily_breakdown(history),
                 # Raw legacy imports that cannot be reconstructed from snapshots.
                 "imported_history": _load_imported_data(),
             }
@@ -465,6 +482,24 @@ def _fmt_snapshot_total(totals):
     if not parts:
         parts.append("no snapshot usage")
     return " · ".join(parts)
+
+
+def _fmt_daily_usage_items(usage, limit=3):
+    parts = []
+    for key, value in sorted((usage or {}).items(), key=lambda item: str(item[0]))[:limit]:
+        try:
+            amount = float(value or 0.0)
+        except (TypeError, ValueError):
+            continue
+        label = _shorten(_friendly_snapshot_label(key), 18)
+        if _snapshot_unit_for_key(key) == "usd":
+            parts.append(f"{label} ${amount:.2f}")
+        else:
+            parts.append(f"{label} {amount:.1f}%")
+    hidden = max(0, len(usage or {}) - limit)
+    if hidden:
+        parts.append(f"+{hidden} more")
+    return " · ".join(parts) if parts else "no snapshot usage"
 
 
 def _fmt_tokens(value):
@@ -605,6 +640,20 @@ def display_consolidated_report(args, print_c, opencode_data=None, analytics=Non
             print(f"    {_shorten(_friendly_snapshot_label(key), 30):<30} ${usage:.2f} used")
         if has_observed(observed):
             print(f"    {'OpenCode / Pi / Copilot':<30} {observed_total}")
+
+    daily = analytics.get("daily") or {}
+    if daily:
+        print_c("\n  Daily (approx)", "\033[1;36m", args.no_color)
+        items = sorted(daily.items(), reverse=True)
+        max_rows = len(items) if getattr(args, "verbose", False) else 7
+        for date_str, row in items[:max_rows]:
+            marker = "today" if date_str == datetime.now(timezone.utc).strftime("%Y-%m-%d") else ""
+            label = f"{date_str} {marker}".strip()
+            print(f"    {label:<16} {_fmt_daily_usage_items(row.get('usage') or {})}")
+        hidden = len(items) - max_rows
+        if hidden > 0:
+            print_c(f"    +{hidden} more days (use --verbose)", "\033[90m", args.no_color)
+        print_c("    Snapshot-derived quota usage is approximate.", "\033[90m", args.no_color)
 
     warning_items = sorted(
         [(k, v) for k, v in waste_by_key.items() if float(v.get("avg_wasted_pct") or 0.0) >= 30],
