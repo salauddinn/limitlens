@@ -2,13 +2,62 @@
 """Tests for limitlens recommendations engine."""
 
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 from limitlens.core import parse_to_utc, fmt_reset
 from limitlens import recommendations as rec
 
 
+def _print_c(text, color, no_color):
+    print(text)
+
+
 class TestRecommendations(unittest.TestCase):
+    def test_display_suggestions_answers_which_ai_to_use(self):
+        recs = {
+            "hard": [{
+                "name": "codex (weekly)",
+                "headroom_pct": 82.0,
+                "reset_label": "2 days left to reset",
+                "note": "bottleneck: weekly",
+            }],
+            "quick": [{
+                "name": "antigravity:main → Gemini Flash",
+                "headroom_pct": 60.0,
+                "reset_label": "tomorrow",
+                "note": "model: Gemini Flash",
+            }],
+            "cli": [{
+                "name": "amp (signed in)",
+                "headroom_pct": 23.0,
+                "reset_label": "replenishing",
+                "note": "$1.15 pool, replenishing",
+                "stale": True,
+            }],
+        }
+
+        with unittest.mock.patch("sys.stdout") as mock_stdout:
+            rec.display_suggestions(recs, SimpleNamespace(no_color=True, plain=True), _print_c)
+            out = "".join(call.args[0] for call in mock_stdout.write.call_args_list if call.args)
+
+        self.assertIn("AI suggestion", out)
+        self.assertIn("Hard task", out)
+        self.assertIn("Quick edit", out)
+        self.assertIn("CLI work", out)
+        self.assertIn("82% left", out)
+        self.assertIn("2 days left to reset", out)
+        self.assertIn("$1.15 pool", out)
+        self.assertIn("stale data", out)
+
+    def test_display_suggestions_empty_state(self):
+        with unittest.mock.patch("sys.stdout") as mock_stdout:
+            rec.display_suggestions({}, SimpleNamespace(no_color=True, plain=True), _print_c)
+            out = "".join(call.args[0] for call in mock_stdout.write.call_args_list if call.args)
+
+        self.assertIn("Hard task", out)
+        self.assertIn("no usable option", out)
+
     def test_antigravity_cli_profile_is_cli_candidate(self):
         now = datetime.now(timezone.utc)
         result = {

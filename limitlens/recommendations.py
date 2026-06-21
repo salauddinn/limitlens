@@ -514,6 +514,36 @@ TIER_HEADERS = {
     "cli":   "💻 Right now (CLI / scripting / pair-prog):",
 }
 
+SUGGESTION_LABELS = (
+    ("hard", "Hard task"),
+    ("quick", "Quick edit"),
+    ("cli", "CLI work"),
+)
+
+def _suggestion_reason(top):
+    reason = f"{top.get('headroom_pct', 0):.0f}% left"
+    reset = top.get("reset_label")
+    note = top.get("note")
+    if reset:
+        reason += f", {reset}"
+    if note:
+        reason += f", {note}"
+    if top.get("stale"):
+        reason += ", stale data"
+    return reason
+
+def display_suggestions(recs, args, print_c):
+    title = "AI suggestion" if getattr(args, "plain", False) else "🎯 AI suggestion"
+    print_c(f"\n  {title}", "\033[1;35m", args.no_color)
+    for key, label in SUGGESTION_LABELS:
+        picks = recs.get(key) or []
+        if not picks:
+            print_c(f"  {label:<10}: no usable option", "\033[33m", args.no_color)
+            continue
+        top = picks[0]
+        name = compact_reco_name(top.get("name", "unknown"))
+        print(f"  {label:<10}: {name} — {_suggestion_reason(top)}")
+
 def _print_tier(key, picks, args, print_c):
     header = TIER_HEADERS[key]
     print_c(f"\n  ➜ {header}", "\033[1;36m", args.no_color)
@@ -535,7 +565,9 @@ def _print_tier(key, picks, args, print_c):
 
 
 def display_recommendations(recs, args, print_c):
-    print_c("\n  🎯 ═══ Smart Recommendations ═══", "\033[1;35m", args.no_color)
+    display_suggestions(recs, args, print_c)
+    title = "Smart Recommendations" if getattr(args, "plain", False) else "🎯 ═══ Smart Recommendations ═══"
+    print_c(f"\n  {title}", "\033[1;35m", args.no_color)
 
     waste_reduction = recs.get("waste_reduction") or []
     if waste_reduction:
