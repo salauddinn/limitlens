@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-21
+
+### Added
+- Add common command aliases: `suggest`/`s`, `usage`/`u`, `all`/`a`, and `watch`/`w`.
+- Add low-conflict short flags: `-u`, `-a`, and `-w`.
+- Add `--plain` for simpler human-readable output with no color and fewer decorations.
+- Add day-wise usage reporting and a `daily` JSON field for snapshot-derived usage.
+
+### Changed
+- Improve `--reco` and `suggest` output so it directly recommends tools for hard tasks, quick edits, and CLI work.
+- Label snapshot-derived daily usage as approximate because it is based on observed quota decreases.
+- Make config reset writes safer with timestamped backups and atomic JSON updates.
+
+### Fixed
+- Add regression coverage so provider errors remain visible and directly requested providers still run even when disabled in the all-dashboard config.
+
 ## [1.4.0] - 2026-06-14
 
 ### Added
