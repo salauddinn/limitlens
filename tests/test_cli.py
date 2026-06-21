@@ -251,6 +251,35 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue())["version"], 4)
         mock_analytics.assert_called_once()
 
+    def test_plain_usage_output_has_no_ansi_color(self):
+        config = dict(TEST_CONFIG)
+        config["pi"] = {"enabled": False}
+        config["cursor"] = {"enabled": False}
+        analytics = {
+            "metadata": {"days": 7, "generated_at": "2026-06-21T00:00:00+00:00"},
+            "snapshot_usage": {},
+            "history": {},
+            "waste": {},
+            "observed": {},
+            "totals": {},
+        }
+
+        test_args = ["limitlens", "usage", "--plain", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=config), \
+             patch("limitlens.cli.get_codex_data", return_value={"accounts": []}), \
+             patch("limitlens.cli.get_amp_data", return_value={}), \
+             patch("limitlens.cli.get_antigravity_data", return_value={}), \
+             patch("limitlens.cli.get_opencode_data", return_value={}), \
+             patch("limitlens.cli.get_claude_data", return_value={}), \
+             patch("limitlens.usage_tracker.compute_usage_analytics", return_value=analytics), \
+             redirect_stdout(buf):
+            main()
+
+        self.assertNotIn("\033[", buf.getvalue())
+        self.assertIn("No usage history recorded yet", buf.getvalue())
+
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "codex": {"enabled": True},
         "amp": {"enabled": True},

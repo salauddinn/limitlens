@@ -3,6 +3,7 @@
 
 import os
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 from limitlens.core import (
@@ -18,6 +19,8 @@ from limitlens.core import (
     deep_merge,
     configured_days,
     load_display_config,
+    is_plain,
+    plain_icon,
 )
 
 
@@ -192,6 +195,17 @@ class TestGetToolIcon(unittest.TestCase):
         self.assertEqual(get_tool_icon(name=name), expected_emoji)
         # Verify it is consistent
         self.assertEqual(get_tool_icon(name=name), get_tool_icon(name=name))
+
+
+class TestPlainOutputHelpers(unittest.TestCase):
+    def test_is_plain_reads_args_flag(self):
+        self.assertTrue(is_plain(SimpleNamespace(plain=True)))
+        self.assertFalse(is_plain(SimpleNamespace(plain=False)))
+        self.assertFalse(is_plain(SimpleNamespace()))
+
+    def test_plain_icon_suppresses_icons_only_in_plain_mode(self):
+        self.assertEqual(plain_icon("🔥", SimpleNamespace(plain=True)), "")
+        self.assertEqual(plain_icon("🔥", SimpleNamespace(plain=False)), "🔥")
 
 
 if __name__ == "__main__":

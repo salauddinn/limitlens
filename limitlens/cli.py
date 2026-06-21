@@ -76,6 +76,7 @@ def _main():
     parser.add_argument("command", nargs="?", choices=["suggest", "s", "usage", "u", "all", "a", "watch", "w"], help=argparse.SUPPRESS)
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
+    parser.add_argument("--plain", action="store_true", help="Plain output: no color and fewer decorations")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
@@ -111,6 +112,8 @@ def _main():
         args.all = True
     elif args.command in ("watch", "w"):
         args.watch = True
+    if args.plain:
+        args.no_color = True
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
 

@@ -221,6 +221,12 @@ def print_c(text, color_code, no_color=False, end="\n"):
     else:
         print(f"{color_code}{text}\033[0m", end=end)
 
+def is_plain(args):
+    return bool(getattr(args, "plain", False))
+
+def plain_icon(icon, args):
+    return "" if is_plain(args) else icon
+
 def is_verbose(args):
     return bool(getattr(args, "verbose", False))
 
