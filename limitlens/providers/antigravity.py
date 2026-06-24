@@ -671,6 +671,9 @@ def get_ag_quota_summary(port, csrf_token, verbose=False):
         groups = payload.get("groups", []) or []
         for grp in groups:
             group_label = _clean_quota_group_name(grp.get("displayName"))
+            group_buckets = []
+            weekly_pct = None
+
             for bucket in grp.get("buckets", []) or []:
                 window = (bucket.get("window") or "").lower()
                 if window == "weekly":
@@ -686,13 +689,23 @@ def get_ag_quota_summary(port, csrf_token, verbose=False):
                 if is_reset_passed(reset_time):
                     pct_left = 100.0
 
-                models.append({
+                if limit_type == "weekly":
+                    weekly_pct = pct_left
+
+                group_buckets.append({
                     "label": group_label,
                     "group": group_label,
                     "pct_left": pct_left,
                     "reset_time": reset_time,
                     "limit_type": limit_type,
                 })
+
+            if weekly_pct is not None and weekly_pct <= 0:
+                for b in group_buckets:
+                    if b["limit_type"] == "5h window":
+                        b["pct_left"] = 0.0
+
+            models.extend(group_buckets)
     except (TypeError, ValueError, AttributeError) as e:
         return None, f"Error parsing quota summary: {e}", used_insecure_tls
 

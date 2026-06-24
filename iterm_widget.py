@@ -95,10 +95,10 @@ async def main(connection):
 
         if limitlens_bin:
             cmd = [limitlens_bin, "--json"]
-            return subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=15, stdin=subprocess.DEVNULL)
 
         cmd = [PYTHON_BIN, "-m", "limitlens", "--json"]
-        return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15)
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=LIMITLENS_DIR, timeout=15, stdin=subprocess.DEVNULL)
 
     def _tool_icon(tool_key, name):
         """Return a unique icon: known tool → fixed icon, custom → keyword match

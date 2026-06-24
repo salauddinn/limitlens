@@ -557,7 +557,7 @@ class LimitLensApp(rumps.App):
                     # Forcing a Codex sync spawns codex exec per account, so allow more time.
                     cmd.append("--sync-codex")
                     timeout = 60
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)  # nosec B603
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)  # nosec B603
 
                 if proc.returncode == 0:
                     data = json.loads(proc.stdout)

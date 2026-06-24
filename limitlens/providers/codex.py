@@ -302,6 +302,11 @@ def parse_limits(session_file):
                 limit = normalize_rate_limit(rate_limits.get(name))
                 if limit:
                     limits[limit["key"]] = limit
+
+    if limits.get("weekly") and limits["weekly"]["used_percent"] >= 100.0:
+        if limits.get("5h"):
+            limits["5h"]["used_percent"] = 100.0
+
     return limits, status, tokens
 
 def get_session_mtime(session_file):
