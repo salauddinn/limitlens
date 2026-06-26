@@ -7,6 +7,7 @@ import re
 import shutil
 import sqlite3
 import subprocess  # nosec B404
+import urllib.parse
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,8 +41,12 @@ def fetch_reset_credits(codex_home):
         if not token or not account:
             return None
 
+        reset_url = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+        if urllib.parse.urlparse(reset_url).scheme != "https":
+            return None
+
         req = urllib.request.Request(
-            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+            reset_url,
             headers={
                 "Authorization": f"Bearer {token}",
                 "ChatGPT-Account-ID": account,
@@ -49,7 +54,8 @@ def fetch_reset_credits(codex_home):
                 "originator": "Codex Desktop",
             },
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
+        # Fixed HTTPS URL, not user-controlled.
+        with urllib.request.urlopen(req, timeout=5) as response:  # nosec B310
             return json.loads(response.read().decode())
     except Exception:
         return None

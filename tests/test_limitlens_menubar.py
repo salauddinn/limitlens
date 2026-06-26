@@ -54,11 +54,11 @@ def test_refresh_and_on_refresh(app):
 
         mock_fetch.reset_mock()
         app._on_refresh(None)
-        mock_fetch.assert_called_once_with(sync_codex=False)
+        mock_fetch.assert_called_once_with(sync_codex=True)
 
         mock_fetch.reset_mock()
-        app._on_deep_refresh(None)
-        mock_fetch.assert_called_once_with(sync_codex=True)
+        app._on_quick_refresh(None)
+        mock_fetch.assert_called_once_with(sync_codex=False)
 
 def test_check_updates(app):
     app._pending_title = "New Title"
@@ -179,6 +179,30 @@ def test_fetch_data_runs_queued_manual_refresh_after_current_fetch(app):
     assert "--sync-codex" in second_cmd
     assert not app._queued_refresh_sync_codex
 
+
+def test_refresh_actions_use_expected_codex_sync_modes(app):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps({"recommendations": {"hard": []}})
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc) as mock_run:
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+
+        mock_thread.side_effect = mock_thread_init
+
+        app._on_refresh(None)
+        refresh_cmd = mock_run.call_args.args[0]
+        assert "--sync-codex" in refresh_cmd
+
+        mock_run.reset_mock()
+        app._on_quick_refresh(None)
+        quick_cmd = mock_run.call_args.args[0]
+        assert "--sync-codex" not in quick_cmd
+
 def test_fetch_data_success_empty(app):
     mock_data = {
         "recommendations": {"hard": []}
@@ -295,7 +319,7 @@ def test_fetch_data_success_with_quotas(app):
         assert "Cursor" in menu_text and "C1" in menu_text and "50%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
         assert "Refresh" in menu_text
-        assert "Deep Refresh" in menu_text
+        assert "Quick Refresh" in menu_text
         assert "Open Config" in menu_text
         assert "Copy Status" in menu_text
         assert "Recommended:" in app._last_status_summary

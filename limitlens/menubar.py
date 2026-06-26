@@ -64,14 +64,14 @@ class LimitLensApp(rumps.App):
 
         # Persistent items — stored on self so their callbacks are never lost
         self._item_refresh = rumps.MenuItem("Refresh", callback=self._on_refresh)
-        self._item_deep_refresh = rumps.MenuItem("Deep Refresh", callback=self._on_deep_refresh)
+        self._item_quick_refresh = rumps.MenuItem("Quick Refresh", callback=self._on_quick_refresh)
         self._item_open_config = rumps.MenuItem("Open Config", callback=self._on_open_config)
         self._item_copy_status = rumps.MenuItem("Copy Status", callback=self._on_copy_status)
         self._item_quit    = rumps.MenuItem("Quit",    callback=self._on_quit)
         self._sep_top      = rumps.separator
         self._sep_bot      = rumps.separator
 
-        self.menu = [self._item_refresh, self._item_deep_refresh, self._sep_top, self._item_quit]
+        self.menu = [self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
         self._queued_refresh_sync_codex = False
@@ -125,11 +125,11 @@ class LimitLensApp(rumps.App):
         self.fetch_data()
 
     def _on_refresh(self, _):
-        self.fetch_data(sync_codex=False)
-
-    def _on_deep_refresh(self, _):
         # Manual refresh forces a full Codex account sync for fresh data.
         self.fetch_data(sync_codex=True)
+
+    def _on_quick_refresh(self, _):
+        self.fetch_data(sync_codex=False)
 
     def _on_open_config(self, _):
         try:
@@ -641,7 +641,7 @@ class LimitLensApp(rumps.App):
             menu_items.append(rumps.separator)
         menu_items.extend([
             self._item_refresh,
-            self._item_deep_refresh,
+            self._item_quick_refresh,
             self._item_open_config,
             self._item_copy_status,
         ])
