@@ -8,6 +8,7 @@ remaining quota percentages, helping users avoid rate limits. It also triggers
 desktop notifications when quotas run critically low.
 """
 import json
+import os
 import subprocess  # nosec B404
 import sys
 import threading
@@ -62,12 +63,15 @@ class LimitLensApp(rumps.App):
         )
 
         # Persistent items — stored on self so their callbacks are never lost
-        self._item_refresh = rumps.MenuItem("Refresh Now", callback=self._on_refresh)
-        self._item_quit    = rumps.MenuItem("Quit",         callback=self._on_quit)
+        self._item_refresh = rumps.MenuItem("Refresh", callback=self._on_refresh)
+        self._item_deep_refresh = rumps.MenuItem("Deep Refresh", callback=self._on_deep_refresh)
+        self._item_open_config = rumps.MenuItem("Open Config", callback=self._on_open_config)
+        self._item_copy_status = rumps.MenuItem("Copy Status", callback=self._on_copy_status)
+        self._item_quit    = rumps.MenuItem("Quit",    callback=self._on_quit)
         self._sep_top      = rumps.separator
         self._sep_bot      = rumps.separator
 
-        self.menu = [self._item_refresh, self._sep_top, self._item_quit]
+        self.menu = [self._item_refresh, self._item_deep_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
         self._queued_refresh_sync_codex = False
@@ -76,6 +80,7 @@ class LimitLensApp(rumps.App):
         self._notified_set = set()
         self._has_loaded_once = False
         self._last_refresh_label = None
+        self._last_status_summary = "LimitLens status\nNo data loaded yet."
         # Keep the macOS menubar compact. Full details live in the dropdown.
         self._max_title_items = 2
 
@@ -120,8 +125,35 @@ class LimitLensApp(rumps.App):
         self.fetch_data()
 
     def _on_refresh(self, _):
+        self.fetch_data(sync_codex=False)
+
+    def _on_deep_refresh(self, _):
         # Manual refresh forces a full Codex account sync for fresh data.
         self.fetch_data(sync_codex=True)
+
+    def _on_open_config(self, _):
+        try:
+            from .config import auto_detect_providers, limitlens_config_path
+
+            path = limitlens_config_path()
+            if not os.path.exists(path):
+                auto_detect_providers(path, write=True)
+            subprocess.Popen(["open", path])  # nosec B603 B607
+        except Exception as e:  # pragma: no cover - depends on macOS desktop state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
+
+    def _on_copy_status(self, _):
+        try:
+            subprocess.run(
+                ["pbcopy"],
+                input=self._last_status_summary,
+                text=True,
+                check=False,
+                timeout=5,
+            )  # nosec B603 B607
+            self._pending_title = "✓ Status copied"
+        except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
 
     def _on_quit(self, _):
         rumps.quit_application()
@@ -135,8 +167,6 @@ class LimitLensApp(rumps.App):
             # Rebuild only the dynamic middle section.
             # Never clear persistent items — that breaks their click handlers.
             self.menu.clear()
-            self.menu.add(self._item_refresh)
-            self.menu.add(self._sep_top)
             if self._pending_menu_items:
                 for item in self._pending_menu_items:
                     self.menu.add(item)
@@ -342,6 +372,21 @@ class LimitLensApp(rumps.App):
         extra_str = self._compact(note, 22)
         return f"{icon} {status_dot} {clean_name:<24} [{bar}]  {pct_str:>4}   {extra_str}"
 
+    def _format_recommendation_compact(self, item):
+        pct = self._safe_float(item.get("headroom_pct"))
+        if pct is None:
+            return None
+        name = item.get("name") or item.get("tool") or "quota"
+        if " (" in name:
+            name = name.split(" (", 1)[0]
+        if " → " in name:
+            profile, model = name.split(" → ", 1)
+            profile = profile.split(":", 1)[-1]
+            name = f"{profile} · {model}"
+        name = name.replace("codex-", "").strip()
+        icon = self._tool_icon(item.get("tool", ""), name)
+        return f"{icon} {self._compact(name, 30)} · {pct:.0f}%"
+
     def _format_usage_row(self, row):
         pct = row.get("pct_left")
         name = self._compact(row["name"], 14)
@@ -379,6 +424,48 @@ class LimitLensApp(rumps.App):
         extra_str = f"({ratio_str}){status_suffix}" if ratio_str != "?" else status_suffix.strip()
         
         return f"{icon} {status_dot} {title_str:<24} [{bar}]  {pct_str:>4}   {extra_str}"
+
+    def _format_usage_compact(self, row):
+        pct = row.get("pct_left")
+        icon = self._tool_icon(section=row["section"])
+        title = row["label"] if row["section"].lower() in row["name"].lower() else f"{row['name']} · {row['label']}"
+        if pct is None:
+            if row.get("used") is not None:
+                unit = str(row.get("unit") or "").strip()
+                suffix = f" {unit}" if unit else ""
+                return f"{icon} {self._compact(title, 30)} · {self._format_number(row['used'])}{suffix} used"
+            return f"{icon} {self._compact(title, 30)} · n/a"
+        return f"{icon} {self._compact(title, 30)} · {pct:.0f}%"
+
+    @staticmethod
+    def _add_submenu_item(parent, title):
+        item = rumps.MenuItem(title)
+        if hasattr(parent, "add"):
+            parent.add(item)
+        return item
+
+    def _make_all_quotas_menu(self, rows):
+        submenu = rumps.MenuItem("All Quotas")
+        sorted_rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
+        for row in sorted_rows:
+            self._add_submenu_item(submenu, self._format_usage_row(row))
+        return submenu
+
+    def _build_status_summary(self, rec_rows, low_rows, rows):
+        lines = ["LimitLens status"]
+        if rec_rows:
+            lines.append("Recommended:")
+            lines.extend(f"- {row}" for row in rec_rows)
+        if low_rows:
+            lines.append("Low quota:")
+            lines.extend(f"- {self._format_usage_compact(row)}" for row in low_rows)
+        if rows:
+            lines.append("All quotas:")
+            for row in sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1))):
+                lines.append(f"- {self._format_usage_compact(row)}")
+        if self._last_refresh_label:
+            lines.append(f"Last refreshed: {self._last_refresh_label}")
+        return "\n".join(lines)
 
     def _collect_rows(self, data, check_low_quota):
         rows = []
@@ -528,26 +615,42 @@ class LimitLensApp(rumps.App):
         def add_header(title):
             if menu_items:
                 menu_items.append(rumps.separator)
-            menu_items.append(f"[{title}]")
+            menu_items.append(title)
 
         recs = (data.get("recommendations") or {}).get("hard") or []
         fresh_recs = [r for r in recs if not r.get("stale")]
         rec_source = fresh_recs or recs
-        formatted_recs = [self._format_recommendation_row(r) for r in rec_source[:2]]
+        formatted_recs = [self._format_recommendation_compact(r) for r in rec_source[:2]]
         formatted_recs = [r for r in formatted_recs if r]
+        low_rows = [r for r in rows if r.get("pct_left") is not None and r["pct_left"] < self._notify_warn_pct]
         if formatted_recs:
-            add_header("Best available")
+            add_header("✨ Recommended")
             menu_items.extend(formatted_recs)
 
+        if low_rows:
+            add_header("⚠️ Low quota")
+            for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3]:
+                menu_items.append(self._format_usage_compact(row))
+
         if rows:
-            add_header("Usage overview")
-            rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
-            for row in rows:
-                menu_items.append(self._format_usage_row(row))
+            if menu_items:
+                menu_items.append(rumps.separator)
+            menu_items.append(self._make_all_quotas_menu(rows))
 
         if self._last_refresh_label and menu_items:
             menu_items.append(rumps.separator)
             menu_items.append(f"Last refreshed: {self._last_refresh_label}")
+
+        if menu_items:
+            menu_items.append(rumps.separator)
+        menu_items.extend([
+            self._item_refresh,
+            self._item_deep_refresh,
+            self._item_open_config,
+            self._item_copy_status,
+        ])
+
+        self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, rows)
 
         return menu_items
 

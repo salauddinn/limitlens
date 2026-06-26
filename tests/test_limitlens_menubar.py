@@ -6,6 +6,19 @@ from unittest.mock import patch, MagicMock
 
 # Mock rumps BEFORE importing limitlens.menubar
 mock_rumps = MagicMock()
+class MockMenuItem:
+    def __init__(self, title, callback=None):
+        self.title = title
+        self.callback = callback
+        self.items = []
+
+    def add(self, item):
+        self.items.append(item)
+
+    def __str__(self):
+        child_text = "\n".join(str(item) for item in self.items)
+        return self.title if not child_text else f"{self.title}\n{child_text}"
+
 class MockApp:
     def __init__(self, title, *args, **kwargs):
         self.title = title
@@ -14,6 +27,8 @@ class MockApp:
         self.menu.add = MagicMock()
 
 mock_rumps.App = MockApp
+mock_rumps.MenuItem = MockMenuItem
+mock_rumps.separator = "---"
 mock_rumps.timer = lambda x: (lambda f: f)
 mock_rumps.clicked = lambda x: (lambda f: f)
 sys.modules['rumps'] = mock_rumps
@@ -27,7 +42,7 @@ def app():
 
 def test_init(app):
     assert app.title == "⏳ Loading..."
-    assert len(app.menu) == 3
+    assert len(app.menu) == 4
     assert not app._is_fetching
     assert not app._queued_refresh_sync_codex
     assert app._pending_title is None
@@ -39,6 +54,10 @@ def test_refresh_and_on_refresh(app):
 
         mock_fetch.reset_mock()
         app._on_refresh(None)
+        mock_fetch.assert_called_once_with(sync_codex=False)
+
+        mock_fetch.reset_mock()
+        app._on_deep_refresh(None)
         mock_fetch.assert_called_once_with(sync_codex=True)
 
 def test_check_updates(app):
@@ -73,6 +92,32 @@ def test_notify(app):
         assert args[0] == "osascript"
         assert "Test Msg" in args
         assert "Test Title" in args
+
+
+def test_open_config_creates_missing_config_then_opens(app):
+    with patch("limitlens.config.limitlens_config_path", return_value="/tmp/limitlens-test-config.json"), \
+         patch("limitlens.menubar.os.path.exists", return_value=False), \
+         patch("limitlens.config.auto_detect_providers") as mock_auto_detect, \
+         patch("subprocess.Popen") as mock_popen:
+        app._on_open_config(None)
+
+    mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True)
+    mock_popen.assert_called_once_with(["open", "/tmp/limitlens-test-config.json"])
+
+
+def test_copy_status_uses_readable_summary(app):
+    app._last_status_summary = "LimitLens status\nRecommended:\n- Amp · 50%"
+    with patch("subprocess.run") as mock_run:
+        app._on_copy_status(None)
+
+    mock_run.assert_called_once_with(
+        ["pbcopy"],
+        input=app._last_status_summary,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    assert app._pending_title == "✓ Status copied"
 
 def test_fetch_data_already_fetching(app):
     app._is_fetching = True
@@ -141,7 +186,7 @@ def test_fetch_data_success_empty(app):
         app.fetch_data()
 
         assert app._pending_title == "⚪ No quota"
-        assert app._pending_menu_items == []
+        assert "Refresh" in "\n".join(str(item) for item in app._pending_menu_items)
         assert not app._is_fetching
 
 def test_fetch_data_success_with_quotas(app):
@@ -222,10 +267,11 @@ def test_fetch_data_success_with_quotas(app):
 
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)
-        assert "[Best available]" in menu
+        assert "✨ Recommended" in menu
         assert "ag-prof:model" in menu_text
         assert "25%" in menu_text
-        assert "[Usage overview]" in menu
+        assert "⚠️ Low quota" in menu
+        assert "All Quotas" in menu_text
         assert "Last refreshed:" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
         assert "Amp" in menu_text and "Tier1" in menu_text and "$1.50/$10.00" in menu_text
@@ -236,6 +282,12 @@ def test_fetch_data_success_with_quotas(app):
         assert "Pioneer" in menu_text and "P1" in menu_text and "2%" in menu_text
         assert "Cursor" in menu_text and "C1" in menu_text and "50%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
+        assert "Refresh" in menu_text
+        assert "Deep Refresh" in menu_text
+        assert "Open Config" in menu_text
+        assert "Copy Status" in menu_text
+        assert "Recommended:" in app._last_status_summary
+        assert "Low quota:" in app._last_status_summary
 
         mock_notify.assert_any_call("LimitLens Quota Warning", "Codex (Acc1) Reqs is running low (5.0% left).")
         mock_notify.assert_any_call("LimitLens Quota Warning", "Tier1 is running low (8.0% left). ($1.50 remaining)")
