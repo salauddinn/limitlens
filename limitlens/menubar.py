@@ -12,6 +12,7 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+from datetime import datetime
 
 _RUMPS_AVAILABLE = True
 try:
@@ -69,10 +70,12 @@ class LimitLensApp(rumps.App):
         self.menu = [self._item_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
+        self._queued_refresh_sync_codex = False
         self._pending_title = None
         self._pending_menu_items = None
         self._notified_set = set()
         self._has_loaded_once = False
+        self._last_refresh_label = None
         # Keep the macOS menubar compact. Full details live in the dropdown.
         self._max_title_items = 2
 
@@ -542,12 +545,21 @@ class LimitLensApp(rumps.App):
             for row in rows:
                 menu_items.append(self._format_usage_row(row))
 
+        if self._last_refresh_label and menu_items:
+            menu_items.append(rumps.separator)
+            menu_items.append(f"Last refreshed: {self._last_refresh_label}")
+
         return menu_items
 
     def fetch_data(self, sync_codex=False):
         if self._is_fetching:
+            # Do not drop refresh requests made while a slower fetch is running.
+            # Manual refreshes are stronger than timer refreshes because they
+            # request a Codex sync, so preserve that intent for the queued run.
+            self._queued_refresh_sync_codex = self._queued_refresh_sync_codex or bool(sync_codex)
             return
         self._is_fetching = True
+        self._pending_title = "↻ Refreshing…"
 
         def worker():
             try:
@@ -584,6 +596,7 @@ class LimitLensApp(rumps.App):
 
                     title_items = self._recommendation_title_items(data, rows)
                     self._pending_title = self._format_title(title_items) if title_items else "⚪ No quota"
+                    self._last_refresh_label = datetime.now().strftime("%I:%M %p").lstrip("0")
                     self._pending_menu_items = self._build_menu_items(data, rows)
                     self._has_loaded_once = True
                 else:
@@ -591,7 +604,6 @@ class LimitLensApp(rumps.App):
                     self._pending_title = f"⚠️ {err_msg[:20]}"
                     try:
                         import os
-                        from datetime import datetime
                         log_dir = os.path.expanduser("~/.cache/limitlens")
                         os.makedirs(log_dir, exist_ok=True)
                         log_file = os.path.join(log_dir, "limitlens.log")
@@ -606,7 +618,6 @@ class LimitLensApp(rumps.App):
                 try:
                     import os
                     import traceback
-                    from datetime import datetime
                     log_dir = os.path.expanduser("~/.cache/limitlens")
                     os.makedirs(log_dir, exist_ok=True)
                     log_file = os.path.join(log_dir, "limitlens.log")
@@ -622,7 +633,6 @@ class LimitLensApp(rumps.App):
                 try:
                     import os
                     import traceback
-                    from datetime import datetime
                     log_dir = os.path.expanduser("~/.cache/limitlens")
                     os.makedirs(log_dir, exist_ok=True)
                     log_file = os.path.join(log_dir, "limitlens.log")
@@ -635,6 +645,9 @@ class LimitLensApp(rumps.App):
                     pass
             finally:
                 self._is_fetching = False
+                if self._queued_refresh_sync_codex:
+                    self._queued_refresh_sync_codex = False
+                    self.fetch_data(sync_codex=True)
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()

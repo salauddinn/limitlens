@@ -29,6 +29,7 @@ def test_init(app):
     assert app.title == "⏳ Loading..."
     assert len(app.menu) == 3
     assert not app._is_fetching
+    assert not app._queued_refresh_sync_codex
     assert app._pending_title is None
 
 def test_refresh_and_on_refresh(app):
@@ -78,6 +79,48 @@ def test_fetch_data_already_fetching(app):
     with patch("threading.Thread") as mock_thread:
         app.fetch_data()
         mock_thread.assert_not_called()
+        assert not app._queued_refresh_sync_codex
+
+        app.fetch_data(sync_codex=True)
+        mock_thread.assert_not_called()
+        assert app._queued_refresh_sync_codex
+
+
+def test_fetch_data_sets_refreshing_state(app):
+    with patch("threading.Thread") as mock_thread:
+        app.fetch_data()
+
+    assert app._pending_title == "↻ Refreshing…"
+    mock_thread.assert_called_once()
+
+
+def test_fetch_data_runs_queued_manual_refresh_after_current_fetch(app):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps({"recommendations": {"hard": []}})
+    original_fetch = app.fetch_data
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc) as mock_run:
+
+        calls = 0
+
+        def mock_thread_init(target, daemon):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                app._queued_refresh_sync_codex = True
+            target()
+            return MagicMock()
+
+        mock_thread.side_effect = mock_thread_init
+        original_fetch()
+
+    assert mock_thread.call_count == 2
+    assert mock_run.call_count == 2
+    second_cmd = mock_run.call_args_list[1].args[0]
+    assert "--sync-codex" in second_cmd
+    assert not app._queued_refresh_sync_codex
 
 def test_fetch_data_success_empty(app):
     mock_data = {
@@ -183,6 +226,7 @@ def test_fetch_data_success_with_quotas(app):
         assert "ag-prof:model" in menu_text
         assert "25%" in menu_text
         assert "[Usage overview]" in menu
+        assert "Last refreshed:" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
         assert "Amp" in menu_text and "Tier1" in menu_text and "$1.50/$10.00" in menu_text
         assert "Antigrav" in menu_text and "prof1" in menu_text and "m1" in menu_text and "20%" in menu_text
