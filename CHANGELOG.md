@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-06-26
+
+### Fixed
+- Queue menubar refresh requests instead of dropping manual refresh clicks while another refresh is already running.
+- Preserve manual refresh intent so queued refreshes still perform the stronger Codex sync.
+- Show an in-progress menubar title while refresh is running and include a last-refreshed timestamp in populated menus.
+
 ## [1.6.0] - 2026-06-26
 
 ### Added
