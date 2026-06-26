@@ -433,8 +433,11 @@ class LimitLensApp(rumps.App):
 
     def _format_usage_compact(self, row):
         pct = row.get("pct_left")
-        icon = self._tool_icon(section=row["section"])
-        title = row["label"] if row["section"].lower() in row["name"].lower() else f"{row['name']} · {row['label']}"
+        section = str(row.get("section") or "")
+        name = str(row.get("name") or "")
+        label = str(row.get("label") or "")
+        icon = self._tool_icon(section=section)
+        title = label if section.lower() in name.lower() else f"{name} · {label}"
         if pct is None:
             if row.get("used") is not None:
                 unit = str(row.get("unit") or "").strip()
