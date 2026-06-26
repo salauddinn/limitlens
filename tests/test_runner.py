@@ -84,6 +84,24 @@ def test_build_command_supports_configured_stdin_mode():
     assert stdin_text == "Research this"
 
 
+def test_build_command_uses_production_cli_defaults():
+    assert build_command("pi", "hello") == (("pi", "hello"), None)
+    assert build_command("agy", "hello") == (("agy", "--prompt-interactive", "hello"), None)
+    assert build_command("amp", "hello") == (("amp",), "hello")
+    assert build_command("codex", "hello") == (("codex", "hello"), None)
+    assert build_command("opencode", "hello") == (("opencode", "run", "hello"), None)
+    assert build_command("commandcode", "hello") == (("cmd", "hello"), None)
+
+
+def test_build_command_rejects_unknown_prompt_mode():
+    try:
+        build_command("pi", "hello", config={"runner": {"tools": {"pi": {"prompt_mode": "typo"}}}})
+    except ValueError as exc:
+        assert "unsupported prompt_mode" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_route_respects_runner_ignored_tools():
     quota_data = {
         "antigravity": {

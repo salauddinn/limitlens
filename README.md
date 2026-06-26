@@ -116,6 +116,8 @@ limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with
 
 > **Quota-aware launcher:** `limitlens run "..."` uses fast local heuristics plus LimitLens quota data to choose and launch a CLI agent directly (for example Pi for planning/research, Antigravity CLI for coding, then Amp/Codex/OpenCode-style fallbacks). It honors provider `enabled: false`, existing ignored accounts/models, and optional `runner.ignored_tools`. Override with `limitlens run --tool agy "..."`. Configure commands under the optional `runner.tools` section in `config.json`.
 
+Default launcher commands are intentionally simple and match current CLI help output: `pi <prompt>`, `agy --prompt-interactive <prompt>`, `amp` with the prompt on stdin, `codex <prompt>`, `opencode run <prompt>`, and `cmd <prompt>`. Use `limitlens run --dry-run "..."` to preview the selected command before launching.
+
 > **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 
 > **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).

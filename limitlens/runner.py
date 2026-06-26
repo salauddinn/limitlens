@@ -59,10 +59,10 @@ class RouteDecision:
 
 TOOL_SPECS: Dict[str, ToolSpec] = {
     "pi": ToolSpec("pi", "Pi", "pi", ("pi",), quota_optional=True),
-    "agy": ToolSpec("agy", "Antigravity CLI", "antigravity", ("agy",), aliases=("antigravity",)),
+    "agy": ToolSpec("agy", "Antigravity CLI", "antigravity", ("agy", "--prompt-interactive"), aliases=("antigravity",)),
     "amp": ToolSpec("amp", "Amp", "amp", ("amp",)),
     "codex": ToolSpec("codex", "Codex", "codex", ("codex",)),
-    "opencode": ToolSpec("opencode", "OpenCode", "opencode", ("opencode",), quota_optional=True),
+    "opencode": ToolSpec("opencode", "OpenCode", "opencode", ("opencode", "run"), quota_optional=True),
     "commandcode": ToolSpec("commandcode", "Command Code", "commandcode", ("cmd",), aliases=("cmd",)),
 }
 
@@ -229,13 +229,16 @@ def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]]
         argv.extend(_format_arg(item, prompt) for item in extra)
         return tuple(argv), stdin_text
 
-    prompt_mode = str(tool_cfg.get("prompt_mode") or "arg").lower()
+    default_prompt_mode = "stdin" if canonical == "amp" else "arg"
+    prompt_mode = str(tool_cfg.get("prompt_mode") or default_prompt_mode).lower()
     if prompt_mode == "stdin":
         stdin_text = prompt
     elif prompt_mode == "none":
         pass
-    else:
+    elif prompt_mode == "arg":
         argv.append(prompt)
+    else:
+        raise ValueError(f"unsupported prompt_mode for {canonical}: {prompt_mode}")
     return tuple(argv), stdin_text
 
 
@@ -457,6 +460,8 @@ def run_task(
     print_c(f"  task:   {decision.task_kind}", "\033[90m", no_color)
     print_c(f"  why:    {decision.reason}", "\033[90m", no_color)
     print_c(f"  cmd:    {shell_join(decision.command)}", "\033[90m", no_color)
+    if decision.stdin_text is not None:
+        print_c("  input:  prompt via stdin", "\033[90m", no_color)
     if decision.routed_prompt != prompt:
         print_c("  prompt: adapted by runner config", "\033[90m", no_color)
     if decision.fallback_chain:

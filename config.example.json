@@ -101,10 +101,10 @@
     "ignored_tools": [],
     "tools": {
       "pi": {"command": "pi", "prompt_mode": "arg"},
-      "agy": {"command": "agy", "prompt_mode": "arg"},
-      "amp": {"command": "amp", "prompt_mode": "arg"},
+      "agy": {"command": "agy --prompt-interactive", "prompt_mode": "arg"},
+      "amp": {"command": "amp", "prompt_mode": "stdin"},
       "codex": {"command": "codex", "prompt_mode": "arg"},
-      "opencode": {"command": "opencode", "prompt_mode": "arg"},
+      "opencode": {"command": "opencode run", "prompt_mode": "arg"},
       "commandcode": {"command": "cmd", "prompt_mode": "arg"}
     }
   },
