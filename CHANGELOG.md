@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-26
+
+### Added
+- Add `limitlens run "..."`, a quota-aware launcher that chooses and starts the best available AI CLI for a task.
+- Add `--init-config` to explicitly write a starter config from detected local tools.
+- Add configurable runner commands, prompt modes, ignored tools, and dry-run previews.
+
+### Changed
+- Make zero-config provider detection read-only during normal status, suggest, usage, and runner commands.
+- Document production launcher defaults for Pi, Antigravity CLI, Amp, Codex, OpenCode, and Command Code.
+
+### Fixed
+- Prevent read-only commands and `limitlens run --dry-run` from creating or rewriting `config.json` unexpectedly.
+- Harden runner launch defaults so Amp receives prompts on stdin, Antigravity uses `--prompt-interactive`, and OpenCode uses `run`.
+- Reject invalid runner `prompt_mode` values with a clear error instead of silently falling back.
+
 ## [1.5.0] - 2026-06-21
 
 ### Added
