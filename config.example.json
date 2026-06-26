@@ -98,10 +98,9 @@
     }
   },
   "runner": {
-    "use_pi_subagents": true,
     "ignored_tools": [],
     "tools": {
-      "pi": {"command": "pi", "prompt_mode": "arg", "use_subagents": true},
+      "pi": {"command": "pi", "prompt_mode": "arg"},
       "agy": {"command": "agy", "prompt_mode": "arg"},
       "amp": {"command": "amp", "prompt_mode": "arg"},
       "codex": {"command": "codex", "prompt_mode": "arg"},

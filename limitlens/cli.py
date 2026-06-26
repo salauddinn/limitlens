@@ -59,7 +59,7 @@ def log_error(e, context=""):
 def _run_subcommand(argv):
     parser = argparse.ArgumentParser(
         prog="limitlens run",
-        description="Route a natural-language task to the best available AI agent CLI.",
+        description="Launch the best available AI agent CLI for a natural-language task.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
   limitlens run "Plan the auth refactor"
@@ -121,7 +121,7 @@ def _main():
         description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Common commands:
-  limitlens run "Build a feature"   Route a task to the best AI agent CLI
+  limitlens run "Build a feature"   Launch the best AI agent CLI
   limitlens suggest                 Which AI should I use now?
   limitlens usage                   Show day-wise usage
   limitlens all                     Show hidden/empty providers too

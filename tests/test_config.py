@@ -116,10 +116,9 @@ class TestValidateConfigTypes(unittest.TestCase):
         validate_config_types(
             {
                 "runner": {
-                    "use_pi_subagents": True,
                     "ignored_tools": ["agy"],
                     "tools": {
-                        "pi": {"command": "pi", "prompt_mode": "arg", "use_subagents": False},
+                        "pi": {"command": "pi", "prompt_mode": "arg"},
                     },
                 }
             }

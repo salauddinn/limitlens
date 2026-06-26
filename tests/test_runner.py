@@ -22,7 +22,7 @@ def test_route_planning_prefers_pi_when_enabled_without_hard_quota():
     assert decision.tool_id == "pi"
     assert decision.task_kind == "planning"
     assert decision.command[0] == "pi"
-    assert "LimitLens" in decision.command[1]
+    assert decision.command[1] == "Plan the auth migration"
     assert "Plan the auth migration" in decision.command[1]
 
 
@@ -51,15 +51,26 @@ def test_route_coding_uses_antigravity_quota_candidate():
     assert "72% left" in decision.reason
 
 
-def test_prepare_prompt_can_disable_pi_orchestration():
+def test_prepare_prompt_passes_through_by_default():
     routed = prepare_prompt_for_tool(
         "pi",
         "Research this",
         "planning",
-        config={"runner": {"tools": {"pi": {"use_subagents": False}}}},
+        config={"runner": {"tools": {"pi": {}}}},
     )
 
     assert routed == "Research this"
+
+
+def test_prepare_prompt_supports_explicit_template():
+    routed = prepare_prompt_for_tool(
+        "pi",
+        "Research this",
+        "planning",
+        config={"runner": {"tools": {"pi": {"prompt_template": "[{task_kind}] {prompt}"}}}},
+    )
+
+    assert routed == "[planning] Research this"
 
 
 def test_build_command_supports_configured_stdin_mode():

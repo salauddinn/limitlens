@@ -1,9 +1,9 @@
-"""Unified task runner for ``limitlens run``.
+"""Quota-aware launcher for ``limitlens run``.
 
-This module contains the lightweight orchestration layer that chooses an AI
-agent CLI from the user's prompt and the quota data LimitLens already knows how
-to collect.  It intentionally keeps routing deterministic and configurable so it
-works without a specific IDE or local profile.
+This module chooses an AI CLI from the user's prompt and the quota data
+LimitLens already knows how to collect, then launches that CLI directly.
+Routing stays deterministic and configurable so it works without a specific IDE
+or local profile.
 """
 
 from __future__ import annotations
@@ -129,31 +129,6 @@ RECOMMENDATION_TOOL_ALIASES = {
     "opencode": "opencode",
 }
 
-PI_ORCHESTRATION_PROMPTS: Dict[TaskKind, str] = {
-    "planning": (
-        "You are being launched by LimitLens as the unified AI-tool interface. "
-        "Use the installed pi-subagents workflow when useful: start with scout/context-builder for repo context, "
-        "use researcher only if external evidence matters, then produce a concrete plan. "
-        "Do not implement unless the user clearly asked for implementation.\n\nUser task:\n{prompt}"
-    ),
-    "coding": (
-        "You are being launched by LimitLens as the unified AI-tool interface. "
-        "Use pi-subagents when useful: clarify only blocking ambiguity, use planner for non-trivial scope, "
-        "then a single worker for edits, followed by reviewer validation for meaningful changes. "
-        "Keep the work local, verify with focused commands, and summarize changed files and residual risks.\n\nUser task:\n{prompt}"
-    ),
-    "cli": (
-        "You are being launched by LimitLens as the unified AI-tool interface for CLI/scripting work. "
-        "Prefer direct shell inspection and small, portable changes. Use subagents only if the task needs research, planning, or review.\n\nUser task:\n{prompt}"
-    ),
-    "general": (
-        "You are being launched by LimitLens as the unified AI-tool interface. "
-        "Choose the right Pi workflow for the task: scout/researcher for context, planner for design, worker for approved implementation, "
-        "and reviewer for validation when changes are made.\n\nUser task:\n{prompt}"
-    ),
-}
-
-
 def normalize_tool_id(tool: Optional[str]) -> Optional[str]:
     """Return the canonical runner tool id for a user/config value."""
 
@@ -202,21 +177,11 @@ def prepare_prompt_for_tool(tool_id: str, prompt: str, task_kind: TaskKind, conf
 
     canonical = normalize_tool_id(tool_id) or tool_id
     tool_cfg = _runner_tool_config(config, canonical)
-    runner_cfg = _runner_config(config)
-
-    # Pi is the backend that can understand package-installed workflows such as
-    # pi-subagents. LimitLens stays the top-level selector, but when Pi is chosen
-    # it receives a stronger orchestration prompt so the user gets one interface
-    # without losing Pi's package ecosystem.
-    use_pi_orchestration = _bool_config(
-        tool_cfg.get("use_subagents", runner_cfg.get("use_pi_subagents")),
-        default=True,
-    )
-    if canonical != "pi" or not use_pi_orchestration:
+    template = tool_cfg.get("prompt_template")
+    if not template:
         return prompt
 
-    template = str(tool_cfg.get("prompt_template") or PI_ORCHESTRATION_PROMPTS.get(task_kind) or PI_ORCHESTRATION_PROMPTS["general"])
-    return template.replace("{prompt}", prompt).replace("{task_kind}", task_kind)
+    return str(template).replace("{prompt}", prompt).replace("{task_kind}", task_kind)
 
 
 def _coerce_command(value: Any, default: Sequence[str]) -> Tuple[str, ...]:
@@ -493,7 +458,7 @@ def run_task(
     print_c(f"  why:    {decision.reason}", "\033[90m", no_color)
     print_c(f"  cmd:    {shell_join(decision.command)}", "\033[90m", no_color)
     if decision.routed_prompt != prompt:
-        print_c("  prompt: adapted for backend workflow", "\033[90m", no_color)
+        print_c("  prompt: adapted by runner config", "\033[90m", no_color)
     if decision.fallback_chain:
         print_c(f"  backup: {', '.join(decision.fallback_chain)}", "\033[90m", no_color)
 

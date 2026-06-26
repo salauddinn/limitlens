@@ -72,7 +72,6 @@ DEFAULT_CONFIG = {
         "tools": {},
     },
     "runner": {
-        "use_pi_subagents": True,
         "ignored_tools": [],
         "ignore_tools": [],
         "tools": {},
