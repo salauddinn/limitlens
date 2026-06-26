@@ -101,8 +101,20 @@ def test_open_config_creates_missing_config_then_opens(app):
          patch("subprocess.Popen") as mock_popen:
         app._on_open_config(None)
 
-    mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True)
+    mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True, interactive=False)
     mock_popen.assert_called_once_with(["open", "/tmp/limitlens-test-config.json"])
+
+
+def test_build_menu_items_returns_submenu_spec_not_rumps_item(app):
+    row = app._row("Amp", "Amp", "Credits", 50.0, remaining=5, total=10, unit="$")
+    app._last_refresh_label = "7:00 PM"
+
+    with patch("limitlens.menubar.rumps.MenuItem", side_effect=AssertionError("worker must not create menu items")):
+        items = app._build_menu_items({"recommendations": {"hard": []}}, [row])
+
+    submenu_specs = [item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "All Quotas")]
+    assert len(submenu_specs) == 1
+    assert "Amp" in "\n".join(submenu_specs[0][2])
 
 
 def test_copy_status_uses_readable_summary(app):

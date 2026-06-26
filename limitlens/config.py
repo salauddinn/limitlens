@@ -355,7 +355,7 @@ def reset_custom_tool_spend(config_path):
     return True
 
 
-def auto_detect_providers(path, write=True):
+def auto_detect_providers(path, write=True, interactive=True):
     """Scan the local system for installed providers.
 
     When ``write`` is true, also write an initial config file to ``path``.
@@ -402,7 +402,7 @@ def auto_detect_providers(path, write=True):
     check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))
     check("commandcode", False)
 
-    is_interactive = write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
+    is_interactive = interactive and write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
 
     if is_interactive:
         sys.stderr.write("\033[36m[LimitLens]\033[0m First run setup.\n")

@@ -137,7 +137,7 @@ class LimitLensApp(rumps.App):
 
             path = limitlens_config_path()
             if not os.path.exists(path):
-                auto_detect_providers(path, write=True)
+                auto_detect_providers(path, write=True, interactive=False)
             subprocess.Popen(["open", path])  # nosec B603 B607
         except Exception as e:  # pragma: no cover - depends on macOS desktop state
             self._pending_title = f"⚠️ {str(e)[:15]}"
@@ -169,7 +169,13 @@ class LimitLensApp(rumps.App):
             self.menu.clear()
             if self._pending_menu_items:
                 for item in self._pending_menu_items:
-                    self.menu.add(item)
+                    if isinstance(item, tuple) and len(item) == 3 and item[0] == "submenu":
+                        submenu = rumps.MenuItem(item[1])
+                        for child in item[2]:
+                            submenu.add(rumps.MenuItem(child))
+                        self.menu.add(submenu)
+                    else:
+                        self.menu.add(item)
             else:
                 self.menu.add(rumps.MenuItem("No active quotas found"))
             self.menu.add(self._sep_bot)
@@ -437,19 +443,9 @@ class LimitLensApp(rumps.App):
             return f"{icon} {self._compact(title, 30)} · n/a"
         return f"{icon} {self._compact(title, 30)} · {pct:.0f}%"
 
-    @staticmethod
-    def _add_submenu_item(parent, title):
-        item = rumps.MenuItem(title)
-        if hasattr(parent, "add"):
-            parent.add(item)
-        return item
-
     def _make_all_quotas_menu(self, rows):
-        submenu = rumps.MenuItem("All Quotas")
         sorted_rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
-        for row in sorted_rows:
-            self._add_submenu_item(submenu, self._format_usage_row(row))
-        return submenu
+        return ("submenu", "All Quotas", [self._format_usage_row(row) for row in sorted_rows])
 
     def _build_status_summary(self, rec_rows, low_rows, rows):
         lines = ["LimitLens status"]

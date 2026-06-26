@@ -182,7 +182,7 @@ def _main():
 
     if args.init_config:
         path = limitlens_config_path()
-        auto_detect_providers(path, write=True)
+        auto_detect_providers(path, write=True, interactive=True)
         return
 
     tool_label = {

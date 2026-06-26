@@ -920,7 +920,7 @@ class TestCLI(unittest.TestCase):
              redirect_stdout(io.StringIO()):
             main()
 
-        mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True)
+        mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True, interactive=True)
 
 
 class TestCLIThreadPool(unittest.TestCase):
