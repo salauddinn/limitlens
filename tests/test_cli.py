@@ -897,6 +897,21 @@ class TestCLI(unittest.TestCase):
             main()
         mock_display_pi.assert_called_once()
 
+    @patch("limitlens.runner.collect_quota_data", return_value={})
+    def test_run_subcommand_dry_run_routes_without_launching(self, mock_collect):
+        test_args = ["limitlens", "run", "--dry-run", "Plan the migration"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value={"pi": {"enabled": True}}), \
+             patch("limitlens.runner.subprocess.run") as mock_subprocess, \
+             redirect_stdout(buf):
+            main()
+
+        self.assertIn("LimitLens runner", buf.getvalue())
+        self.assertIn("Pi", buf.getvalue())
+        mock_collect.assert_called_once()
+        mock_subprocess.assert_not_called()
+
 
 class TestCLIThreadPool(unittest.TestCase):
     @patch("limitlens.cli.ThreadPoolExecutor")

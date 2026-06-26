@@ -71,6 +71,12 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "tools": {},
     },
+    "runner": {
+        "use_pi_subagents": True,
+        "ignored_tools": [],
+        "ignore_tools": [],
+        "tools": {},
+    },
     "display": {
         "auto_hide_enabled": True,
         "auto_hide_days": 1,
@@ -99,6 +105,7 @@ def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
             path == "custom_tools.tools."
             or path == "pioneer."
             or path == "agentrouter."
+            or path == "runner.tools."
             or path.endswith("model_parents.")
             or path.endswith("parents.")
         ):

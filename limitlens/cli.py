@@ -56,15 +56,76 @@ def log_error(e, context=""):
     except Exception:
         pass
 
+def _run_subcommand(argv):
+    parser = argparse.ArgumentParser(
+        prog="limitlens run",
+        description="Route a natural-language task to the best available AI agent CLI.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  limitlens run "Plan the auth refactor"
+  limitlens run "Fix the failing tests"
+  limitlens run --tool agy "Build the dashboard"
+  limitlens run --dry-run "Research the migration path"
+""",
+    )
+    parser.add_argument("--tool", choices=["auto", "pi", "agy", "antigravity", "amp", "codex", "opencode", "commandcode", "cmd"], default="auto", help="Force a tool instead of auto-routing")
+    parser.add_argument("--dry-run", action="store_true", help="Show the chosen tool and command without launching it")
+    parser.add_argument("--cwd", help="Working directory for the launched agent")
+    parser.add_argument("--plain", action="store_true", help="Plain output: no color")
+    parser.add_argument("--no-color", action="store_true", help="Disable color output")
+    parser.add_argument("--debug", "-d", action="store_true", help="Show runner traceback on errors")
+    parser.add_argument("prompt", nargs=argparse.REMAINDER, help="Task prompt to route")
+    args = parser.parse_args(argv)
+
+    prompt = " ".join(args.prompt).strip()
+    if not prompt:
+        parser.error("prompt is required")
+    if args.plain:
+        args.no_color = True
+
+    try:
+        from .runner import run_task
+
+        config = load_limitlens_config()
+        preferred = None if args.tool == "auto" else args.tool
+        code = run_task(
+            prompt,
+            config=config,
+            preferred_tool=preferred,
+            dry_run=args.dry_run,
+            cwd=args.cwd,
+            no_color=args.no_color,
+            require_executable=not args.dry_run,
+        )
+    except Exception as e:
+        import sys
+        import traceback
+        if args.debug:
+            traceback.print_exc(file=sys.stderr)
+        else:
+            print_c(f"  ⚠ runner failed: {e}", "\033[31m", args.no_color)
+        log_error(e, "Runner ")
+        raise SystemExit(1)
+
+    if code:
+        raise SystemExit(code)
+
+
 def _main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        _run_subcommand(sys.argv[2:])
+        return
+
     parser = argparse.ArgumentParser(
         description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Common commands:
-  limitlens suggest   Which AI should I use now?
-  limitlens usage     Show day-wise usage
-  limitlens all       Show hidden/empty providers too
-  limitlens watch     Refresh continuously
+  limitlens run "Build a feature"   Route a task to the best AI agent CLI
+  limitlens suggest                 Which AI should I use now?
+  limitlens usage                   Show day-wise usage
+  limitlens all                     Show hidden/empty providers too
+  limitlens watch                   Refresh continuously
 """,
     )
     try:

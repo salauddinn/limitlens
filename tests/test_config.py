@@ -112,6 +112,19 @@ class TestValidateConfigTypes(unittest.TestCase):
     def test_valid_bool_passes(self):
         validate_config_types({"cursor": {"enabled": True}})
 
+    def test_runner_config_passes(self):
+        validate_config_types(
+            {
+                "runner": {
+                    "use_pi_subagents": True,
+                    "ignored_tools": ["agy"],
+                    "tools": {
+                        "pi": {"command": "pi", "prompt_mode": "arg", "use_subagents": False},
+                    },
+                }
+            }
+        )
+
     def test_unknown_top_level_key_raises(self):
         with self.assertRaises(ConfigValidationError):
             validate_config_types({"nonexistent_provider": {}})

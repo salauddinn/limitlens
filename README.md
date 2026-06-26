@@ -108,10 +108,13 @@ limitlens --waste    # Show waste report and Time-To-Exhaustion (TTX) projection
 limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
 limitlens --store-token pioneer # Securely store an API token in the OS keychain (prompts securely)
+limitlens run "Fix the failing tests" # Route a task to the best available agent CLI
+limitlens run --dry-run "Plan the migration" # Preview routing without launching an agent
 limitlens-switch     # Switch context interactively and execute a tool in place
 limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with args
 ```
 
+> **Unified Runner:** `limitlens run "..."` uses fast local heuristics plus LimitLens quota data to choose a CLI agent (for example Pi for planning/research, Antigravity CLI for coding, then Amp/Codex/OpenCode-style fallbacks). It honors provider `enabled: false`, existing ignored accounts/models, and optional `runner.ignored_tools`. Override with `limitlens run --tool agy "..."`. When Pi is selected, LimitLens can adapt the prompt for installed Pi workflows such as `pi-subagents` (`scout`, `planner`, `worker`, `reviewer`) while keeping LimitLens as the single top-level interface. Configure commands under the optional `runner.tools` section in `config.json`.
 
 > **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 

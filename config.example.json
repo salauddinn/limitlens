@@ -97,6 +97,18 @@
       }
     }
   },
+  "runner": {
+    "use_pi_subagents": true,
+    "ignored_tools": [],
+    "tools": {
+      "pi": {"command": "pi", "prompt_mode": "arg", "use_subagents": true},
+      "agy": {"command": "agy", "prompt_mode": "arg"},
+      "amp": {"command": "amp", "prompt_mode": "arg"},
+      "codex": {"command": "codex", "prompt_mode": "arg"},
+      "opencode": {"command": "opencode", "prompt_mode": "arg"},
+      "commandcode": {"command": "cmd", "prompt_mode": "arg"}
+    }
+  },
   "display": {
     "auto_hide_enabled": true,
     "auto_hide_days": 1,
