@@ -219,6 +219,16 @@ class TestLoadLimitlensConfig(unittest.TestCase):
         self.assertIn("codex", config)
         self.assertTrue(config["codex"]["enabled"])
         self.assertIn("display", config)
+        mock_auto.assert_called_once_with("/nonexistent/path/config.json", write=False)
+
+    def test_missing_file_does_not_write_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "config.json")
+            with patch.dict(os.environ, {"LIMITLENS_CONFIG": path}):
+                config = load_limitlens_config()
+
+            self.assertIn("codex", config)
+            self.assertFalse(os.path.exists(path))
 
     def test_non_dict_json_raises(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:

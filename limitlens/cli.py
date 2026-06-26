@@ -21,6 +21,7 @@ from .core import (
 from .config import (
     is_provider_enabled,
     ConfigValidationError,
+    auto_detect_providers,
     reset_custom_tool_spend,
     limitlens_config_path,
 )
@@ -162,6 +163,7 @@ def _main():
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
     parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
+    parser.add_argument("--init-config", action="store_true", help="Detect installed tools and write an initial config file, then exit")
     parser.add_argument("--store-token", metavar="PROVIDER", help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode). Prompts for token securely.")
     parser.add_argument("--store-token-stdin", metavar="PROVIDER", help="Securely store an API token in the OS keychain reading from stdin")
     args = parser.parse_args()
@@ -177,6 +179,11 @@ def _main():
         args.no_color = True
     if args.interval <= 0:
         parser.error("--interval must be greater than 0")
+
+    if args.init_config:
+        path = limitlens_config_path()
+        auto_detect_providers(path, write=True)
+        return
 
     tool_label = {
         "codex": "Codex quota",

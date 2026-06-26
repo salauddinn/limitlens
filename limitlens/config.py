@@ -191,7 +191,7 @@ def load_limitlens_config():
         validate_config_types(user_config)
         config = deep_merge(config, user_config)
     else:
-        auto_config = auto_detect_providers(path)
+        auto_config = auto_detect_providers(path, write=False)
         if auto_config:
             config = deep_merge(config, auto_config)
 
@@ -355,8 +355,13 @@ def reset_custom_tool_spend(config_path):
     return True
 
 
-def auto_detect_providers(path):
-    """Scan the local system for installed providers and write an initial config."""
+def auto_detect_providers(path, write=True):
+    """Scan the local system for installed providers.
+
+    When ``write`` is true, also write an initial config file to ``path``.
+    Normal config loading keeps this read-only so status checks never mutate the
+    user's config unexpectedly.
+    """
     import sys
     import shutil
 
@@ -397,7 +402,7 @@ def auto_detect_providers(path):
     check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))
     check("commandcode", False)
 
-    is_interactive = "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
+    is_interactive = write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
 
     if is_interactive:
         sys.stderr.write("\033[36m[LimitLens]\033[0m First run setup.\n")
@@ -437,16 +442,16 @@ def auto_detect_providers(path):
             if key in detected:
                 detected[key]["enabled"] = available[key]
 
-    try:
-        dir_path = os.path.dirname(path)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(detected, f, indent=2)
+    if write:
+        try:
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+            atomic_write_json(path, detected)
 
-        if "--json" not in sys.argv:
-            sys.stderr.write(f"\033[36m[LimitLens]\033[0m Config written to: {path}\n\n")
-    except OSError:
-        pass
+            if "--json" not in sys.argv:
+                sys.stderr.write(f"\033[36m[LimitLens]\033[0m Config written to: {path}\n\n")
+        except OSError:
+            pass
 
     return detected

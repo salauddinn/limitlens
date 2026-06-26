@@ -108,6 +108,7 @@ limitlens --waste    # Show waste report and Time-To-Exhaustion (TTX) projection
 limitlens --usage    # Show usage history, including observed Amp dollar spend
 limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
 limitlens --store-token pioneer # Securely store an API token in the OS keychain (prompts securely)
+limitlens --init-config # Detect installed tools and write ~/.config/limitlens/config.json
 limitlens run "Fix the failing tests" # Launch the best available agent CLI
 limitlens run --dry-run "Plan the migration" # Preview routing without launching an agent
 limitlens-switch     # Switch context interactively and execute a tool in place
@@ -158,7 +159,7 @@ Bring real-time quota visibility to your terminal window.
 
 ## ⚙️ Configuration & Privacy
 
-**Zero-Config Auto-Detection:** On its first run, LimitLens automatically scans your system paths (like `~/.codex-*` or `~/.cursor`) to detect installed tools and creates a default config.
+**Zero-Config Auto-Detection:** When no config exists, LimitLens scans your system paths (like `~/.codex-*` or `~/.cursor`) in memory to detect installed tools without modifying files. To create a starter config explicitly, run `limitlens --init-config`.
 
 No manual configuration is required by default, but LimitLens is highly customizable.
 You can edit the config file at `~/.config/limitlens/config.json` to completely disable any supported provider by setting its `"enabled"` property to `false`:

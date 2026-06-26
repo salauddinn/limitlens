@@ -912,6 +912,16 @@ class TestCLI(unittest.TestCase):
         mock_collect.assert_called_once()
         mock_subprocess.assert_not_called()
 
+    @patch("limitlens.cli.auto_detect_providers", return_value={})
+    def test_init_config_writes_explicitly(self, mock_auto_detect):
+        test_args = ["limitlens", "--init-config"]
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.limitlens_config_path", return_value="/tmp/limitlens-test-config.json"), \
+             redirect_stdout(io.StringIO()):
+            main()
+
+        mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True)
+
 
 class TestCLIThreadPool(unittest.TestCase):
     @patch("limitlens.cli.ThreadPoolExecutor")
