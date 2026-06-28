@@ -527,17 +527,42 @@ def display_codex_text(data, args):
             except ValueError:
                 pass
 
+        def sort_key(lim):
+            l = lim['label']
+            return 0 if l == '5h' else (1 if l == 'weekly' else 2)
+        visible_limits.sort(key=sort_key)
+
+        parts = []
+        soonest_rst = None
+        soonest_stale_hint = ""
+        soonest_is_stale = False
+
         for lim in visible_limits:
             pct = lim["used_percent"]
             left = lim["left_percent"]
             rst = lim["reset_time_fmt"]
-            b = bar(pct, no_color=getattr(args, 'no_color', False))
-            stale_hint = "  ⟲" if lim.get("is_stale") else ""
+            is_stale = lim.get("is_stale", False)
+            lbl = lim['label']
+
+            w_lbl = "h" if lbl == "5h" else "w" if lbl == "weekly" else lbl
+
+            if lbl == "5h" or not soonest_rst:
+                soonest_rst = rst
+                soonest_stale_hint = "  ⟲" if is_stale else ""
+                soonest_is_stale = is_stale
+
+            b = bar(pct, width=6, no_color=getattr(args, 'no_color', False))
+            parts.append(f"[{b}] {w_lbl} {left:4.0f}%")
+
+        if parts:
+            parts_str = "   ".join(parts)
+            if not soonest_rst:
+                soonest_rst = ""
             if getattr(args, 'no_color', False):
-                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {rst}{stale_hint}")
+                print(f"    quota     {parts_str}  {soonest_rst}{soonest_stale_hint}")
             else:
-                stale_color = "\033[33m" if lim.get("is_stale") else "\033[90m"
-                print(f"    {lim['label']:<9} {b}  {left:5.1f}% left  {stale_color}{rst}{stale_hint}\033[0m")
+                stale_color = "\033[33m" if soonest_is_stale else "\033[90m"
+                print(f"    quota     {parts_str}  {stale_color}{soonest_rst}{soonest_stale_hint}\033[0m")
 
         tokens = acc.get("tokens")
         if tokens:

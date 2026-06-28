@@ -307,8 +307,14 @@ class LimitLensApp(rumps.App):
         for part in row.get("window_parts") or []:
             pct = cls._safe_float(part.get("pct_left"))
             pct_str = "n/a" if pct is None else f"{cls._format_number(pct)}%"
-            parts.append(f"{part.get('window_label')} {pct_str}")
-        return " · ".join(parts)
+            w_lbl = part.get('window_label')
+            if w_lbl == "5h":
+                w_lbl = "h"
+            elif w_lbl == "week":
+                w_lbl = "w"
+            bar = cls._bar(pct, width=6)
+            parts.append(f"[{bar}] {w_lbl} {pct_str}")
+        return "   ".join(parts)
 
     @classmethod
     def _group_antigravity_window_rows(cls, rows):
@@ -478,11 +484,10 @@ class LimitLensApp(rumps.App):
         
         window_parts = self._format_window_parts(row)
         if window_parts:
-            extra_str = f"{window_parts}{status_suffix}"
+            return f"{icon} {status_dot} {title_str:<24} {window_parts} {status_suffix}".rstrip()
         else:
             extra_str = f"({ratio_str}){status_suffix}" if ratio_str != "?" else status_suffix.strip()
-        
-        return f"{icon} {status_dot} {title_str:<24} [{bar}]  {pct_str:>4}   {extra_str}"
+            return f"{icon} {status_dot} {title_str:<24} [{bar}]  {pct_str:>4}   {extra_str}"
 
     def _format_usage_compact(self, row):
         pct = row.get("pct_left")
@@ -569,10 +574,20 @@ class LimitLensApp(rumps.App):
             for lim in acc.get("limits", []):
                 label = lim.get("label", "limit")
                 pct = self._safe_float(lim.get("left_percent"))
+                
+                window_label = None
+                display_label = "quota"
+                if label == "5h":
+                    window_label = "5h"
+                elif label == "weekly":
+                    window_label = "week"
+                
                 rows.append(self._row(
-                    "Codex", acc_name, label, pct,
+                    "Codex", acc_name, f"quota ({label})" if window_label else label, pct,
                     remaining=lim.get("remaining"), total=lim.get("total"), unit=lim.get("unit"),
                     notify_id=f"codex-{acc_name}-{label}", notify_label=f"Codex ({acc_name}) {label}",
+                    display_group=f"codex-{acc_name}" if window_label else None,
+                    display_label=display_label, window_label=window_label,
                 ))
                 check_low_quota(f"codex-{acc_name}-{label}", f"Codex ({acc_name}) {label}", pct)
 

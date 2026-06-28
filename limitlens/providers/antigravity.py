@@ -1228,33 +1228,56 @@ def display_antigravity_text(data, args):
                 except Exception:
                     secs = 0
                 return (lt_rank, secs)
-            fam_models.sort(key=sort_key)
-
+            models_by_label = {}
             for m in fam_models:
-                pct_left = m["pct_left"]
-                pct_used = 100.0 - pct_left
-                rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
+                models_by_label.setdefault(m["label"], []).append(m)
 
-                limit_type = m.get("limit_type", "unknown")
-                if limit_type == "weekly":
-                    limit_label = "weekly"
-                elif limit_type == "5h window":
-                    limit_label = "5h window"
-                else:
-                    limit_label = "unknown limit"
+            for label, group in models_by_label.items():
+                group.sort(key=sort_key)
+                
+                parts = []
+                soonest_rst = None
+                soonest_secs = float('inf')
+
+                for m in group:
+                    pct_left = m["pct_left"]
+                    pct_used = 100.0 - pct_left
+                    rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
+                    limit_type = m.get("limit_type", "unknown")
+
                     try:
                         rt = parse_to_utc(m.get("reset_time"))
-                        now = datetime.now(timezone.utc)
-                        if (rt - now).total_seconds() > 86400:
-                            limit_label = "weekly"
-                        else:
-                            limit_label = "5h window"
+                        secs = (rt - datetime.now(timezone.utc)).total_seconds()
+                        if secs < soonest_secs:
+                            soonest_secs = secs
+                            soonest_rst = rst
                     except Exception:
-                        pass  # nosec B110
+                        if not soonest_rst:
+                            soonest_rst = rst
 
-                b = bar(pct_used, no_color=getattr(args, 'no_color', False))
-                pct_fmt = f"{pct_left:5.1f}%" if is_verbose(args) else f"{pct_left:5.0f}%"
+                    if limit_type == "weekly":
+                        w_lbl = "w"
+                    elif limit_type == "5h window":
+                        w_lbl = "h"
+                    else:
+                        w_lbl = "w"
+                        try:
+                            rt = parse_to_utc(m.get("reset_time"))
+                            now = datetime.now(timezone.utc)
+                            if (rt - now).total_seconds() <= 86400:
+                                w_lbl = "h"
+                        except Exception:
+                            pass  # nosec B110
+
+                    b = bar(pct_used, width=6, no_color=getattr(args, 'no_color', False))
+                    pct_fmt = f"{pct_left:.1f}%" if is_verbose(args) else f"{pct_left:.0f}%"
+                    parts.append(f"[{b}] {w_lbl} {pct_fmt:>4}")
+
+                parts_str = "   ".join(parts)
+                if not soonest_rst:
+                    soonest_rst = ""
+
                 if getattr(args, 'no_color', False):
-                    print(f"      {limit_label:<14} {b}  {pct_fmt} left  {rst}")
+                    print(f"      {label:<14} {parts_str}  {soonest_rst}")
                 else:
-                    print(f"      {limit_label:<14} {b}  {pct_fmt} left  \033[90m{rst}\033[0m")
+                    print(f"      {label:<14} {parts_str}  \033[90m{soonest_rst}\033[0m")

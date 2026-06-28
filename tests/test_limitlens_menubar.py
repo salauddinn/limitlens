@@ -391,8 +391,8 @@ def test_fetch_data_groups_antigravity_5h_and_weekly_rows(app):
 
     menu_text = "\n".join(str(item) for item in app._pending_menu_items)
     assert menu_text.count("Gemini") == 1
-    assert "5h 80%" in menu_text
-    assert "week 40%" in menu_text
+    assert "h 80%" in menu_text
+    assert "w 40%" in menu_text
     assert "Gemini (5h)" not in menu_text
     assert "Gemini (weekly)" not in menu_text
 
