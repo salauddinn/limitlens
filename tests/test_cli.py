@@ -922,6 +922,50 @@ class TestCLI(unittest.TestCase):
 
         mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=True, interactive=True)
 
+    @patch("limitlens.cli.auto_detect_providers")
+    @patch("limitlens.cli.get_codex_data")
+    def test_doctor_prints_readiness_without_fetching_provider_data(self, mock_codex, mock_auto_detect):
+        config = {
+            "codex": {"enabled": True},
+            "amp": {"enabled": True},
+            "antigravity": {"enabled": False},
+            "commandcode": {"enabled": False},
+            "custom_tools": {"enabled": False},
+            "pioneer": {"enabled": False},
+            "agentrouter": {"enabled": False},
+            "opencode": {"enabled": False},
+            "pi": {"enabled": False},
+            "cursor": {"enabled": False},
+        }
+        detected = {
+            "codex": {"enabled": True},
+            "amp": {"enabled": False},
+            "antigravity": {"enabled": True},
+            "commandcode": {"enabled": False},
+        }
+        mock_auto_detect.return_value = detected
+
+        test_args = ["limitlens", "doctor"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=config), \
+             patch("limitlens.cli.limitlens_config_path", return_value="/tmp/limitlens-test-config.json"), \
+             redirect_stdout(buf):
+            main()
+
+        output = buf.getvalue()
+        self.assertIn("LimitLens Doctor", output)
+        self.assertIn("Codex", output)
+        self.assertIn("ready", output)
+        self.assertIn("Amp", output)
+        self.assertIn("enabled, not detected", output)
+        self.assertIn("Antigravity", output)
+        self.assertIn("detected, disabled", output)
+        self.assertIn("Next: run `limitlens`", output)
+        self.assertNotIn("/tmp/limitlens-test-config.json", output)
+        mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=False, interactive=False)
+        mock_codex.assert_not_called()
+
 
 class TestCLIThreadPool(unittest.TestCase):
     @patch("limitlens.cli.ThreadPoolExecutor")

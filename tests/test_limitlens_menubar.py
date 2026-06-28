@@ -151,6 +151,25 @@ def test_fetch_data_sets_refreshing_state(app):
     mock_thread.assert_called_once()
 
 
+def test_fetch_data_allows_slow_normal_refresh(app):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps({"recommendations": {"hard": []}})
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc) as mock_run:
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+
+        mock_thread.side_effect = mock_thread_init
+
+        app.fetch_data()
+
+    assert mock_run.call_args.kwargs["timeout"] >= 30
+
+
 def test_fetch_data_runs_queued_manual_refresh_after_current_fetch(app):
     mock_proc = MagicMock()
     mock_proc.returncode = 0
@@ -338,6 +357,44 @@ def test_fetch_data_success_with_quotas(app):
 
         mock_notify.assert_not_called()
         assert "codex-Acc1-Reqs" not in app._notified_set
+
+
+def test_fetch_data_groups_antigravity_5h_and_weekly_rows(app):
+    mock_data = {
+        "recommendations": {"hard": []},
+        "antigravity": {
+            "profiles": [
+                {
+                    "name": "main",
+                    "status": "running",
+                    "models": [
+                        {"label": "Gemini", "limit_type": "5h window", "pct_left": 80.0},
+                        {"label": "Gemini", "limit_type": "weekly", "pct_left": 40.0},
+                    ],
+                }
+            ]
+        },
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps(mock_data)
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc):
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+
+        mock_thread.side_effect = mock_thread_init
+        app.fetch_data()
+
+    menu_text = "\n".join(str(item) for item in app._pending_menu_items)
+    assert menu_text.count("Gemini") == 1
+    assert "5h 80%" in menu_text
+    assert "week 40%" in menu_text
+    assert "Gemini (5h)" not in menu_text
+    assert "Gemini (weekly)" not in menu_text
 
 def test_fetch_data_suppresses_initial_low_quota_notification(app):
     mock_data = {

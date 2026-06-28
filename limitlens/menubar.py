@@ -15,6 +15,9 @@ import threading
 import time
 from datetime import datetime
 
+MENUBAR_REFRESH_TIMEOUT_SECONDS = 45
+MENUBAR_SYNC_CODEX_TIMEOUT_SECONDS = 90
+
 _RUMPS_AVAILABLE = True
 try:
     import rumps
@@ -274,7 +277,8 @@ class LimitLensApp(rumps.App):
 
     @classmethod
     def _row(cls, section, name, label, pct_left, remaining=None, total=None, unit=None,
-             status=None, used=None, pct_used=None, notify_id=None, notify_label=None):
+             status=None, used=None, pct_used=None, notify_id=None, notify_label=None,
+             display_group=None, display_label=None, window_label=None):
         pct_left = cls._safe_float(pct_left)
         pct_used = cls._safe_float(pct_used)
         if pct_used is None and pct_left is not None:
@@ -292,7 +296,52 @@ class LimitLensApp(rumps.App):
             "used": used,
             "notify_id": notify_id,
             "notify_label": notify_label or f"{section} {label}",
+            "display_group": display_group,
+            "display_label": display_label or label,
+            "window_label": window_label,
         }
+
+    @classmethod
+    def _format_window_parts(cls, row):
+        parts = []
+        for part in row.get("window_parts") or []:
+            pct = cls._safe_float(part.get("pct_left"))
+            pct_str = "n/a" if pct is None else f"{cls._format_number(pct)}%"
+            parts.append(f"{part.get('window_label')} {pct_str}")
+        return " · ".join(parts)
+
+    @classmethod
+    def _group_antigravity_window_rows(cls, rows):
+        grouped = {}
+        display_rows = []
+        order = {"5h": 0, "week": 1}
+
+        for row in rows:
+            group_key = row.get("display_group")
+            window_label = row.get("window_label")
+            if not group_key or not window_label:
+                display_rows.append(row)
+                continue
+
+            pct_left = cls._safe_float(row.get("pct_left"))
+            if group_key not in grouped:
+                combined = dict(row)
+                combined["label"] = row.get("display_label") or row.get("label")
+                combined["window_parts"] = []
+                grouped[group_key] = combined
+                display_rows.append(combined)
+
+            combined = grouped[group_key]
+            combined["window_parts"].append({
+                "window_label": window_label,
+                "pct_left": pct_left,
+            })
+            combined["window_parts"].sort(key=lambda part: order.get(part.get("window_label"), 99))
+            current_pct = cls._safe_float(combined.get("pct_left"))
+            if current_pct is None or (pct_left is not None and pct_left < current_pct):
+                combined["pct_left"] = pct_left
+
+        return display_rows
 
     def _format_title(self, display_items):
         visible = display_items[:self._max_title_items]
@@ -427,7 +476,11 @@ class LimitLensApp(rumps.App):
         status = row.get("status")
         status_suffix = f" [{status}]" if status and status != "running" else ""
         
-        extra_str = f"({ratio_str}){status_suffix}" if ratio_str != "?" else status_suffix.strip()
+        window_parts = self._format_window_parts(row)
+        if window_parts:
+            extra_str = f"{window_parts}{status_suffix}"
+        else:
+            extra_str = f"({ratio_str}){status_suffix}" if ratio_str != "?" else status_suffix.strip()
         
         return f"{icon} {status_dot} {title_str:<24} [{bar}]  {pct_str:>4}   {extra_str}"
 
@@ -438,6 +491,9 @@ class LimitLensApp(rumps.App):
         label = str(row.get("label") or "")
         icon = self._tool_icon(section=section)
         title = label if section.lower() in name.lower() else f"{name} · {label}"
+        window_parts = self._format_window_parts(row)
+        if window_parts:
+            return f"{icon} {self._compact(title, 30)} · {window_parts}"
         if pct is None:
             if row.get("used") is not None:
                 unit = str(row.get("unit") or "").strip()
@@ -447,6 +503,7 @@ class LimitLensApp(rumps.App):
         return f"{icon} {self._compact(title, 30)} · {pct:.0f}%"
 
     def _make_all_quotas_menu(self, rows):
+        rows = self._group_antigravity_window_rows(rows)
         sorted_rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
         return ("submenu", "All Quotas", [self._format_usage_row(row) for row in sorted_rows])
 
@@ -545,18 +602,24 @@ class LimitLensApp(rumps.App):
                 if model.get("visible", True) is False:
                     continue
                 label = model.get("label", "model")
+                display_label = label
+                window_label = None
                 # Each group exposes a 5h and a weekly bucket sharing the same
                 # label; append the window so rows (and notify ids) stay distinct.
                 limit_type = model.get("limit_type")
                 if limit_type == "5h window":
                     label = f"{label} (5h)"
+                    window_label = "5h"
                 elif limit_type == "weekly":
                     label = f"{label} (weekly)"
+                    window_label = "week"
                 pct = self._safe_float(model.get("pct_left"))
                 rows.append(self._row(
                     "Antigrav", prof_name, label, pct,
                     remaining=pct, total=100, unit="% left", status=status,
                     notify_id=f"ag-{prof_name}-{label}", notify_label=f"Antigravity ({prof_name}) {label}",
+                    display_group=f"ag-{prof_name}-{display_label}" if window_label else None,
+                    display_label=display_label, window_label=window_label,
                 ))
                 if status == "running":
                     check_low_quota(f"ag-{prof_name}-{label}", f"Antigravity ({prof_name}) {label}", pct)
@@ -610,6 +673,7 @@ class LimitLensApp(rumps.App):
 
     def _build_menu_items(self, data, rows):
         menu_items = []
+        display_rows = self._group_antigravity_window_rows(rows)
 
         def add_header(title):
             if menu_items:
@@ -621,7 +685,7 @@ class LimitLensApp(rumps.App):
         rec_source = fresh_recs or recs
         formatted_recs = [self._format_recommendation_compact(r) for r in rec_source[:2]]
         formatted_recs = [r for r in formatted_recs if r]
-        low_rows = [r for r in rows if r.get("pct_left") is not None and r["pct_left"] < self._notify_warn_pct]
+        low_rows = [r for r in display_rows if r.get("pct_left") is not None and r["pct_left"] < self._notify_warn_pct]
         if formatted_recs:
             add_header("✨ Recommended")
             menu_items.extend(formatted_recs)
@@ -631,7 +695,7 @@ class LimitLensApp(rumps.App):
             for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3]:
                 menu_items.append(self._format_usage_compact(row))
 
-        if rows:
+        if display_rows:
             if menu_items:
                 menu_items.append(rumps.separator)
             menu_items.append(self._make_all_quotas_menu(rows))
@@ -649,7 +713,7 @@ class LimitLensApp(rumps.App):
             self._item_copy_status,
         ])
 
-        self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, rows)
+        self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, display_rows)
 
         return menu_items
 
@@ -666,11 +730,11 @@ class LimitLensApp(rumps.App):
         def worker():
             try:
                 cmd = [sys.executable, "-m", "limitlens", "--json"]
-                timeout = 15
+                timeout = MENUBAR_REFRESH_TIMEOUT_SECONDS
                 if sync_codex:
                     # Forcing a Codex sync spawns codex exec per account, so allow more time.
                     cmd.append("--sync-codex")
-                    timeout = 60
+                    timeout = MENUBAR_SYNC_CODEX_TIMEOUT_SECONDS
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)  # nosec B603
 
                 if proc.returncode == 0:

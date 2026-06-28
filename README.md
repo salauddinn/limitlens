@@ -23,6 +23,16 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 
 ---
 
+## Start here
+
+1. Install LimitLens.
+2. Run `limitlens doctor` to check which providers are ready.
+3. Run `limitlens` to see all quotas.
+4. Run `limitlens suggest` to pick the best tool for your next task.
+5. Optional: enable the macOS menubar app or iTerm2 widget.
+
+---
+
 ## ✨ Features
 
 - **📊 Unified Dashboard:** Instantly view remaining headroom, reset times, and limits across all your installed accounts and profiles.
@@ -100,6 +110,7 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 Monitor everything with a single command:
 
 ```sh
+limitlens doctor     # Check local provider readiness and next setup steps
 limitlens            # Show full status across all tracked AI tools
 limitlens --tool codex  # Filter output to a specific tool
 limitlens --watch    # Keep alive and refresh every 5 seconds

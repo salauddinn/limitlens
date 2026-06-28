@@ -57,6 +57,48 @@ def log_error(e, context=""):
     except Exception:
         pass
 
+
+def _display_doctor(config):
+    import os
+    import sys
+
+    detected = auto_detect_providers(limitlens_config_path(), write=False, interactive=False)
+    providers = [
+        ("codex", "Codex", True),
+        ("amp", "Amp", True),
+        ("antigravity", "Antigravity", True),
+        ("opencode", "OpenCode", True),
+        ("pi", "Pi", False),
+        ("claude", "Claude", True),
+        ("cursor", "Cursor", True),
+        ("pioneer", "Pioneer", False),
+        ("agentrouter", "AgentRouter", False),
+        ("commandcode", "CommandCode", False),
+        ("custom_tools", "Custom", False),
+    ]
+
+    def status_for(key, default):
+        configured = is_provider_enabled(config, key, default=default)
+        found = is_provider_enabled(detected, key, default=False)
+        if configured and found:
+            return "ready"
+        if configured:
+            return "enabled, not detected"
+        if found:
+            return "detected, disabled"
+        return "not configured"
+
+    rows = [(label, status_for(key, default)) for key, label, default in providers]
+    rows.append(("Menubar", "available" if sys.platform == "darwin" else "macOS only"))
+    widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "iterm_widget.py")
+    rows.append(("iTerm widget", "available" if os.path.exists(widget_path) else "not installed"))
+
+    width = max(len(name) for name, _ in rows)
+    print("LimitLens Doctor\n")
+    for name, status in rows:
+        print(f"{name:<{width}}  {status}")
+    print("\nNext: run `limitlens` for the dashboard or `limitlens suggest` for routing advice.")
+
 def _run_subcommand(argv):
     parser = argparse.ArgumentParser(
         prog="limitlens run",
@@ -123,6 +165,7 @@ def _main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Common commands:
   limitlens run "Build a feature"   Launch the best AI agent CLI
+  limitlens doctor                  Check local provider readiness
   limitlens suggest                 Which AI should I use now?
   limitlens usage                   Show day-wise usage
   limitlens all                     Show hidden/empty providers too
@@ -135,7 +178,7 @@ def _main():
         from importlib.metadata import version as _pkg_version
         _ver = _pkg_version("limitlens")
     parser.add_argument("--version", action="version", version=f"limitlens {_ver}")
-    parser.add_argument("command", nargs="?", choices=["suggest", "s", "usage", "u", "all", "a", "watch", "w"], help=argparse.SUPPRESS)
+    parser.add_argument("command", nargs="?", choices=["suggest", "s", "usage", "u", "all", "a", "watch", "w", "doctor", "d"], help=argparse.SUPPRESS)
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
     parser.add_argument("--plain", action="store_true", help="Plain output: no color and fewer decorations")
@@ -200,6 +243,10 @@ def _main():
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
+
+    if args.command in ("doctor", "d"):
+        _display_doctor(config)
+        return
 
     if args.refresh_codex:
         from .providers.codex import refresh_all_accounts
