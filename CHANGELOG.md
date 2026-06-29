@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-29
+
+### Added
+- Add `limitlens doctor` readiness checks and a sanitized `doctor --report` output for support/debugging.
+- Add configurable macOS menubar eye-break reminders every 20 minutes by default.
+- Add product-next ideas documentation for follow-up planning.
+
+### Changed
+- Improve menubar UX with overview, all-quota, doctor, and actions submenus.
+- Group Codex and Antigravity 5-hour and weekly quota windows into compact paired rows.
+- Surface Codex stale-refresh metadata and manual refresh state more clearly.
+
+### Fixed
+- Keep Antigravity low-quota notifications distinct for separate 5-hour and weekly windows.
+- Sanitize menubar refresh failures before displaying or copying status text.
+
 ## [1.6.1] - 2026-06-26
 
 ### Fixed

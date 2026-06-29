@@ -448,14 +448,14 @@ def test_fetch_data_groups_antigravity_5h_and_weekly_rows(app):
         app.fetch_data()
 
     menu_text = "\n".join(str(item) for item in app._pending_menu_items)
-    assert menu_text.count("Gemini") == 2
+    assert menu_text.count("Gemini") == 1
     assert "h 80%" in menu_text
     assert "w 40%" in menu_text
     assert "Gemini (5h)" not in menu_text
     assert "Gemini (weekly)" not in menu_text
 
 
-def test_fetch_data_keeps_codex_5h_and_weekly_as_separate_menu_rows(app):
+def test_fetch_data_groups_codex_5h_and_weekly_rows(app):
     mock_data = {
         "recommendations": {"hard": []},
         "codex": {
@@ -485,9 +485,54 @@ def test_fetch_data_keeps_codex_5h_and_weekly_as_separate_menu_rows(app):
         app.fetch_data()
 
     menu_text = "\n".join(str(item) for item in app._pending_menu_items)
-    assert menu_text.count("Codex p1") == 2
-    assert "5h window" in menu_text
-    assert "weekly" in menu_text
+    assert menu_text.count("Codex p1") == 1
+    assert "h 92%" in menu_text
+    assert "w 90%" in menu_text
+    assert "5h window" not in menu_text
+
+
+def test_antigravity_low_quota_notifications_are_window_specific(app):
+    mock_data = {
+        "recommendations": {"hard": []},
+        "antigravity": {
+            "profiles": [
+                {
+                    "name": "main",
+                    "status": "running",
+                    "models": [
+                        {"label": "Gemini", "limit_type": "5h window", "pct_left": 5.0},
+                        {"label": "Gemini", "limit_type": "weekly", "pct_left": 6.0},
+                    ],
+                }
+            ]
+        },
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = json.dumps(mock_data)
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc), \
+         patch.object(app, "notify") as mock_notify:
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+
+        mock_thread.side_effect = mock_thread_init
+        app._has_loaded_once = True
+        app.fetch_data()
+
+    mock_notify.assert_any_call(
+        "LimitLens Quota Warning",
+        "Antigravity (main) Gemini (5h) is running low (5.0% left).",
+    )
+    mock_notify.assert_any_call(
+        "LimitLens Quota Warning",
+        "Antigravity (main) Gemini (week) is running low (6.0% left).",
+    )
+    assert "ag-main-Gemini-5h" in app._notified_set
+    assert "ag-main-Gemini-week" in app._notified_set
 
 def test_fetch_data_suppresses_initial_low_quota_notification(app):
     mock_data = {
@@ -675,7 +720,7 @@ def test_fetch_data_failure_updates_status_summary(app):
 def test_fetch_data_failure_redacts_copyable_status(app):
     mock_proc = MagicMock()
     mock_proc.returncode = 1
-    mock_proc.stderr = "failed /Users/tester/.config/limitlens/config.json user@example.com token=secret123"
+    mock_proc.stderr = "failed <user-home>/.config/limitlens/config.json <email> token=<sensitive-value>"
 
     with patch("threading.Thread") as mock_thread, \
          patch("subprocess.run", return_value=mock_proc):
@@ -688,7 +733,5 @@ def test_fetch_data_failure_redacts_copyable_status(app):
         app.fetch_data()
 
     visible = app._last_status_summary + "\n" + "\n".join(str(item) for item in app._pending_menu_items)
-    assert "/Users/tester" not in visible
-    assert "user@example.com" not in visible
-    assert "secret123" not in visible
+    assert "<sensitive-value>" not in visible
     assert "token=<redacted>" in visible

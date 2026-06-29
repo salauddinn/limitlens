@@ -657,14 +657,14 @@ class LimitLensApp(rumps.App):
             for lim in acc.get("limits", []):
                 label = lim.get("label", "limit")
                 pct = self._safe_float(lim.get("left_percent"))
-                
+
                 window_label = None
                 display_label = "quota"
                 if label == "5h window":
                     window_label = "5h"
                 elif label == "weekly":
                     window_label = "week"
-                
+
                 rows.append(self._row(
                     "Codex", acc_name, label, pct,
                     remaining=lim.get("remaining"), total=lim.get("total"), unit=lim.get("unit"),
@@ -721,7 +721,11 @@ class LimitLensApp(rumps.App):
                     display_label=display_label, window_label=window_label,
                 ))
                 if status == "running":
-                    check_low_quota(f"ag-{prof_name}-{label}", f"Antigravity ({prof_name}) {label}", pct)
+                    check_low_quota(
+                        f"ag-{prof_name}-{label}{notify_suffix}",
+                        f"Antigravity ({prof_name}) {notify_label}",
+                        pct,
+                    )
 
         # OpenCode / credits
         op_data = data.get("opencode") or {}
@@ -783,7 +787,7 @@ class LimitLensApp(rumps.App):
 
         menu_items.append(self._make_overview_menu(formatted_recs, low_rows))
         if display_rows:
-            menu_items.append(self._make_all_quotas_menu(rows))
+            menu_items.append(self._make_all_quotas_menu(display_rows))
         menu_items.append(self._make_doctor_menu())
         menu_items.append(self._make_actions_menu())
 
