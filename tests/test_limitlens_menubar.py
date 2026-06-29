@@ -44,7 +44,7 @@ def test_init(app):
     assert app.title == "⏳ Loading..."
     assert len(app.menu) == 4
     assert not app._is_fetching
-    assert not app._queued_refresh_sync_codex
+    assert app._queued_sync_codex is None
     assert app._pending_title is None
 
 def test_refresh_and_on_refresh(app):
@@ -132,15 +132,17 @@ def test_copy_status_uses_readable_summary(app):
     assert app._pending_title == "✓ Status copied"
 
 def test_fetch_data_already_fetching(app):
+    import threading
     app._is_fetching = True
+    app._fetch_lock = threading.Lock()
     with patch("threading.Thread") as mock_thread:
         app.fetch_data()
         mock_thread.assert_not_called()
-        assert not app._queued_refresh_sync_codex
+        assert app._queued_sync_codex is False
 
         app.fetch_data(sync_codex=True)
         mock_thread.assert_not_called()
-        assert app._queued_refresh_sync_codex
+        assert app._queued_sync_codex is True
 
 
 def test_fetch_data_sets_refreshing_state(app):
@@ -185,7 +187,7 @@ def test_fetch_data_runs_queued_manual_refresh_after_current_fetch(app):
             nonlocal calls
             calls += 1
             if calls == 1:
-                app._queued_refresh_sync_codex = True
+                app._queued_sync_codex = True
             target()
             return MagicMock()
 
@@ -196,7 +198,7 @@ def test_fetch_data_runs_queued_manual_refresh_after_current_fetch(app):
     assert mock_run.call_count == 2
     second_cmd = mock_run.call_args_list[1].args[0]
     assert "--sync-codex" in second_cmd
-    assert not app._queued_refresh_sync_codex
+    assert app._queued_sync_codex is None
 
 
 def test_refresh_actions_use_expected_codex_sync_modes(app):

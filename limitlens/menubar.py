@@ -77,7 +77,8 @@ class LimitLensApp(rumps.App):
         self.menu = [self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
-        self._queued_refresh_sync_codex = False
+        self._queued_sync_codex = None
+        self._fetch_lock = threading.Lock()
         self._pending_title = None
         self._pending_menu_items = None
         self._notified_set = set()
@@ -577,13 +578,13 @@ class LimitLensApp(rumps.App):
                 
                 window_label = None
                 display_label = "quota"
-                if label == "5h":
+                if label == "5h window":
                     window_label = "5h"
                 elif label == "weekly":
                     window_label = "week"
                 
                 rows.append(self._row(
-                    "Codex", acc_name, f"quota ({label})" if window_label else label, pct,
+                    "Codex", acc_name, label, pct,
                     remaining=lim.get("remaining"), total=lim.get("total"), unit=lim.get("unit"),
                     notify_id=f"codex-{acc_name}-{label}", notify_label=f"Codex ({acc_name}) {label}",
                     display_group=f"codex-{acc_name}" if window_label else None,
@@ -733,13 +734,15 @@ class LimitLensApp(rumps.App):
         return menu_items
 
     def fetch_data(self, sync_codex=False):
-        if self._is_fetching:
-            # Do not drop refresh requests made while a slower fetch is running.
-            # Manual refreshes are stronger than timer refreshes because they
-            # request a Codex sync, so preserve that intent for the queued run.
-            self._queued_refresh_sync_codex = self._queued_refresh_sync_codex or bool(sync_codex)
-            return
-        self._is_fetching = True
+        with self._fetch_lock:
+            if self._is_fetching:
+                # Preserve the stronger sync intent. If the queued request
+                # already wants a full sync, keep it. Otherwise use the
+                # incoming sync_codex value.
+                if self._queued_sync_codex is None or sync_codex:
+                    self._queued_sync_codex = sync_codex
+                return
+            self._is_fetching = True
         self._pending_title = "↻ Refreshing…"
 
         def worker():
@@ -825,10 +828,12 @@ class LimitLensApp(rumps.App):
                 except Exception:
                     pass
             finally:
-                self._is_fetching = False
-                if self._queued_refresh_sync_codex:
-                    self._queued_refresh_sync_codex = False
-                    self.fetch_data(sync_codex=True)
+                with self._fetch_lock:
+                    self._is_fetching = False
+                    queued = self._queued_sync_codex
+                    self._queued_sync_codex = None
+                if queued is not None:
+                    self.fetch_data(sync_codex=queued)
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()

@@ -528,8 +528,8 @@ def display_codex_text(data, args):
                 pass
 
         def sort_key(lim):
-            l = lim['label']
-            return 0 if l == '5h' else (1 if l == 'weekly' else 2)
+            label = lim['label']
+            return 0 if label == '5h window' else (1 if label == 'weekly' else 2)
         visible_limits.sort(key=sort_key)
 
         parts = []
@@ -544,9 +544,10 @@ def display_codex_text(data, args):
             is_stale = lim.get("is_stale", False)
             lbl = lim['label']
 
-            w_lbl = "h" if lbl == "5h" else "w" if lbl == "weekly" else lbl
+            w_lbl = "h" if lbl == "5h window" else "w" if lbl == "weekly" else lbl
 
-            if lbl == "5h" or not soonest_rst:
+            is_5h = (lbl == "5h window")
+            if is_5h or not soonest_rst:
                 soonest_rst = rst
                 soonest_stale_hint = "  ⟲" if is_stale else ""
                 soonest_is_stale = is_stale

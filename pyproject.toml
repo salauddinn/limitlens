@@ -34,7 +34,7 @@ keywords = ["ai", "quota", "codex", "amp", "antigravity", "cli", "developer-tool
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=7.0,<9.0",
 ]
 mac = [
     "rumps>=0.4.0",
