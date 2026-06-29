@@ -311,7 +311,10 @@ class LimitLensApp(rumps.App):
     @classmethod
     def _format_window_parts(cls, row):
         parts = []
-        for part in row.get("window_parts") or []:
+        window_parts = row.get("window_parts")
+        if not window_parts and row.get("window_label"):
+            window_parts = [{"window_label": row.get("window_label"), "pct_left": row.get("pct_left")}]
+        for part in window_parts or []:
             pct = cls._safe_float(part.get("pct_left"))
             pct_str = "n/a" if pct is None else f"{cls._format_number(pct)}%"
             w_lbl = part.get('window_label')
@@ -515,7 +518,6 @@ class LimitLensApp(rumps.App):
         return f"{icon} {self._compact(title, 30)} · {pct:.0f}%"
 
     def _make_all_quotas_menu(self, rows):
-        rows = self._group_antigravity_window_rows(rows)
         sorted_rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
         return ("submenu", "All Quotas", [self._format_usage_row(row) for row in sorted_rows])
 
@@ -683,19 +685,20 @@ class LimitLensApp(rumps.App):
                 display_label = label
                 window_label = None
                 # Each group exposes a 5h and a weekly bucket sharing the same
-                # label; append the window so rows (and notify ids) stay distinct.
+                # label; keep the visible label stable and key notifications by
+                # window so rows stay distinct without crowding the menu title.
                 limit_type = model.get("limit_type")
                 if limit_type == "5h window":
-                    label = f"{label} (5h)"
                     window_label = "5h"
                 elif limit_type == "weekly":
-                    label = f"{label} (weekly)"
                     window_label = "week"
                 pct = self._safe_float(model.get("pct_left"))
+                notify_suffix = f"-{window_label}" if window_label else ""
+                notify_label = f"{label} ({window_label})" if window_label else label
                 rows.append(self._row(
                     "Antigrav", prof_name, label, pct,
                     remaining=pct, total=100, unit="% left", status=status,
-                    notify_id=f"ag-{prof_name}-{label}", notify_label=f"Antigravity ({prof_name}) {label}",
+                    notify_id=f"ag-{prof_name}-{label}{notify_suffix}", notify_label=f"Antigravity ({prof_name}) {notify_label}",
                     display_group=f"ag-{prof_name}-{display_label}" if window_label else None,
                     display_label=display_label, window_label=window_label,
                 ))

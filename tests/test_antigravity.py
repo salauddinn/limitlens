@@ -869,6 +869,26 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         args.no_color = True
         ag_mod.display_antigravity_text(data, args)
 
+    @patch("builtins.print")
+    def test_display_antigravity_text_splits_5h_and_weekly_lines(self, mock_print):
+        args = MagicMock()
+        args.verbose = False
+        args.no_color = True
+        args.all = False
+        args.tool = None
+        data = {"profiles": [{"name": "ide", "status": "running", "models": [
+            {"label": "Gemini", "group": "Gemini", "limit_type": "5h window", "pct_left": 80.0, "visible": True},
+            {"label": "Gemini", "group": "Gemini", "limit_type": "weekly", "pct_left": 40.0, "visible": True},
+        ]}]}
+
+        ag_mod.display_antigravity_text(data, args)
+
+        lines = [call.args[0] for call in mock_print.call_args_list if call.args]
+        gemini_lines = [line for line in lines if "Gemini" in line and "[" in line]
+        self.assertEqual(len(gemini_lines), 2)
+        self.assertTrue(any("5h" in line and "80%" in line for line in gemini_lines))
+        self.assertTrue(any("weekly" in line and "40%" in line for line in gemini_lines))
+
 
 class TestAntigravityIgnoredAccounts(unittest.TestCase):
     """Tests for profile_is_ignored and filter_antigravity_profiles."""

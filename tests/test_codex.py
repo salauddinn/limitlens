@@ -713,6 +713,25 @@ class TestCodexEdgeCases(unittest.TestCase):
             ]
         }
         display_codex_text(data, args)
+
+        mock_print.reset_mock()
+        split_data = {
+            "accounts": [
+                {
+                    "name": "p1",
+                    "home": "/home",
+                    "limits": [
+                        {"visible": True, "label": "5h window", "used_percent": 8.0, "left_percent": 92.0, "reset_time_fmt": "4 hours left", "is_stale": False},
+                        {"visible": True, "label": "weekly", "used_percent": 10.0, "left_percent": 90.0, "reset_time_fmt": "6 days left", "is_stale": False},
+                    ],
+                }
+            ]
+        }
+        display_codex_text(split_data, argparse.Namespace(no_color=True, verbose=False, all=False, tool=None))
+        quota_lines = [call.args[0] for call in mock_print.call_args_list if call.args and "quota" in call.args[0]]
+        self.assertEqual(len(quota_lines), 2)
+        self.assertTrue(any("5h" in line and "92%" in line for line in quota_lines))
+        self.assertTrue(any("weekly" in line and "90%" in line for line in quota_lines))
         
         # Test missing path refresh
         with patch("limitlens.providers.codex.shutil.which", return_value=None):

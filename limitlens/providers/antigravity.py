@@ -1240,10 +1240,6 @@ def display_antigravity_text(data, args):
 
             for label, group in models_by_label.items():
                 group.sort(key=sort_key)
-                
-                parts = []
-                soonest_rst = None
-                soonest_secs = float('inf')
 
                 for m in group:
                     pct_left = m["pct_left"]
@@ -1251,39 +1247,24 @@ def display_antigravity_text(data, args):
                     rst = fmt_reset(m.get("reset_time"), is_stale=is_stale)
                     limit_type = m.get("limit_type", "unknown")
 
-                    try:
-                        rt = parse_to_utc(m.get("reset_time"))
-                        secs = (rt - datetime.now(timezone.utc)).total_seconds()
-                        if secs < soonest_secs:
-                            soonest_secs = secs
-                            soonest_rst = rst
-                    except Exception:
-                        if not soonest_rst:
-                            soonest_rst = rst
-
                     if limit_type == "weekly":
-                        w_lbl = "w"
+                        w_lbl = "weekly"
                     elif limit_type == "5h window":
-                        w_lbl = "h"
+                        w_lbl = "5h"
                     else:
-                        w_lbl = "w"
+                        w_lbl = limit_type
                         try:
                             rt = parse_to_utc(m.get("reset_time"))
                             now = datetime.now(timezone.utc)
                             if (rt - now).total_seconds() <= 86400:
-                                w_lbl = "h"
+                                w_lbl = "5h"
                         except Exception:
                             pass  # nosec B110
 
                     b = bar(pct_used, width=6, no_color=getattr(args, 'no_color', False))
                     pct_fmt = f"{pct_left:.1f}%" if is_verbose(args) else f"{pct_left:.0f}%"
-                    parts.append(f"[{b}] {w_lbl} {pct_fmt:>4}")
 
-                parts_str = "   ".join(parts)
-                if not soonest_rst:
-                    soonest_rst = ""
-
-                if getattr(args, 'no_color', False):
-                    print(f"      {label:<14} {parts_str}  {soonest_rst}")
-                else:
-                    print(f"      {label:<14} {parts_str}  \033[90m{soonest_rst}\033[0m")
+                    if getattr(args, 'no_color', False):
+                        print(f"      {label:<14} {w_lbl:<6} [{b}] {pct_fmt:>4}  {rst}")
+                    else:
+                        print(f"      {label:<14} {w_lbl:<6} [{b}] {pct_fmt:>4}  \033[90m{rst}\033[0m")
