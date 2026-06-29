@@ -94,6 +94,46 @@ def test_notify(app):
         assert "Test Title" in args
 
 
+def test_init_starts_eye_break_timer_when_enabled():
+    cfg = {
+        "menubar_refresh_seconds": 300,
+        "notify_warn_pct": 30.0,
+        "notify_critical_pct": 10.0,
+        "eye_break_enabled": True,
+        "eye_break_minutes": 20,
+    }
+    with patch("limitlens.config.load_display_config", return_value=cfg), \
+         patch.object(LimitLensApp, "_start_refresh_timer"), \
+         patch.object(LimitLensApp, "_start_eye_break_timer") as mock_eye_timer:
+        app = LimitLensApp()
+
+    assert app._eye_break_interval == 1200
+    mock_eye_timer.assert_called_once_with()
+
+
+def test_init_skips_eye_break_timer_when_disabled():
+    cfg = {
+        "menubar_refresh_seconds": 300,
+        "notify_warn_pct": 30.0,
+        "notify_critical_pct": 10.0,
+        "eye_break_enabled": False,
+        "eye_break_minutes": 20,
+    }
+    with patch("limitlens.config.load_display_config", return_value=cfg), \
+         patch.object(LimitLensApp, "_start_refresh_timer"), \
+         patch.object(LimitLensApp, "_start_eye_break_timer") as mock_eye_timer:
+        LimitLensApp()
+
+    mock_eye_timer.assert_not_called()
+
+
+def test_send_eye_break_reminder(app):
+    with patch.object(app, "notify") as mock_notify:
+        app._send_eye_break_reminder()
+
+    mock_notify.assert_called_once_with("Eye Break", "Close your eyes for 20 seconds.")
+
+
 def test_open_config_creates_missing_config_then_opens(app):
     with patch("limitlens.config.limitlens_config_path", return_value="/tmp/limitlens-test-config.json"), \
          patch("limitlens.menubar.os.path.exists", return_value=False), \

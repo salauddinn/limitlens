@@ -111,6 +111,8 @@
   "display": {
     "auto_hide_enabled": true,
     "auto_hide_days": 1,
-    "amp_usable_pct": 30.0
+    "amp_usable_pct": 30.0,
+    "eye_break_enabled": true,
+    "eye_break_minutes": 20
   }
 }

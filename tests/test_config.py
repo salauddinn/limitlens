@@ -68,6 +68,8 @@ class TestDisplayConfig(unittest.TestCase):
         self.assertEqual(cfg["menubar_refresh_seconds"], 300)
         self.assertEqual(cfg["notify_warn_pct"], 30.0)
         self.assertEqual(cfg["notify_critical_pct"], 10.0)
+        self.assertTrue(cfg["eye_break_enabled"])
+        self.assertEqual(cfg["eye_break_minutes"], 20)
 
 
 # ── is_provider_enabled ──────────────────────────────────────────────────────

@@ -83,6 +83,8 @@ DEFAULT_CONFIG = {
         "menubar_refresh_seconds": 300,
         "notify_warn_pct": 30.0,
         "notify_critical_pct": 10.0,
+        "eye_break_enabled": True,
+        "eye_break_minutes": 20,
     },
 }
 
@@ -225,6 +227,14 @@ def load_display_config():
         notify_critical_pct = float(disp.get("notify_critical_pct", 10.0))
     except (TypeError, ValueError):
         notify_critical_pct = 10.0
+    try:
+        eye_break_enabled = bool(disp.get("eye_break_enabled", True))
+    except (TypeError, ValueError):
+        eye_break_enabled = True
+    try:
+        eye_break_minutes = int(disp.get("eye_break_minutes", 20))
+    except (TypeError, ValueError):
+        eye_break_minutes = 20
     return {
         "auto_hide_enabled": auto_hide_enabled,
         "auto_hide_days": auto_hide_days,
@@ -232,6 +242,8 @@ def load_display_config():
         "menubar_refresh_seconds": menubar_refresh_seconds,
         "notify_warn_pct": notify_warn_pct,
         "notify_critical_pct": notify_critical_pct,
+        "eye_break_enabled": eye_break_enabled,
+        "eye_break_minutes": eye_break_minutes,
     }
 
 def configured_days(config_section):
