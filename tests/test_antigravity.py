@@ -850,10 +850,11 @@ class TestMoreAntigravityExtra(unittest.TestCase):
         ag_mod.display_antigravity_text({"error": "⚠ oops"}, args)
         mock_warn.assert_called()
 
-        # Stale profile without verbose
-        data = {"profiles": [{"name": "p1", "status": "stale"}]}
+        # Stale profile without verbose should still show a useful summary.
+        data = {"profiles": [{"name": "p1", "status": "stale", "warning": "showing old cached data (not running)"}]}
         ag_mod.display_antigravity_text(data, args)
-        mock_printc.assert_called_with("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", False)
+        self.assertTrue(any("cached quota" in str(c) for c in mock_printc.mock_calls))
+        self.assertTrue(any("showing old cached data" in str(c) for c in mock_printc.mock_calls))
 
         # Stale with verbose
         args.verbose = True

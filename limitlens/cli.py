@@ -331,6 +331,7 @@ def _main():
     codex_refresh_attempts = {}
     codex_refresh_cooldown = 300.0
     sync_codex_pending = bool(args.sync_codex)
+    refresh_metadata = {}
 
     def _provider_error_payload(key, err):
         message = f"{key} provider failed: {type(err).__name__}: {err}"
@@ -403,14 +404,20 @@ def _main():
         return result
 
     def fetch_and_refresh():
-        nonlocal sync_codex_pending
+        nonlocal sync_codex_pending, refresh_metadata
         if sync_codex_pending:
             from .providers.codex import refresh_all_accounts
             if not args.json:
                 print_c("  ⟲  syncing codex accounts...", "\033[90m", args.no_color)
-            refresh_all_accounts(config)
+            results = refresh_all_accounts(config)
+            refresh_metadata["codex"] = {
+                "mode": "sync_all",
+                "results": results,
+            }
             sync_codex_pending = False
-            return collect_results()
+            result = collect_results()
+            result["_refresh"] = refresh_metadata
+            return result
 
         result = collect_results()
         from .providers.codex import refresh_accounts
@@ -433,8 +440,15 @@ def _main():
                 codex_refresh_attempts[name] = now
             if not args.json:
                 print_c(f"  ⟲  refreshing stale codex accounts: {', '.join(stale_names)}...", "\033[90m", args.no_color)
-            refresh_accounts(stale_names, config)
+            results = refresh_accounts(stale_names, config)
+            refresh_metadata["codex"] = {
+                "mode": "stale_accounts",
+                "accounts": stale_names,
+                "results": results,
+            }
             result = collect_results()
+        if refresh_metadata:
+            result["_refresh"] = refresh_metadata
         return result
 
     # They're loaded lazily so we don't break when recommendations.py

@@ -40,20 +40,25 @@ class TestCLI(unittest.TestCase):
         mock_amp.return_value = {}
         mock_ag.return_value = {}
         mock_opencode.return_value = {}
+        mock_refresh_all.return_value = {"default": {"ok": True, "error": None}}
 
         test_args = ["limitlens", "--json", "--tool", "codex", "--sync-codex", "--no-record"]
         with patch.object(sys, "argv", test_args), \
              patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
-             redirect_stdout(io.StringIO()):
+             redirect_stdout(io.StringIO()) as buf:
             main()
 
         mock_refresh_all.assert_called_once()
         mock_print.assert_not_called()
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["_refresh"]["codex"]["mode"], "sync_all")
+        self.assertEqual(payload["_refresh"]["codex"]["results"], {"default": {"ok": True, "error": None}})
 
     @patch("limitlens.providers.codex.refresh_accounts")
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.waste_tracker.record_snapshot")
     def test_stale_codex_refreshes_by_default(self, mock_record, mock_codex, mock_refresh_accounts):
+        mock_refresh_accounts.return_value = {"default": {"ok": True, "error": None}}
         stale = {
             "accounts": [
                 {
@@ -99,6 +104,33 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(mock_refresh_accounts.call_args[0][0], ["default"])
         payload = json.loads(buf.getvalue())
         self.assertFalse(payload["codex"]["accounts"][0]["limits"][0]["is_stale"])
+        self.assertEqual(payload["_refresh"]["codex"]["mode"], "stale_accounts")
+        self.assertEqual(payload["_refresh"]["codex"]["accounts"], ["default"])
+
+    @patch("limitlens.providers.codex.refresh_accounts", return_value={"default": {"ok": False, "error": "timeout"}})
+    @patch("limitlens.cli.get_codex_data")
+    @patch("limitlens.waste_tracker.record_snapshot")
+    def test_stale_codex_refresh_result_is_reported_when_still_stale(self, mock_record, mock_codex, mock_refresh_accounts):
+        stale = {
+            "accounts": [
+                {
+                    "name": "default",
+                    "limits": [{"label": "5h window", "left_percent": 100.0, "is_stale": True}],
+                }
+            ]
+        }
+        mock_codex.side_effect = [stale, stale]
+
+        test_args = ["limitlens", "--json", "--tool", "codex", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(buf):
+            main()
+
+        payload = json.loads(buf.getvalue())
+        self.assertTrue(payload["codex"]["accounts"][0]["limits"][0]["is_stale"])
+        self.assertEqual(payload["_refresh"]["codex"]["results"]["default"]["error"], "timeout")
 
     @patch("limitlens.cli.get_codex_data")
     @patch("limitlens.cli.get_amp_data")

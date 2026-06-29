@@ -1144,8 +1144,10 @@ def display_antigravity_text(data, args):
 
     show_detail = getattr(args, "verbose", False) or getattr(args, "all", False) or getattr(args, 'tool', None) == "antigravity"
     visible_profiles = []
+    stale_profiles = []
     for prof in data.get("profiles", []):
         if prof.get("status") == "stale" and not show_detail:
+            stale_profiles.append(prof)
             continue
         visible_models = []
         for m in prof.get("models", []):
@@ -1156,10 +1158,14 @@ def display_antigravity_text(data, args):
             visible_profiles.append((prof, visible_models))
 
     if not visible_profiles and not show_detail:
-        has_stale = any(p.get("status") == "stale" for p in data.get("profiles", []))
-        if has_stale:
+        if stale_profiles:
             section("Antigravity", args)
-            print_c("    (all instances stopped or stale; run with --verbose to view)", "\033[90m", getattr(args, 'no_color', False))
+            print_c("    ⚠ cached quota only — Antigravity/agy is not running", "\033[33m", getattr(args, 'no_color', False))
+            for prof in stale_profiles[:3]:
+                warning = prof.get("warning") or "start Antigravity or agy to refresh live quota"
+                print_c(f"    {prof.get('name', 'profile'):<16} {warning}", "\033[90m", getattr(args, 'no_color', False))
+            if len(stale_profiles) > 3:
+                print_c(f"    +{len(stale_profiles) - 3} more stale profiles", "\033[90m", getattr(args, 'no_color', False))
         return
 
     section("Antigravity", args)
