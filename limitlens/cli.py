@@ -7,6 +7,7 @@ and waste tracker into the unified ``limitlens`` command.
 
 import argparse
 import json
+import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -58,7 +59,7 @@ def log_error(e, context=""):
         pass
 
 
-def _display_doctor(config):
+def _doctor_rows(config):
     import os
     import sys
 
@@ -81,22 +82,79 @@ def _display_doctor(config):
         configured = is_provider_enabled(config, key, default=default)
         found = is_provider_enabled(detected, key, default=False)
         if configured and found:
-            return "ready"
+            return "ready", "ready", "Provider is configured and detected."
         if configured:
-            return "enabled, not detected"
+            return "enabled_not_detected", "enabled, not detected", "Check local installation, auth, or provider config."
         if found:
-            return "detected, disabled"
-        return "not configured"
+            return "detected_disabled", "detected, disabled", "Enable it in LimitLens config if you want to track it."
+        return "not_configured", "not configured", "Configure this provider only if you use it."
 
-    rows = [(label, status_for(key, default)) for key, label, default in providers]
-    rows.append(("Menubar", "available" if sys.platform == "darwin" else "macOS only"))
+    rows = [
+        {
+            "key": key,
+            "label": label,
+            "state": state,
+            "status": status,
+            "next_step": next_step,
+        }
+        for key, label, default in providers
+        for state, status, next_step in [status_for(key, default)]
+    ]
+    rows.append({
+        "key": "menubar",
+        "label": "Menubar",
+        "state": "available" if sys.platform == "darwin" else "macos_only",
+        "status": "available" if sys.platform == "darwin" else "macOS only",
+        "next_step": "Run `limitlens-menubar` on macOS." if sys.platform == "darwin" else "Use the CLI on non-macOS systems.",
+    })
     widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "iterm_widget.py")
-    rows.append(("iTerm widget", "available" if os.path.exists(widget_path) else "not installed"))
+    rows.append({
+        "key": "iterm_widget",
+        "label": "iTerm widget",
+        "state": "available" if os.path.exists(widget_path) else "not_installed",
+        "status": "available" if os.path.exists(widget_path) else "not installed",
+        "next_step": "Enable the bundled iTerm2 status-bar script." if os.path.exists(widget_path) else "Install the bundled iTerm2 script if you use iTerm2.",
+    })
+    return rows
 
-    width = max(len(name) for name, _ in rows)
+
+def _doctor_report(rows):
+    try:
+        from . import __version__ as version
+    except ImportError:
+        from importlib.metadata import version as _pkg_version
+        version = _pkg_version("limitlens")
+
+    return {
+        "version": 1,
+        "limitlens_version": version,
+        "os": platform.system() or "unknown",
+        "python": platform.python_version(),
+        "providers": {
+            row["key"]: {
+                "label": row["label"],
+                "state": row["state"],
+                "status": row["status"],
+                "next_step": row["next_step"],
+            }
+            for row in rows
+        },
+        "privacy": "Sanitized report: no tokens, cookies, emails, config values, or local paths included.",
+        "next": "Run `limitlens` for the dashboard or `limitlens suggest` for routing advice.",
+    }
+
+
+def _display_doctor(config, report=False):
+    rows = _doctor_rows(config)
+
+    if report:
+        print(json.dumps(_doctor_report(rows), indent=2, sort_keys=True))
+        return
+
+    width = max(len(row["label"]) for row in rows)
     print("LimitLens Doctor\n")
-    for name, status in rows:
-        print(f"{name:<{width}}  {status}")
+    for row in rows:
+        print(f"{row['label']:<{width}}  {row['status']}")
     print("\nNext: run `limitlens` for the dashboard or `limitlens suggest` for routing advice.")
 
 def _run_subcommand(argv):
@@ -181,6 +239,7 @@ def _main():
     parser.add_argument("command", nargs="?", choices=["suggest", "s", "usage", "u", "all", "a", "watch", "w", "doctor", "d"], help=argparse.SUPPRESS)
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode and print full traceback to stderr")
     parser.add_argument("--json", action="store_true", help="Output status as JSON")
+    parser.add_argument("--report", action="store_true", help="Print a sanitized doctor report as JSON")
     parser.add_argument("--plain", action="store_true", help="Plain output: no color and fewer decorations")
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
@@ -218,6 +277,9 @@ def _main():
         args.all = True
     elif args.command in ("watch", "w"):
         args.watch = True
+    if args.report and args.command not in ("doctor", "d"):
+        parser.error("--report can only be used with `limitlens doctor`")
+        return
     if args.plain:
         args.no_color = True
     if args.interval <= 0:
@@ -245,7 +307,7 @@ def _main():
     config = load_limitlens_config()
 
     if args.command in ("doctor", "d"):
-        _display_doctor(config)
+        _display_doctor(config, report=args.report)
         return
 
     if args.refresh_codex:

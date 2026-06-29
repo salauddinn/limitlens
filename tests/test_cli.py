@@ -966,6 +966,51 @@ class TestCLI(unittest.TestCase):
         mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=False, interactive=False)
         mock_codex.assert_not_called()
 
+    @patch("limitlens.cli.auto_detect_providers")
+    def test_doctor_report_outputs_sanitized_json(self, mock_auto_detect):
+        config = {
+            "codex": {"enabled": True},
+            "amp": {"enabled": True},
+            "antigravity": {"enabled": False},
+            "commandcode": {"enabled": False},
+            "custom_tools": {"enabled": False},
+            "pioneer": {"enabled": False},
+            "agentrouter": {"enabled": False},
+            "opencode": {"enabled": False},
+            "pi": {"enabled": False},
+            "cursor": {"enabled": False},
+        }
+        mock_auto_detect.return_value = {
+            "codex": {"enabled": True},
+            "antigravity": {"enabled": True},
+        }
+
+        test_args = ["limitlens", "doctor", "--report"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=config), \
+             patch("limitlens.cli.limitlens_config_path", return_value="/private/user/.config/limitlens/config.json"), \
+             redirect_stdout(buf):
+            main()
+
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["version"], 1)
+        self.assertIn("python", payload)
+        self.assertIn("os", payload)
+        self.assertEqual(payload["providers"]["codex"]["state"], "ready")
+        self.assertEqual(payload["providers"]["antigravity"]["state"], "detected_disabled")
+        self.assertNotIn("/private/user", buf.getvalue())
+        self.assertNotIn("config.json", buf.getvalue())
+        mock_auto_detect.assert_called_once_with("/private/user/.config/limitlens/config.json", write=False, interactive=False)
+
+    def test_report_requires_doctor_command(self):
+        test_args = ["limitlens", "--report"]
+        with patch.object(sys, "argv", test_args), \
+             patch("argparse.ArgumentParser.error") as mock_error:
+            main()
+
+        mock_error.assert_called_once_with("--report can only be used with `limitlens doctor`")
+
 
 class TestCLIThreadPool(unittest.TestCase):
     @patch("limitlens.cli.ThreadPoolExecutor")

@@ -9,6 +9,7 @@ desktop notifications when quotas run critically low.
 """
 import json
 import os
+import re
 import subprocess  # nosec B404
 import sys
 import threading
@@ -176,7 +177,12 @@ class LimitLensApp(rumps.App):
                     if isinstance(item, tuple) and len(item) == 3 and item[0] == "submenu":
                         submenu = rumps.MenuItem(item[1])
                         for child in item[2]:
-                            submenu.add(rumps.MenuItem(child))
+                            if isinstance(child, tuple) and len(child) == 3 and child[0] == "callback":
+                                submenu.add(child[2])
+                            elif hasattr(child, "callback") and hasattr(child, "title"):
+                                submenu.add(child)
+                            else:
+                                submenu.add(rumps.MenuItem(child))
                         self.menu.add(submenu)
                     else:
                         self.menu.add(item)
@@ -513,6 +519,38 @@ class LimitLensApp(rumps.App):
         sorted_rows = sorted(rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
         return ("submenu", "All Quotas", [self._format_usage_row(row) for row in sorted_rows])
 
+    def _make_overview_menu(self, rec_rows, low_rows):
+        items = []
+        if rec_rows:
+            items.append("✨ Recommended")
+            items.extend(rec_rows)
+        if low_rows:
+            if items:
+                items.append(rumps.separator)
+            items.append("⚠️ Low quota")
+            items.extend(self._format_usage_compact(row) for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3])
+        if self._last_refresh_label:
+            if items:
+                items.append(rumps.separator)
+            items.append(f"Last refreshed: {self._last_refresh_label}")
+        if not items:
+            items.append("No active recommendations")
+        return ("submenu", "Overview", items)
+
+    def _make_doctor_menu(self):
+        return ("submenu", "Doctor", [
+            "Run `limitlens doctor`",
+            "Run `limitlens doctor --report` for beta feedback",
+        ])
+
+    def _make_actions_menu(self):
+        return ("submenu", "Actions", [
+            ("callback", "Refresh", self._item_refresh),
+            ("callback", "Quick Refresh", self._item_quick_refresh),
+            ("callback", "Open Config", self._item_open_config),
+            ("callback", "Copy Status", self._item_copy_status),
+        ])
+
     def _build_status_summary(self, rec_rows, low_rows, rows):
         lines = ["LimitLens status"]
         if rec_rows:
@@ -528,6 +566,30 @@ class LimitLensApp(rumps.App):
         if self._last_refresh_label:
             lines.append(f"Last refreshed: {self._last_refresh_label}")
         return "\n".join(lines)
+
+    def _set_refresh_failure(self, message, title_message=None):
+        from .core import redact_text
+
+        message = str(message or "Unknown error").strip() or "Unknown error"
+        message = redact_text(message)
+        message = re.sub(r"/Users/[^/\s]+", "~", message)
+        message = re.sub(r"(?i)\b(token|cookie|authorization|api[_-]?key|password|secret)=\S+", r"\1=<redacted>", message)
+        title_message = title_message or message.split("\n")[-1][:20]
+        self._pending_title = f"⚠️ {title_message}"
+        self._last_status_summary = "\n".join([
+            "LimitLens status",
+            f"Refresh failed: {message}",
+            "Try Quick Refresh, then run `limitlens doctor` if it keeps failing.",
+        ])
+        self._pending_menu_items = [
+            f"⚠️ Refresh failed: {message[:48]}",
+            "Try Quick Refresh",
+            "Run `limitlens doctor` in Terminal",
+            self._item_refresh,
+            self._item_quick_refresh,
+            self._item_open_config,
+            self._item_copy_status,
+        ]
 
     def _collect_rows(self, data, check_low_quota):
         rows = []
@@ -691,43 +753,18 @@ class LimitLensApp(rumps.App):
         menu_items = []
         display_rows = self._group_antigravity_window_rows(rows)
 
-        def add_header(title):
-            if menu_items:
-                menu_items.append(rumps.separator)
-            menu_items.append(title)
-
         recs = (data.get("recommendations") or {}).get("hard") or []
         fresh_recs = [r for r in recs if not r.get("stale")]
         rec_source = fresh_recs or recs
         formatted_recs = [self._format_recommendation_compact(r) for r in rec_source[:2]]
         formatted_recs = [r for r in formatted_recs if r]
         low_rows = [r for r in display_rows if r.get("pct_left") is not None and r["pct_left"] < self._notify_warn_pct]
-        if formatted_recs:
-            add_header("✨ Recommended")
-            menu_items.extend(formatted_recs)
 
-        if low_rows:
-            add_header("⚠️ Low quota")
-            for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3]:
-                menu_items.append(self._format_usage_compact(row))
-
+        menu_items.append(self._make_overview_menu(formatted_recs, low_rows))
         if display_rows:
-            if menu_items:
-                menu_items.append(rumps.separator)
             menu_items.append(self._make_all_quotas_menu(rows))
-
-        if self._last_refresh_label and menu_items:
-            menu_items.append(rumps.separator)
-            menu_items.append(f"Last refreshed: {self._last_refresh_label}")
-
-        if menu_items:
-            menu_items.append(rumps.separator)
-        menu_items.extend([
-            self._item_refresh,
-            self._item_quick_refresh,
-            self._item_open_config,
-            self._item_copy_status,
-        ])
+        menu_items.append(self._make_doctor_menu())
+        menu_items.append(self._make_actions_menu())
 
         self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, display_rows)
 
@@ -785,7 +822,7 @@ class LimitLensApp(rumps.App):
                     self._has_loaded_once = True
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
-                    self._pending_title = f"⚠️ {err_msg[:20]}"
+                    self._set_refresh_failure(err_msg)
                     try:
                         import os
                         log_dir = os.path.expanduser("~/.cache/limitlens")
@@ -798,7 +835,7 @@ class LimitLensApp(rumps.App):
                     except Exception:
                         pass
             except subprocess.TimeoutExpired as e:
-                self._pending_title = "⚠️ Timeout"
+                self._set_refresh_failure("Refresh timed out", title_message="Timeout")
                 try:
                     import os
                     import traceback
@@ -813,7 +850,7 @@ class LimitLensApp(rumps.App):
                 except Exception:
                     pass
             except Exception as e:
-                self._pending_title = f"⚠️ {str(e)[:15]}"
+                self._set_refresh_failure(str(e))
                 try:
                     import os
                     import traceback

@@ -117,6 +117,22 @@ def test_build_menu_items_returns_submenu_spec_not_rumps_item(app):
     assert "Amp" in "\n".join(submenu_specs[0][2])
 
 
+def test_build_menu_items_groups_dropdown_like_tabs(app):
+    row = app._row("Amp", "Amp", "Credits", 50.0, remaining=5, total=10, unit="$")
+    app._last_refresh_label = "7:00 PM"
+
+    items = app._build_menu_items({"recommendations": {"hard": []}}, [row])
+    submenu_titles = [item[1] for item in items if isinstance(item, tuple) and item[0] == "submenu"]
+
+    assert submenu_titles == ["Overview", "All Quotas", "Doctor", "Actions"]
+    overview = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Overview"))
+    doctor = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Doctor"))
+    actions = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Actions"))
+    assert "Last refreshed: 7:00 PM" in overview[2]
+    assert "Run `limitlens doctor`" in doctor[2]
+    assert "Refresh" in "\n".join(str(item) for item in actions[2])
+
+
 def test_copy_status_uses_readable_summary(app):
     app._last_status_summary = "LimitLens status\nRecommended:\n- Amp · 50%"
     with patch("subprocess.run") as mock_run:
@@ -324,10 +340,10 @@ def test_fetch_data_success_with_quotas(app):
 
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)
-        assert "✨ Recommended" in menu
+        assert "✨ Recommended" in menu_text
         assert "ag-prof:model" in menu_text
         assert "25%" in menu_text
-        assert "⚠️ Low quota" in menu
+        assert "⚠️ Low quota" in menu_text
         assert "All Quotas" in menu_text
         assert "Last refreshed:" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
@@ -557,3 +573,47 @@ def test_fetch_data_logging(app):
             os.remove(log_file)
         if os.path.exists(backup_log_file):
             shutil.move(backup_log_file, log_file)
+
+
+def test_fetch_data_failure_updates_status_summary(app):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = "provider boom"
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc):
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
+
+        app.fetch_data()
+
+    assert app._pending_title == "⚠️ provider boom"
+    assert "Refresh failed" in app._last_status_summary
+    assert "provider boom" in app._last_status_summary
+    assert app._pending_menu_items
+    assert any("Refresh failed" in str(item) for item in app._pending_menu_items)
+
+
+def test_fetch_data_failure_redacts_copyable_status(app):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = "failed /Users/tester/.config/limitlens/config.json user@example.com token=secret123"
+
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc):
+
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
+
+        app.fetch_data()
+
+    visible = app._last_status_summary + "\n" + "\n".join(str(item) for item in app._pending_menu_items)
+    assert "/Users/tester" not in visible
+    assert "user@example.com" not in visible
+    assert "secret123" not in visible
+    assert "token=<redacted>" in visible
