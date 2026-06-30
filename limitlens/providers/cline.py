@@ -54,8 +54,9 @@ def display_cline_text(data, args):
     if data is None:
         return
 
-    show_status = getattr(args, "tool", None) == "cline" or getattr(args, "verbose", False) or getattr(args, "all", False)
-    if not show_status:
+    if data.get("status") != "installed" and not (
+        getattr(args, "tool", None) == "cline" or getattr(args, "verbose", False) or getattr(args, "all", False)
+    ):
         return
 
     section(data.get("name") or "Cline CLI", args)
