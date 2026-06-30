@@ -20,6 +20,7 @@ from .core import fmt_reset, parse_to_utc, print_c
 from .providers import (
     get_amp_data,
     get_antigravity_data,
+    get_cline_data,
     get_codex_data,
     get_commandcode_data,
     get_custom_data,
@@ -63,6 +64,7 @@ TOOL_SPECS: Dict[str, ToolSpec] = {
     "amp": ToolSpec("amp", "Amp", "amp", ("amp",)),
     "codex": ToolSpec("codex", "Codex", "codex", ("codex",)),
     "opencode": ToolSpec("opencode", "OpenCode", "opencode", ("opencode", "run"), quota_optional=True),
+    "cline": ToolSpec("cline", "Cline CLI", "cline", ("cline",), quota_optional=True),
     "commandcode": ToolSpec("commandcode", "Command Code", "commandcode", ("cmd",), aliases=("cmd",)),
 }
 
@@ -114,10 +116,10 @@ CLI_KEYWORDS = {
 }
 
 ROUTE_PREFERENCES: Dict[TaskKind, Tuple[str, ...]] = {
-    "planning": ("pi", "amp", "codex", "commandcode", "agy", "opencode"),
-    "coding": ("agy", "amp", "codex", "commandcode", "opencode", "pi"),
-    "cli": ("amp", "codex", "opencode", "commandcode", "pi", "agy"),
-    "general": ("pi", "amp", "agy", "codex", "commandcode", "opencode"),
+    "planning": ("pi", "amp", "codex", "commandcode", "agy", "opencode", "cline"),
+    "coding": ("agy", "amp", "codex", "commandcode", "opencode", "cline", "pi"),
+    "cli": ("amp", "codex", "opencode", "commandcode", "cline", "pi", "agy"),
+    "general": ("pi", "amp", "agy", "codex", "commandcode", "opencode", "cline"),
 }
 
 RECOMMENDATION_TOOL_ALIASES = {
@@ -318,7 +320,7 @@ def _tool_provider_enabled(tool_id: str, config: Optional[Mapping[str, Any]]) ->
     spec = TOOL_SPECS[tool_id]
     if not spec.provider_key:
         return True
-    defaults = {"pi": False, "opencode": True}.get(tool_id, False)
+    defaults = {"pi": False, "opencode": True, "cline": True}.get(tool_id, False)
     return is_provider_enabled(config or {}, spec.provider_key, default=defaults)
 
 

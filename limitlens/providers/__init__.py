@@ -15,6 +15,7 @@ from .agentrouter import get_agentrouter_data, display_agentrouter_text
 from .commandcode import get_commandcode_data, display_commandcode_text
 from .custom import get_custom_data, display_custom_text
 from .cursor import get_cursor_data, display_cursor_text
+from .cline import get_cline_data, display_cline_text
 
 PROVIDERS = {
     "codex":       (get_codex_data, display_codex_text),
@@ -28,6 +29,7 @@ PROVIDERS = {
     "commandcode": (get_commandcode_data, display_commandcode_text),
     "custom":      (get_custom_data, display_custom_text),
     "cursor":      (get_cursor_data, display_cursor_text),
+    "cline":       (get_cline_data, display_cline_text),
 }
 
 __all__ = [
@@ -42,4 +44,5 @@ __all__ = [
     "get_commandcode_data", "display_commandcode_text",
     "get_custom_data", "display_custom_text",
     "get_cursor_data", "display_cursor_text",
+    "get_cline_data", "display_cline_text",
 ]

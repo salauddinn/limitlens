@@ -944,6 +944,21 @@ class TestCLI(unittest.TestCase):
         mock_collect.assert_called_once()
         mock_subprocess.assert_not_called()
 
+    @patch("limitlens.runner.collect_quota_data", return_value={})
+    def test_run_subcommand_accepts_cline_tool(self, mock_collect):
+        test_args = ["limitlens", "run", "--tool", "cline", "--dry-run", "Say hello"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value={"cline": {"enabled": True}}), \
+             patch("limitlens.runner.subprocess.run") as mock_subprocess, \
+             redirect_stdout(buf):
+            main()
+
+        self.assertIn("Cline CLI", buf.getvalue())
+        self.assertIn("cline 'Say hello'", buf.getvalue())
+        mock_collect.assert_called_once()
+        mock_subprocess.assert_not_called()
+
     @patch("limitlens.cli.auto_detect_providers", return_value={})
     def test_init_config_writes_explicitly(self, mock_auto_detect):
         test_args = ["limitlens", "--init-config"]
@@ -968,12 +983,14 @@ class TestCLI(unittest.TestCase):
             "opencode": {"enabled": False},
             "pi": {"enabled": False},
             "cursor": {"enabled": False},
+            "cline": {"enabled": True},
         }
         detected = {
             "codex": {"enabled": True},
             "amp": {"enabled": False},
             "antigravity": {"enabled": True},
             "commandcode": {"enabled": False},
+            "cline": {"enabled": True},
         }
         mock_auto_detect.return_value = detected
 
@@ -993,6 +1010,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("enabled, not detected", output)
         self.assertIn("Antigravity", output)
         self.assertIn("detected, disabled", output)
+        self.assertIn("Cline", output)
         self.assertIn("Next: run `limitlens`", output)
         self.assertNotIn("/tmp/limitlens-test-config.json", output)
         mock_auto_detect.assert_called_once_with("/tmp/limitlens-test-config.json", write=False, interactive=False)
@@ -1011,10 +1029,12 @@ class TestCLI(unittest.TestCase):
             "opencode": {"enabled": False},
             "pi": {"enabled": False},
             "cursor": {"enabled": False},
+            "cline": {"enabled": True},
         }
         mock_auto_detect.return_value = {
             "codex": {"enabled": True},
             "antigravity": {"enabled": True},
+            "cline": {"enabled": True},
         }
 
         test_args = ["limitlens", "doctor", "--report"]
@@ -1031,6 +1051,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("os", payload)
         self.assertEqual(payload["providers"]["codex"]["state"], "ready")
         self.assertEqual(payload["providers"]["antigravity"]["state"], "detected_disabled")
+        self.assertEqual(payload["providers"]["cline"]["state"], "ready")
         self.assertNotIn("/private/user", buf.getvalue())
         self.assertNotIn("config.json", buf.getvalue())
         mock_auto_detect.assert_called_once_with("/private/user/.config/limitlens/config.json", write=False, interactive=False)

@@ -14,6 +14,9 @@ DEFAULT_CONFIG = {
     "cursor": {
         "enabled": True,
     },
+    "cline": {
+        "enabled": True,
+    },
     "amp": {
         "enabled": True,
         "individual_credits": True,
@@ -412,6 +415,7 @@ def auto_detect_providers(path, write=True, interactive=True):
     check("opencode", safe_exists("~/.local/share/opencode"))
     check("copilot_cli", safe_exists("~/.cache/limitlens/copilot-otel.jsonl") or safe_exists("~/.config/github-copilot"))
     check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))
+    check("cline", safe_which("cline") or safe_exists("~/.cline"))
     check("commandcode", False)
 
     is_interactive = interactive and write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()

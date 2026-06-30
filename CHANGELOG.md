@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add Cline CLI provider: local `cline` readiness/version checks, `--tool cline` filter, and `limitlens run --tool cline` launcher routing (quota not exposed by Cline).
+
 ## [1.7.0] - 2026-06-29
 
 ### Added

@@ -114,6 +114,9 @@ class TestValidateConfigTypes(unittest.TestCase):
     def test_valid_bool_passes(self):
         validate_config_types({"cursor": {"enabled": True}})
 
+    def test_cline_config_passes(self):
+        validate_config_types({"cline": {"enabled": True}})
+
     def test_runner_config_passes(self):
         validate_config_types(
             {
