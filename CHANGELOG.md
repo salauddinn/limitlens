@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Add Cline CLI provider: local `cline` readiness/version checks, `--tool cline` filter, and `limitlens run --tool cline` launcher routing (quota not exposed by Cline).
+- Add Cline CLI provider: local `cline` readiness/version checks, `--tool cline` filter, and `limitlens run --tool cline` launcher routing.
+- Fetch ClinePass quota windows (5-hour, weekly, monthly) with reset times using the locally stored Cline OAuth token, including automatic token refresh.
 
 ## [1.7.0] - 2026-06-29
 

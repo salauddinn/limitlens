@@ -97,7 +97,7 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | **Amp** | macOS, Linux | Executes local `amp` binary to fetch quota and observed dollar usage |
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux configurations |
 | **Cursor** | macOS, Linux, Win | Fetches active limits across Cursor tiers |
-| **Cline CLI** | macOS, Linux, Win | Checks local `cline` CLI readiness and version (quota not exposed by Cline) |
+| **Cline CLI** | macOS, Linux, Win | Reads local `cline` CLI readiness/version and fetches ClinePass quota windows (5h, weekly, monthly) via the stored OAuth token |
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
 | **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
