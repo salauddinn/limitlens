@@ -417,6 +417,7 @@ class LimitLensApp(rumps.App):
         button = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
         button.setTitle_(title)
         button.setBezelStyle_(NSBezelStyleRounded)
+        button.setFont_(NSFont.systemFontOfSize_(11))
         button.setTarget_(target)
         button.setAction_(action)
         return button
@@ -441,81 +442,82 @@ class LimitLensApp(rumps.App):
         except Exception:
             pass
 
-        root.addSubview_(self._label(model.get("title"), 18, 526, 260, 24, size=18, weight="bold"))
+        root.addSubview_(self._label("LimitLens", 18, 526, 130, 22, size=16, weight="bold"))
         refreshed = model.get("last_refresh")
-        subtitle = model.get("subtitle") or ""
-        if refreshed:
-            subtitle = f"{subtitle} · {refreshed}"
-        root.addSubview_(self._label(subtitle, 18, 506, 360, 18, size=11, color="subtle"))
+        subtitle = f"Updated {refreshed}" if refreshed else (model.get("subtitle") or "")
+        root.addSubview_(self._label(subtitle, 150, 528, 240, 16, size=10, color="subtle"))
 
         rec = model.get("recommendation")
-        y = 462
+        y = 468
         if rec:
-            root.addSubview_(self._label(rec["icon"], 18, y + 12, 28, 24, size=22))
-            root.addSubview_(self._label(rec["title"], 50, y + 25, 250, 18, size=14, weight="bold"))
-            root.addSubview_(self._label(rec["subtitle"], 50, y + 7, 250, 18, size=11, color="muted"))
-            root.addSubview_(self._label(self._pct_label(rec["pct"]), 322, y + 22, 70, 22, size=16, weight="bold", color=rec["level"]))
-            root.addSubview_(self._progress(rec["pct"], 322, y + 8, 72, 10))
+            root.addSubview_(self._label("Best option", 18, y + 42, 140, 16, size=11, weight="bold", color="subtle"))
+            root.addSubview_(self._label(rec["icon"], 18, y + 10, 28, 24, size=22))
+            root.addSubview_(self._label(rec["title"], 50, y + 23, 220, 18, size=14, weight="bold"))
+            root.addSubview_(self._label(rec["subtitle"], 50, y + 5, 220, 18, size=10, color="muted"))
+            root.addSubview_(self._label(self._pct_label(rec["pct"]), 324, y + 22, 64, 20, size=15, weight="bold", color=rec["level"]))
+            root.addSubview_(self._progress(rec["pct"], 324, y + 8, 58, 8))
         else:
             root.addSubview_(self._label(model.get("message") or "No recommendation available", 18, y + 18, 360, 22, size=13, color="muted"))
 
-        y = 408
+        y = 402
         low_rows = model.get("low_rows") or []
         if low_rows:
-            root.addSubview_(self._label("Needs attention", 18, y, 180, 18, size=12, weight="bold", color="warn"))
-            y -= 36
-            for row in low_rows[:3]:
+            count = len(low_rows)
+            label = "1 quota needs attention" if count == 1 else f"{count} quotas need attention"
+            root.addSubview_(self._label(label, 18, y + 8, 220, 18, size=12, weight="bold", color="warn"))
+            y -= 28
+            for row in low_rows[:2]:
                 self._add_row_view(root, row, y, compact=True)
-                y -= 42
+                y -= 38
         else:
-            root.addSubview_(self._label("No low quotas", 18, y, 180, 18, size=12, weight="bold", color="good"))
-            y -= 34
+            root.addSubview_(self._label("No low quotas", 18, y + 8, 180, 18, size=12, weight="bold", color="good"))
+            y -= 24
 
-        list_top = min(y + 12, 324)
-        root.addSubview_(self._label("All quotas", 18, list_top, 180, 18, size=12, weight="bold"))
-        scroll_height = list_top - 84
-        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 84, POPOVER_WIDTH - 28, max(120, scroll_height)))
+        list_top = min(y + 14, 320)
+        list_title = "Other quotas" if low_rows else "All quotas"
+        root.addSubview_(self._label(list_title, 18, list_top, 180, 18, size=12, weight="bold"))
+        scroll_height = list_top - 132
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 132, POPOVER_WIDTH - 28, max(112, scroll_height)))
         scroll.setHasVerticalScroller_(True)
         scroll.setBorderType_(0)
-        content_rows = model.get("rows") or []
-        content_height = max(120, len(content_rows) * 48 + 8)
+        low_keys = {(row["title"], row["detail"]) for row in low_rows}
+        content_rows = [row for row in model.get("rows") or [] if (row["title"], row["detail"]) not in low_keys]
+        content_height = max(112, len(content_rows) * 44 + 8)
         doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 44, content_height))
-        row_y = content_height - 46
+        row_y = content_height - 42
         if content_rows:
             for row in content_rows:
                 self._add_row_view(doc, row, row_y, compact=False)
-                row_y -= 48
+                row_y -= 44
         else:
-            doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
+            empty_text = "Low quotas are shown above." if low_rows else "Refresh or run Doctor to find providers."
+            doc.addSubview_(self._label(empty_text, 8, content_height - 34, 320, 20, size=12, color="muted"))
         scroll.setDocumentView_(doc)
         root.addSubview_(scroll)
 
         actions = [
-            ("Refresh", "refreshDashboard:"),
-            ("Quick", "quickRefreshDashboard:"),
-            ("Config", "openConfigDashboard:"),
-            ("Copy", "copyStatusDashboard:"),
-            ("Doctor", "doctorDashboard:"),
-            ("Report", "doctorReportDashboard:"),
-            ("Quit", "quitDashboard:"),
+            (("Refresh", "refreshDashboard:", 78), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 98)),
+            (("Copy Status", "copyStatusDashboard:", 96), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 56)),
         ]
-        x = 14
-        for title, action in actions:
-            width = 54 if title not in ("Refresh", "Doctor") else 64
-            root.addSubview_(self._button(title, action, x, 18, width, 28, self))
-            x += width + 6
+        for row_index, row_actions in enumerate(actions):
+            x = 18
+            y = 76 - (row_index * 34)
+            for title, action, width in row_actions:
+                root.addSubview_(self._button(title, action, x, y, width, 26, self))
+                x += width + 8
 
         return root
 
     def _add_row_view(self, parent, row, y, compact=False):
         icon_x = 8 if not compact else 18
         title_x = icon_x + 28
-        pct_x = 320 if not compact else 322
-        parent.addSubview_(self._label(row["icon"], icon_x, y + 13, 24, 20, size=18))
-        parent.addSubview_(self._label(row["title"], title_x, y + 23, 250, 17, size=12, weight="bold"))
-        parent.addSubview_(self._label(row["detail"], title_x, y + 6, 250, 16, size=10, color="muted"))
-        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 22, 56, 17, size=12, weight="bold", color=row["level"]))
-        parent.addSubview_(self._progress(row["pct"], pct_x, y + 8, 56, 8))
+        pct_x = 324 if not compact else 324
+        title_width = 220 if not compact else 218
+        parent.addSubview_(self._label(row["icon"], icon_x, y + 11, 24, 20, size=17))
+        parent.addSubview_(self._label(row["title"], title_x, y + 21, title_width, 17, size=12, weight="bold"))
+        parent.addSubview_(self._label(row["detail"], title_x, y + 5, title_width, 16, size=10, color="muted"))
+        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 20, 54, 17, size=12, weight="bold", color=row["level"]))
+        parent.addSubview_(self._progress(row["pct"], pct_x, y + 7, 54, 7))
 
     @staticmethod
     def _safe_float(value):
@@ -648,6 +650,23 @@ class LimitLensApp(rumps.App):
         return "   ".join(parts)
 
     @classmethod
+    def _format_dashboard_window_parts(cls, row):
+        parts = []
+        window_parts = row.get("window_parts")
+        if not window_parts and row.get("window_label"):
+            window_parts = [{"window_label": row.get("window_label"), "pct_left": row.get("pct_left")}]
+        for part in window_parts or []:
+            pct = cls._safe_float(part.get("pct_left"))
+            pct_str = "n/a" if pct is None else f"{cls._format_number(pct)}%"
+            w_lbl = part.get("window_label")
+            if w_lbl == "5h":
+                w_lbl = "5h"
+            elif w_lbl == "week":
+                w_lbl = "week"
+            parts.append(f"{w_lbl} {pct_str}")
+        return " · ".join(parts)
+
+    @classmethod
     def _group_antigravity_window_rows(cls, rows):
         grouped = {}
         display_rows = []
@@ -720,7 +739,7 @@ class LimitLensApp(rumps.App):
         name = str(row.get("name") or "")
         label = str(row.get("label") or "")
         title = label if section.lower() in name.lower() else f"{name} / {label}"
-        window_parts = self._format_window_parts(row)
+        window_parts = self._format_dashboard_window_parts(row)
         if window_parts:
             detail = window_parts
         elif pct is None and row.get("used") is not None:

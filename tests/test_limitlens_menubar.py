@@ -198,8 +198,8 @@ def test_build_dashboard_model_prioritizes_recommendation_and_two_line_rows(app)
     assert model["recommendation"]["subtitle"] == "best coding fit"
     assert model["low_rows"][0]["title"] == "ide / Gemini"
     codex_row = next(row for row in model["rows"] if row["title"] == "p1 / quota")
-    assert "h 89%" in codex_row["detail"]
-    assert "w 71%" in codex_row["detail"]
+    assert "5h 89%" in codex_row["detail"]
+    assert "week 71%" in codex_row["detail"]
     assert "<object object" not in json.dumps(model)
 
 
