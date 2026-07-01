@@ -422,6 +422,14 @@ class LimitLensApp(rumps.App):
         button.setAction_(action)
         return button
 
+    def _add_button_row(self, parent, actions, y):
+        gap = 8
+        total_width = sum(width for _, _, width in actions) + gap * (len(actions) - 1)
+        x = int((POPOVER_WIDTH - total_width) / 2)
+        for title, action, width in actions:
+            parent.addSubview_(self._button(title, action, x, y, width, 24, self))
+            x += width + gap
+
     @staticmethod
     def _progress(pct, x, y, width, height):
         indicator = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
@@ -495,15 +503,12 @@ class LimitLensApp(rumps.App):
         root.addSubview_(scroll)
 
         actions = [
-            (("Refresh", "refreshDashboard:", 78), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 98)),
-            (("Copy Status", "copyStatusDashboard:", 96), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 56)),
+            (("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)),
+            (("Copy Status", "copyStatusDashboard:", 104), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 58)),
         ]
-        for row_index, row_actions in enumerate(actions):
-            x = 18
-            y = 76 - (row_index * 34)
-            for title, action, width in row_actions:
-                root.addSubview_(self._button(title, action, x, y, width, 26, self))
-                x += width + 8
+        root.addSubview_(self._label("Actions", 18, 96, 120, 14, size=10, weight="bold", color="subtle"))
+        self._add_button_row(root, actions[0], 66)
+        self._add_button_row(root, actions[1], 34)
 
         return root
 
