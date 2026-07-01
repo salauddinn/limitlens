@@ -38,6 +38,7 @@ dev = [
 ]
 mac = [
     "rumps>=0.4.0",
+    "pyobjc-framework-Cocoa>=11.1; sys_platform == 'darwin'",
 ]
 
 [project.urls]

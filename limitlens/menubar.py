@@ -10,6 +10,7 @@ desktop notifications when quotas run critically low.
 import json
 import os
 import re
+import shlex
 import subprocess  # nosec B404
 import sys
 import threading
@@ -51,6 +52,57 @@ except ImportError:  # pragma: no cover - exercised only on non-macOS without ma
     rumps = _UnavailableRumps()
 
 
+_APPKIT_AVAILABLE = True
+try:
+    from AppKit import (  # type: ignore
+        NSAppearance,
+        NSBezelStyleRounded,
+        NSButton,
+        NSColor,
+        NSFont,
+        NSMakeRect,
+        NSMinYEdge,
+        NSPopover,
+        NSPopoverBehaviorTransient,
+        NSProgressIndicator,
+        NSScrollView,
+        NSTextField,
+        NSView,
+        NSViewController,
+        NSVisualEffectBlendingModeBehindWindow,
+        NSVisualEffectMaterialHUDWindow,
+        NSVisualEffectView,
+        NSViewWidthSizable,
+        NSViewHeightSizable,
+    )
+except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
+    _APPKIT_AVAILABLE = False
+
+    NSAppearance = None
+    NSBezelStyleRounded = None
+    NSButton = None
+    NSColor = None
+    NSFont = None
+    NSMakeRect = None
+    NSMinYEdge = None
+    NSPopover = None
+    NSPopoverBehaviorTransient = None
+    NSProgressIndicator = None
+    NSScrollView = None
+    NSTextField = None
+    NSView = None
+    NSViewController = None
+    NSVisualEffectBlendingModeBehindWindow = None
+    NSVisualEffectMaterialHUDWindow = None
+    NSVisualEffectView = None
+    NSViewWidthSizable = None
+    NSViewHeightSizable = None
+
+
+POPOVER_WIDTH = 420
+POPOVER_HEIGHT = 560
+
+
 class LimitLensApp(rumps.App):
     def __init__(self):
         import os
@@ -71,23 +123,32 @@ class LimitLensApp(rumps.App):
         self._item_quick_refresh = rumps.MenuItem("Quick Refresh", callback=self._on_quick_refresh)
         self._item_open_config = rumps.MenuItem("Open Config", callback=self._on_open_config)
         self._item_copy_status = rumps.MenuItem("Copy Status", callback=self._on_copy_status)
+        self._item_open_dashboard = rumps.MenuItem("Open Dashboard", callback=self._on_open_dashboard)
+        self._item_doctor = rumps.MenuItem("Run Doctor", callback=self._on_doctor)
+        self._item_doctor_report = rumps.MenuItem("Copy Doctor Report", callback=self._on_doctor_report)
         self._item_quit    = rumps.MenuItem("Quit",    callback=self._on_quit)
         self._sep_top      = rumps.separator
         self._sep_bot      = rumps.separator
 
-        self.menu = [self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
+        self.menu = [self._item_open_dashboard, self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
         self._queued_sync_codex = None
         self._fetch_lock = threading.Lock()
         self._pending_title = None
         self._pending_menu_items = None
+        self._pending_dashboard_model = None
+        self._dashboard_model = self._empty_dashboard_model()
+        self._popover = None
+        self._popover_content = None
+        self._popover_installed = False
         self._notified_set = set()
         self._has_loaded_once = False
         self._last_refresh_label = None
         self._last_status_summary = "LimitLens status\nNo data loaded yet."
         # Keep the macOS menubar compact. Full details live in the dropdown.
         self._max_title_items = 2
+        self._install_popover()
 
         # Load display config for thresholds and refresh interval.
         try:
@@ -178,11 +239,62 @@ class LimitLensApp(rumps.App):
         except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
+    def _on_open_dashboard(self, _):
+        self._show_dashboard()
+
+    def _on_doctor(self, _):
+        try:
+            cmd = f"{shlex.quote(sys.executable)} -m limitlens doctor"
+            script = f'tell application "Terminal" to do script {json.dumps(cmd)}'
+            subprocess.Popen(["osascript", "-e", script])  # nosec B603 B607
+            self._pending_title = "Doctor opened"
+        except Exception as e:  # pragma: no cover - depends on macOS desktop state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
+
+    def _on_doctor_report(self, _):
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "limitlens", "doctor", "--report"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+                stdin=subprocess.DEVNULL,
+            )  # nosec B603
+            text = proc.stdout.strip() or proc.stderr.strip() or "No doctor report output."
+            subprocess.run(["pbcopy"], input=text, text=True, check=False, timeout=5)  # nosec B603 B607
+            self._pending_title = "✓ Report copied"
+        except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
+
     def _on_quit(self, _):
         rumps.quit_application()
 
+    def refreshDashboard_(self, _):
+        self._on_refresh(None)
+
+    def quickRefreshDashboard_(self, _):
+        self._on_quick_refresh(None)
+
+    def openConfigDashboard_(self, _):
+        self._on_open_config(None)
+
+    def copyStatusDashboard_(self, _):
+        self._on_copy_status(None)
+
+    def doctorDashboard_(self, _):
+        self._on_doctor(None)
+
+    def doctorReportDashboard_(self, _):
+        self._on_doctor_report(None)
+
+    def quitDashboard_(self, _):
+        self._on_quit(None)
+
     @rumps.timer(1)
     def check_updates(self, _):
+        if not self._popover_installed:
+            self._install_popover()
         if self._pending_title is not None:
             self.title = self._pending_title
             self._pending_title = None
@@ -196,7 +308,11 @@ class LimitLensApp(rumps.App):
                         submenu = rumps.MenuItem(item[1])
                         for child in item[2]:
                             if isinstance(child, tuple) and len(child) == 3 and child[0] == "callback":
-                                submenu.add(child[2])
+                                callback = child[2]
+                                if hasattr(callback, "callback") and hasattr(callback, "title"):
+                                    submenu.add(callback)
+                                else:
+                                    submenu.add(rumps.MenuItem(child[1], callback=callback))
                             elif hasattr(child, "callback") and hasattr(child, "title"):
                                 submenu.add(child)
                             else:
@@ -209,10 +325,197 @@ class LimitLensApp(rumps.App):
             self.menu.add(self._sep_bot)
             self.menu.add(self._item_quit)
             self._pending_menu_items = None
+        if self._pending_dashboard_model is not None:
+            self._dashboard_model = self._pending_dashboard_model
+            self._pending_dashboard_model = None
+            self._refresh_dashboard()
 
     def notify(self, title, message):
         script = 'on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\n end run'
         subprocess.Popen(["osascript", "-e", script, message, title])  # nosec B603 B607
+
+    def _install_popover(self):
+        if not _APPKIT_AVAILABLE:
+            return
+        status_item = self._status_item()
+        if status_item is None:
+            return
+        try:
+            self._popover = NSPopover.alloc().init()
+            self._popover.setBehavior_(NSPopoverBehaviorTransient)
+            self._popover.setContentSize_((POPOVER_WIDTH, POPOVER_HEIGHT))
+            controller = NSViewController.alloc().init()
+            controller.setView_(self._render_dashboard_view(self._dashboard_model))
+            self._popover.setContentViewController_(controller)
+            self._popover_content = controller
+            self._popover_installed = True
+        except Exception:
+            self._popover = None
+            self._popover_content = None
+            self._popover_installed = False
+
+    def _status_item(self):
+        nsapp = getattr(self, "_nsapp", None)
+        return getattr(nsapp, "nsstatusitem", None)
+
+    def _show_dashboard(self):
+        self._refresh_dashboard()
+        if not self._popover_installed or self._popover is None:
+            return
+        try:
+            status_item = self._status_item()
+            if status_item is None:
+                return
+            button = status_item.button()
+            if self._popover.isShown():
+                self._popover.performClose_(None)
+            else:
+                self._popover.showRelativeToRect_ofView_preferredEdge_(button.bounds(), button, NSMinYEdge)
+        except Exception:
+            return
+
+    def _refresh_dashboard(self):
+        if not self._popover_installed or self._popover_content is None:
+            return
+        try:
+            self._popover_content.setView_(self._render_dashboard_view(self._dashboard_model))
+        except Exception:
+            self._popover_installed = False
+
+    @staticmethod
+    def _ns_color(level="text"):
+        if level == "good":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.22, 0.84, 0.38, 1.0)
+        if level == "warn":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.73, 0.12, 1.0)
+        if level == "bad":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.32, 0.26, 1.0)
+        if level == "muted":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.78, 0.72)
+        if level == "subtle":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.55, 0.72)
+        return NSColor.colorWithCalibratedWhite_alpha_(0.96, 1.0)
+
+    @staticmethod
+    def _label(text, x, y, width, height, size=13, weight="regular", color="text"):
+        label = NSTextField.labelWithString_(str(text or ""))
+        label.setFrame_(NSMakeRect(x, y, width, height))
+        if weight == "bold":
+            font = NSFont.boldSystemFontOfSize_(size)
+        else:
+            font = NSFont.systemFontOfSize_(size)
+        label.setFont_(font)
+        label.setTextColor_(LimitLensApp._ns_color(color))
+        label.setBezeled_(False)
+        label.setDrawsBackground_(False)
+        label.setEditable_(False)
+        label.setSelectable_(False)
+        return label
+
+    @staticmethod
+    def _button(title, action, x, y, width, height, target):
+        button = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        button.setTitle_(title)
+        button.setBezelStyle_(NSBezelStyleRounded)
+        button.setTarget_(target)
+        button.setAction_(action)
+        return button
+
+    @staticmethod
+    def _progress(pct, x, y, width, height):
+        indicator = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        indicator.setIndeterminate_(False)
+        indicator.setMinValue_(0)
+        indicator.setMaxValue_(100)
+        indicator.setDoubleValue_(0 if pct is None else max(0.0, min(100.0, float(pct))))
+        return indicator
+
+    def _render_dashboard_view(self, model):
+        root = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH, POPOVER_HEIGHT))
+        root.setMaterial_(NSVisualEffectMaterialHUDWindow)
+        root.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
+        root.setState_(1)
+        root.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        try:
+            root.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
+        except Exception:
+            pass
+
+        root.addSubview_(self._label(model.get("title"), 18, 526, 260, 24, size=18, weight="bold"))
+        refreshed = model.get("last_refresh")
+        subtitle = model.get("subtitle") or ""
+        if refreshed:
+            subtitle = f"{subtitle} · {refreshed}"
+        root.addSubview_(self._label(subtitle, 18, 506, 360, 18, size=11, color="subtle"))
+
+        rec = model.get("recommendation")
+        y = 462
+        if rec:
+            root.addSubview_(self._label(rec["icon"], 18, y + 12, 28, 24, size=22))
+            root.addSubview_(self._label(rec["title"], 50, y + 25, 250, 18, size=14, weight="bold"))
+            root.addSubview_(self._label(rec["subtitle"], 50, y + 7, 250, 18, size=11, color="muted"))
+            root.addSubview_(self._label(self._pct_label(rec["pct"]), 322, y + 22, 70, 22, size=16, weight="bold", color=rec["level"]))
+            root.addSubview_(self._progress(rec["pct"], 322, y + 8, 72, 10))
+        else:
+            root.addSubview_(self._label(model.get("message") or "No recommendation available", 18, y + 18, 360, 22, size=13, color="muted"))
+
+        y = 408
+        low_rows = model.get("low_rows") or []
+        if low_rows:
+            root.addSubview_(self._label("Needs attention", 18, y, 180, 18, size=12, weight="bold", color="warn"))
+            y -= 36
+            for row in low_rows[:3]:
+                self._add_row_view(root, row, y, compact=True)
+                y -= 42
+        else:
+            root.addSubview_(self._label("No low quotas", 18, y, 180, 18, size=12, weight="bold", color="good"))
+            y -= 34
+
+        list_top = min(y + 12, 324)
+        root.addSubview_(self._label("All quotas", 18, list_top, 180, 18, size=12, weight="bold"))
+        scroll_height = list_top - 84
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 84, POPOVER_WIDTH - 28, max(120, scroll_height)))
+        scroll.setHasVerticalScroller_(True)
+        scroll.setBorderType_(0)
+        content_rows = model.get("rows") or []
+        content_height = max(120, len(content_rows) * 48 + 8)
+        doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 44, content_height))
+        row_y = content_height - 46
+        if content_rows:
+            for row in content_rows:
+                self._add_row_view(doc, row, row_y, compact=False)
+                row_y -= 48
+        else:
+            doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
+        scroll.setDocumentView_(doc)
+        root.addSubview_(scroll)
+
+        actions = [
+            ("Refresh", "refreshDashboard:"),
+            ("Quick", "quickRefreshDashboard:"),
+            ("Config", "openConfigDashboard:"),
+            ("Copy", "copyStatusDashboard:"),
+            ("Doctor", "doctorDashboard:"),
+            ("Report", "doctorReportDashboard:"),
+            ("Quit", "quitDashboard:"),
+        ]
+        x = 14
+        for title, action in actions:
+            width = 54 if title not in ("Refresh", "Doctor") else 64
+            root.addSubview_(self._button(title, action, x, 18, width, 28, self))
+            x += width + 6
+
+        return root
+
+    def _add_row_view(self, parent, row, y, compact=False):
+        icon_x = 8 if not compact else 18
+        title_x = icon_x + 28
+        pct_x = 320 if not compact else 322
+        parent.addSubview_(self._label(row["icon"], icon_x, y + 13, 24, 20, size=18))
+        parent.addSubview_(self._label(row["title"], title_x, y + 23, 250, 17, size=12, weight="bold"))
+        parent.addSubview_(self._label(row["detail"], title_x, y + 6, 250, 16, size=10, color="muted"))
+        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 22, 56, 17, size=12, weight="bold", color=row["level"]))
+        parent.addSubview_(self._progress(row["pct"], pct_x, y + 8, 56, 8))
 
     @staticmethod
     def _safe_float(value):
@@ -376,6 +679,117 @@ class LimitLensApp(rumps.App):
                 combined["pct_left"] = pct_left
 
         return display_rows
+
+    def _empty_dashboard_model(self):
+        return {
+            "state": "loading",
+            "title": "LimitLens",
+            "subtitle": "Loading quota data...",
+            "recommendation": None,
+            "low_rows": [],
+            "rows": [],
+            "last_refresh": None,
+            "message": None,
+        }
+
+    def _recommendation_model(self, item):
+        pct = self._safe_float(item.get("headroom_pct"))
+        if pct is None:
+            return None
+        name = item.get("name") or item.get("tool") or "quota"
+        if " (" in name:
+            name = name.split(" (", 1)[0]
+        if " → " in name:
+            profile, model = name.split(" → ", 1)
+            profile = profile.split(":", 1)[-1]
+            name = f"{profile} / {model}"
+        name = name.replace("codex-", "").strip()
+        name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
+        note = item.get("note") or item.get("reset_label") or item.get("command") or "Best available right now"
+        return {
+            "icon": self._tool_icon(item.get("tool", ""), name),
+            "title": name,
+            "subtitle": note,
+            "pct": pct,
+            "level": self._level_for_pct(pct),
+        }
+
+    def _row_model(self, row):
+        pct = row.get("pct_left")
+        section = str(row.get("section") or "")
+        name = str(row.get("name") or "")
+        label = str(row.get("label") or "")
+        title = label if section.lower() in name.lower() else f"{name} / {label}"
+        window_parts = self._format_window_parts(row)
+        if window_parts:
+            detail = window_parts
+        elif pct is None and row.get("used") is not None:
+            unit = str(row.get("unit") or "").strip()
+            suffix = f" {unit}" if unit else ""
+            detail = f"{self._format_number(row['used'])}{suffix} used"
+        else:
+            detail = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
+        status = row.get("status")
+        if status and status != "running":
+            detail = f"{detail} · {status}" if detail and detail != "?" else status
+        return {
+            "icon": self._tool_icon(section=section),
+            "section": section,
+            "title": title,
+            "detail": detail if detail != "?" else "No usage details",
+            "pct": pct,
+            "pct_label": self._pct_label(pct),
+            "level": self._level_for_pct(pct),
+        }
+
+    def _build_dashboard_model(self, data, display_rows, low_rows):
+        recs = (data.get("recommendations") or {}).get("hard") or []
+        fresh_recs = [r for r in recs if not r.get("stale")]
+        recommendation = None
+        for rec in fresh_recs or recs:
+            recommendation = self._recommendation_model(rec)
+            if recommendation:
+                break
+
+        sorted_rows = sorted(display_rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
+        if recommendation:
+            title = "Use this next"
+            subtitle = "Best recommendation from current quota data"
+        elif display_rows:
+            title = "Quota dashboard"
+            subtitle = "No recommendation available yet"
+        else:
+            title = "No active quotas"
+            subtitle = "Refresh or check provider setup"
+
+        return {
+            "state": "ready",
+            "title": title,
+            "subtitle": subtitle,
+            "recommendation": recommendation,
+            "low_rows": [self._row_model(row) for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:4]],
+            "rows": [self._row_model(row) for row in sorted_rows],
+            "last_refresh": self._last_refresh_label,
+            "message": None,
+        }
+
+    @staticmethod
+    def _pct_label(pct):
+        if pct is None:
+            return "n/a"
+        if 0 < pct < 1:
+            return f"{pct:.1f}%"
+        return f"{pct:.0f}%"
+
+    @staticmethod
+    def _level_for_pct(pct):
+        if pct is None:
+            return "neutral"
+        if pct >= 50:
+            return "good"
+        if pct >= 15:
+            return "warn"
+        return "bad"
 
     def _format_title(self, display_items):
         visible = display_items[:self._max_title_items]
@@ -559,16 +973,19 @@ class LimitLensApp(rumps.App):
 
     def _make_doctor_menu(self):
         return ("submenu", "Doctor", [
-            "Run `limitlens doctor`",
-            "Run `limitlens doctor --report` for beta feedback",
+            ("callback", "Run Doctor", self._on_doctor),
+            ("callback", "Copy Doctor Report", self._on_doctor_report),
         ])
 
     def _make_actions_menu(self):
         return ("submenu", "Actions", [
-            ("callback", "Refresh", self._item_refresh),
-            ("callback", "Quick Refresh", self._item_quick_refresh),
-            ("callback", "Open Config", self._item_open_config),
-            ("callback", "Copy Status", self._item_copy_status),
+            ("callback", "Open Dashboard", self._on_open_dashboard),
+            ("callback", "Refresh", self._on_refresh),
+            ("callback", "Quick Refresh", self._on_quick_refresh),
+            ("callback", "Open Config", self._on_open_config),
+            ("callback", "Copy Status", self._on_copy_status),
+            ("callback", "Run Doctor", self._on_doctor),
+            ("callback", "Copy Doctor Report", self._on_doctor_report),
         ])
 
     def _build_status_summary(self, rec_rows, low_rows, rows):
@@ -605,11 +1022,22 @@ class LimitLensApp(rumps.App):
             f"⚠️ Refresh failed: {message[:48]}",
             "Try Quick Refresh",
             "Run `limitlens doctor` in Terminal",
+            self._item_open_dashboard,
             self._item_refresh,
             self._item_quick_refresh,
             self._item_open_config,
             self._item_copy_status,
         ]
+        self._pending_dashboard_model = {
+            "state": "error",
+            "title": "Refresh failed",
+            "subtitle": "Try Quick Refresh or run Doctor",
+            "recommendation": None,
+            "low_rows": [],
+            "rows": [],
+            "last_refresh": self._last_refresh_label,
+            "message": message,
+        }
 
     def _collect_rows(self, data, check_low_quota):
         rows = []
@@ -775,6 +1203,7 @@ class LimitLensApp(rumps.App):
         menu_items.append(self._make_actions_menu())
 
         self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, display_rows)
+        self._pending_dashboard_model = self._build_dashboard_model(data, display_rows, low_rows)
 
         return menu_items
 
