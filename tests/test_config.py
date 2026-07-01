@@ -141,6 +141,13 @@ class TestValidateConfigTypes(unittest.TestCase):
         with self.assertRaises(ConfigValidationError):
             validate_config_types({"commandcode": {"credits_url": 123}})
 
+    def test_commandcode_total_accepts_number(self):
+        validate_config_types({"commandcode": {"total": 10.0}})
+
+    def test_commandcode_total_rejects_string(self):
+        with self.assertRaises(ConfigValidationError):
+            validate_config_types({"commandcode": {"total": "10"}})
+
     def test_wrong_type_float_raises(self):
         with self.assertRaises(ConfigValidationError):
             validate_config_types({"display": {"amp_usable_pct": "high"}})

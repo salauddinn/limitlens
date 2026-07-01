@@ -69,6 +69,7 @@ DEFAULT_CONFIG = {
     "commandcode": {
         "enabled": False,
         "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
+        "total": 0.0,
     },
     "custom_tools": {
         "enabled": False,

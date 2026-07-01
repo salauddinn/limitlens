@@ -297,7 +297,8 @@ def _commandcode_candidates(commandcode_data):
         return []
     tiers = commandcode_data.get("tiers") or []
     unit = commandcode_data.get("unit_label") or (tiers[0].get("unit") if tiers else None) or "credits"
-    headroom = float(tiers[0].get("pct_left", 100.0)) if tiers else 100.0
+    pct_left = tiers[0].get("pct_left") if tiers else None
+    headroom = float(pct_left) if pct_left is not None else 100.0
     return [{
         "tool": "commandcode",
         "name": "command code",

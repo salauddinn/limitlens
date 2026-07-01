@@ -56,7 +56,8 @@
   },
   "commandcode": {
     "enabled": false,
-    "credits_url": "https://api.commandcode.ai/internal/billing/credits?"
+    "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
+    "total": 10.0
   },
   "custom_tools": {
     "enabled": false,
