@@ -20,7 +20,6 @@ from .core import fmt_reset, parse_to_utc, print_c
 from .providers import (
     get_amp_data,
     get_antigravity_data,
-    get_cline_data,
     get_codex_data,
     get_commandcode_data,
     get_custom_data,

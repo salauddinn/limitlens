@@ -10,6 +10,9 @@
   "cline": {
     "enabled": true
   },
+  "claude": {
+    "enabled": true
+  },
   "amp": {
     "enabled": true
   },
@@ -110,6 +113,7 @@
       "codex": {"command": "codex", "prompt_mode": "arg"},
       "opencode": {"command": "opencode run", "prompt_mode": "arg"},
       "cline": {"command": "cline", "prompt_mode": "arg"},
+      "claude": {"command": "claude", "prompt_mode": "arg"},
       "commandcode": {"command": "cmd", "prompt_mode": "arg"}
     }
   },

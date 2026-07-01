@@ -60,12 +60,6 @@ DEFAULT_CONFIG = {
         "team_id": "",
         "team_name": "",
     },
-    "agentrouter": {
-        "enabled": False,
-        "provider": "agentrouter",
-        "quota_url": "https://agentrouter.org/api/user/self",
-        "unit_label": "units",
-    },
     "commandcode": {
         "enabled": False,
         "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
@@ -77,7 +71,6 @@ DEFAULT_CONFIG = {
     },
     "runner": {
         "ignored_tools": [],
-        "ignore_tools": [],
         "tools": {},
     },
     "display": {
@@ -105,11 +98,13 @@ def limitlens_config_path():
     return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
 
 def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
+    legacy_sections = {"agentrouter"}
     for key, value in config.items():
+        if path == "" and key in legacy_sections:
+            continue
         if (
             path == "custom_tools.tools."
             or path == "pioneer."
-            or path == "agentrouter."
             or path == "runner.tools."
             or path.endswith("model_parents.")
             or path.endswith("parents.")
@@ -412,7 +407,6 @@ def auto_detect_providers(path, write=True, interactive=True):
     check("antigravity", safe_exists("~/.agy-p1-home") or safe_exists("~/.config/agy"))
     check("pi", safe_exists("~/.pi/agent/sessions"))
     check("pioneer", "PIONEER_API_TOKEN" in os.environ)
-    check("agentrouter", safe_exists("~/.config/agentrouter"))
     check("opencode", safe_exists("~/.local/share/opencode"))
     check("copilot_cli", safe_exists("~/.cache/limitlens/copilot-otel.jsonl") or safe_exists("~/.config/github-copilot"))
     check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))

@@ -344,10 +344,33 @@ def _custom_candidates(custom_data):
     return out
 
 
+def _claude_candidates(claude_data):
+    if not claude_data or not claude_data.get("models"):
+        return []
+    models = claude_data["models"]
+    cands = []
+    for m in models:
+        cands.append({
+            "tool": "claude",
+            "name": f"claude ({m.get('id', 'unknown')})",
+            "command": "claude",
+            "headroom_pct": float(m.get("pct_left", 100.0)),
+            "reset_at": m.get("reset_at"),
+            "reset_label": m.get("reset_label"),
+            "quality": "premium",
+            "cost_class": "prepaid" if m.get("limit") else "metered",
+            "surface": "cli",
+            "stale": claude_data.get("stale", False),
+            "note": "Claude CLI provider",
+        })
+    return cands
+
+
 def _all_candidates(result, parse_to_utc, fmt_reset):
     result = result or {}
     cands = []
     cands += _codex_candidates(result.get("codex"))
+    cands += _claude_candidates(result.get("claude"))
     cands += _amp_candidates(result.get("amp"))
     cands += _pioneer_candidates(result.get("pioneer"))
     cands += _agentrouter_candidates(result.get("agentrouter"))
