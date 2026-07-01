@@ -192,9 +192,9 @@ class TestApplyEnvOverrides(unittest.TestCase):
 
     def test_string_override(self):
         config = copy.deepcopy(DEFAULT_CONFIG)
-        with patch.dict(os.environ, {"LIMITLENS_AGENTROUTER_QUOTA_URL": "https://example.com/quota"}):
+        with patch.dict(os.environ, {"LIMITLENS_COMMANDCODE_CREDITS_URL": "https://example.com/credits"}):
             apply_env_overrides(config)
-        self.assertEqual(config["agentrouter"]["quota_url"], "https://example.com/quota")
+        self.assertEqual(config["commandcode"]["credits_url"], "https://example.com/credits")
 
 
 # ── load_limitlens_config ─────────────────────────────────────────────────────

@@ -46,9 +46,14 @@ def log_error(e, context=""):
     import traceback
     from datetime import datetime
     try:
-        log_dir = os.path.expanduser("~/.cache/limitlens")
+        log_file = os.environ.get("LIMITLENS_LOG_PATH")
+        if log_file:
+            log_file = os.path.expanduser(log_file)
+            log_dir = os.path.dirname(log_file) or "."
+        else:
+            log_dir = os.path.expanduser("~/.cache/limitlens")
+            log_file = os.path.join(log_dir, "limitlens.log")
         os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, "limitlens.log")
         with open(log_file, "a", encoding="utf-8") as f:
             timestamp = datetime.now().isoformat()
             f.write(f"[{timestamp}] {context}Error: {type(e).__name__}: {e}\n")

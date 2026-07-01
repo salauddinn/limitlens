@@ -19,7 +19,6 @@ TEST_CONFIG = {
     "opencode": {"enabled": True},
     "pi": {"enabled": True},
     "pioneer": {"enabled": False},
-    "agentrouter": {"enabled": False},
     "commandcode": {"enabled": False},
     "custom_tools": {"enabled": False},
 }
@@ -136,18 +135,16 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
     @patch("limitlens.cli.get_opencode_data")
-    @patch("limitlens.cli.get_agentrouter_data")
     @patch("limitlens.cli.get_custom_data")
     @patch("limitlens.waste_tracker.record_snapshot")
     @patch("limitlens.recommendations.display_one_line")
     def test_one_line_quick_recommendation(
-        self, mock_display_one_line, mock_record, mock_custom, mock_agentrouter, mock_opencode, mock_ag, mock_amp, mock_codex
+        self, mock_display_one_line, mock_record, mock_custom, mock_opencode, mock_ag, mock_amp, mock_codex
     ):
         mock_codex.return_value = {}
         mock_amp.return_value = {}
         mock_ag.return_value = {}
         mock_opencode.return_value = {}
-        mock_agentrouter.return_value = {}
         mock_custom.return_value = {}
 
         test_args = ["limitlens", "--quick"]
@@ -174,17 +171,15 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
     @patch("limitlens.cli.get_opencode_data")
-    @patch("limitlens.cli.get_agentrouter_data")
     @patch("limitlens.cli.get_custom_data")
     @patch("limitlens.waste_tracker.record_snapshot")
     def test_waste_report(
-        self, mock_record, mock_custom, mock_agentrouter, mock_opencode, mock_ag, mock_amp, mock_codex, mock_display_waste, mock_compute_waste
+        self, mock_record, mock_custom, mock_opencode, mock_ag, mock_amp, mock_codex, mock_display_waste, mock_compute_waste
     ):
         mock_codex.return_value = {}
         mock_amp.return_value = {}
         mock_ag.return_value = {}
         mock_opencode.return_value = {}
-        mock_agentrouter.return_value = {}
         mock_custom.return_value = {}
         mock_compute_waste.return_value = []
 
@@ -321,7 +316,6 @@ class TestCLI(unittest.TestCase):
         "claude": {"enabled": False},
         "cursor": {"enabled": False},
         "pioneer": {"enabled": False},
-        "agentrouter": {"enabled": False},
         "commandcode": {"enabled": False},
         "custom_tools": {"enabled": False},
     })
@@ -353,7 +347,6 @@ class TestCLI(unittest.TestCase):
         "claude": {"enabled": False},
         "cursor": {"enabled": False},
         "pioneer": {"enabled": False},
-        "agentrouter": {"enabled": False},
         "commandcode": {"enabled": False},
         "custom_tools": {"enabled": False},
     })
@@ -384,17 +377,15 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_amp_data")
     @patch("limitlens.cli.get_antigravity_data")
     @patch("limitlens.cli.get_opencode_data")
-    @patch("limitlens.cli.get_agentrouter_data")
     @patch("limitlens.cli.get_custom_data")
     @patch("limitlens.waste_tracker.record_snapshot")
     def test_provider_failure_isolated_in_json(
-        self, mock_record, mock_custom, mock_agentrouter, mock_opencode, mock_ag, mock_amp, mock_codex
+        self, mock_record, mock_custom, mock_opencode, mock_ag, mock_amp, mock_codex
     ):
         mock_codex.return_value = {"accounts": []}
         mock_amp.side_effect = TypeError("bad local output")
         mock_ag.return_value = {"profiles": []}
         mock_opencode.return_value = {"opencode": {"windows": []}, "copilot_cli": {"disabled": True}}
-        mock_agentrouter.return_value = {"tiers": []}
         mock_custom.return_value = {"tools": []}
 
         test_args = ["limitlens", "--json", "--tool", "all", "--no-record"]
@@ -412,7 +403,6 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "codex": {"enabled": True},
         "pioneer": {"enabled": False},
-        "agentrouter": {"enabled": False},
         "custom_tools": {"enabled": False},
     })
     @patch("limitlens.cli.get_codex_data")
@@ -466,7 +456,6 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.load_limitlens_config", return_value={
         "codex": {"enabled": False},
         "pioneer": {"enabled": False},
-        "agentrouter": {"enabled": False},
         "custom_tools": {"enabled": True},
     })
     @patch("limitlens.cli.get_amp_data")
@@ -503,16 +492,12 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(any("waste history cleared" in str(call) for call in mock_print.mock_calls))
 
     @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
-    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
     @patch("limitlens.cli.load_limitlens_config", return_value={
-        "agentrouter": {"enabled": True},
-        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
+        "custom_tools": {"enabled": True, "tools": {"kilo": {}}},
     })
-    def test_reset_spend_uses_raw_agentrouter_totals_and_rewrites_custom_config(
-        self, mock_config, mock_agentrouter, mock_mark_reset
+    def test_reset_spend_rewrites_custom_kilo_config(
+        self, mock_config, mock_mark_reset
     ):
-        mock_agentrouter.return_value = {"tiers": [{"used": 120}], "request_count": 12}
-
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             json.dump({
                 "custom_tools": {
@@ -531,13 +516,8 @@ class TestCLI(unittest.TestCase):
                  redirect_stdout(io.StringIO()):
                 main()
 
-            mock_agentrouter.assert_called_once()
-            self.assertFalse(mock_agentrouter.call_args.kwargs["apply_reset_offset"])
-
             extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
-            self.assertEqual(extra_data["agentrouter_offset"]["used"], 120)
-            self.assertEqual(extra_data["agentrouter_offset"]["request_count"], 12)
-            self.assertIn("timestamp", extra_data["agentrouter_offset"])
+            self.assertEqual(extra_data, {})
 
             with open(config_path, encoding="utf-8") as f:
                 updated = json.load(f)
@@ -547,23 +527,6 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(updated["custom_tools"]["tools"]["other"]["request_count"], 0)
         finally:
             os.remove(config_path)
-
-    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
-    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
-    @patch("limitlens.cli.load_limitlens_config", return_value={
-        "agentrouter": {"enabled": True},
-        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "vertex"}}},
-    })
-    def test_reset_spend_skips_agentrouter_when_kilo_provider_is_not_agentrouter(
-        self, mock_config, mock_agentrouter, mock_mark_reset
-    ):
-        test_args = ["limitlens", "--reset-spend"]
-        with patch.object(sys, "argv", test_args), redirect_stdout(io.StringIO()):
-            main()
-
-        mock_agentrouter.assert_not_called()
-        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
-        self.assertEqual(extra_data, {})
 
     @patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG)
     @patch("argparse.ArgumentParser.error")
@@ -585,27 +548,17 @@ class TestCLI(unittest.TestCase):
         payload = json.loads(buf.getvalue())
         self.assertIn("opencode provider failed: Exception: test error", payload["opencode"]["error"])
 
-    @patch("limitlens.cli.get_agentrouter_data")
     @patch("limitlens.cli.get_commandcode_data")
-    def test_agentrouter_and_commandcode(self, mock_cc, mock_ar):
-        mock_ar.return_value = {"ar": 1}
+    def test_commandcode_tool(self, mock_cc):
         mock_cc.return_value = {"cc": 1}
-        for tool in ["agentrouter", "commandcode"]:
-            test_args = ["limitlens", "--json", "--tool", tool, "--no-record"]
-            buf = io.StringIO()
-            config = dict(TEST_CONFIG)
-            if tool == "agentrouter":
-                config = dict(TEST_CONFIG)
-                config["agentrouter"] = {"enabled": True, "provider": "agentrouter"}
-            with patch.object(sys, "argv", test_args), \
-                 patch("limitlens.cli.load_limitlens_config", return_value=config), \
-                 redirect_stdout(buf):
-                main()
-            payload = json.loads(buf.getvalue())
-            if tool == "agentrouter":
-                self.assertIn("agentrouter", payload)
-            else:
-                self.assertIn("commandcode", payload)
+        test_args = ["limitlens", "--json", "--tool", "commandcode", "--no-record"]
+        buf = io.StringIO()
+        with patch.object(sys, "argv", test_args), \
+             patch("limitlens.cli.load_limitlens_config", return_value=TEST_CONFIG), \
+             redirect_stdout(buf):
+            main()
+        payload = json.loads(buf.getvalue())
+        self.assertIn("commandcode", payload)
 
     @patch("limitlens.providers.codex.refresh_all_accounts")
     @patch("limitlens.cli.print_c")
@@ -726,7 +679,6 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.display_amp_text")
     @patch("limitlens.cli.display_antigravity_text")
     @patch("limitlens.cli.display_pioneer_text")
-    @patch("limitlens.cli.display_agentrouter_text")
     @patch("limitlens.cli.display_commandcode_text")
     @patch("limitlens.cli.display_custom_text")
     @patch("limitlens.cli.display_opencode_text")
@@ -740,14 +692,13 @@ class TestCLI(unittest.TestCase):
     @patch("limitlens.cli.get_opencode_data")
     @patch("limitlens.cli.get_pi_data")
     @patch("limitlens.cli.get_pioneer_data")
-    @patch("limitlens.cli.get_agentrouter_data")
     @patch("limitlens.cli.get_commandcode_data")
     @patch("limitlens.cli.get_custom_data")
     @patch("limitlens.cli.get_cursor_data")
     def test_display_all_providers(
-        self, mock_g_cursor, mock_g_custom, mock_g_cc, mock_g_ar, mock_g_pioneer, mock_g_pi,
+        self, mock_g_cursor, mock_g_custom, mock_g_cc, mock_g_pioneer, mock_g_pi,
         mock_g_oc, mock_g_ag, mock_g_amp, mock_g_codex, mock_compute, mock_glance,
-        mock_d_cursor, mock_d_pi, mock_d_oc, mock_d_custom, mock_d_cc, mock_d_ar,
+        mock_d_cursor, mock_d_pi, mock_d_oc, mock_d_custom, mock_d_cc,
         mock_d_pioneer, mock_d_ag, mock_d_amp, mock_d_codex, mock_print
     ):
         mock_g_codex.return_value = {"codex_active": True}
@@ -756,7 +707,6 @@ class TestCLI(unittest.TestCase):
         mock_g_oc.return_value = {"oc_active": True}
         mock_g_pi.return_value = {"pi_active": True}
         mock_g_pioneer.return_value = {"pioneer_active": True}
-        mock_g_ar.return_value = {"ar_active": True}
         mock_g_cc.return_value = {"cc_active": True}
         mock_g_custom.return_value = {"custom_active": True}
         mock_g_cursor.return_value = {"cursor_active": True}
@@ -765,7 +715,7 @@ class TestCLI(unittest.TestCase):
         test_config = {
             "codex": {"enabled": True}, "amp": {"enabled": True}, "antigravity": {"enabled": True},
             "opencode": {"enabled": True}, "pi": {"enabled": True}, "pioneer": {"enabled": True},
-            "agentrouter": {"enabled": True, "provider": "agentrouter"}, "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
+            "commandcode": {"enabled": True}, "custom_tools": {"enabled": True},
             "cursor": {"enabled": True}
         }
         test_args = ["limitlens", "--tool", "all", "--no-record"]
@@ -779,7 +729,6 @@ class TestCLI(unittest.TestCase):
         mock_d_amp.assert_called_once()
         mock_d_ag.assert_called_once()
         mock_d_pioneer.assert_called_once()
-        mock_d_ar.assert_called_once()
         mock_d_cc.assert_called_once()
         mock_d_custom.assert_called_once()
         mock_d_oc.assert_called_once()
@@ -872,47 +821,6 @@ class TestCLI(unittest.TestCase):
         finally:
             os.remove(config_path)
 
-    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
-    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
-    @patch("limitlens.cli.load_limitlens_config", return_value={
-        "agentrouter": {"enabled": True},
-        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
-    })
-    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_error(self, mock_config, mock_agentrouter, mock_mark_reset):
-        mock_agentrouter.return_value = {"error": "Connection timed out"}
-
-        test_args = ["limitlens", "--reset-spend"]
-        buf = io.StringIO()
-        with patch.object(sys, "argv", test_args), \
-             redirect_stdout(buf):
-            main()
-
-        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
-        self.assertIn("Connection timed out", buf.getvalue())
-        mock_mark_reset.assert_called_once()
-        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
-        self.assertIsNone(extra_data["agentrouter_offset"])
-
-    @patch("limitlens.providers.observed.mark_spend_reset", return_value=True)
-    @patch("limitlens.providers.agentrouter.get_agentrouter_data")
-    @patch("limitlens.cli.load_limitlens_config", return_value={
-        "agentrouter": {"enabled": True},
-        "custom_tools": {"enabled": True, "tools": {"kilo": {"provider": "agentrouter"}}},
-    })
-    def test_reset_spend_warns_and_clears_baseline_on_agentrouter_empty_tiers(self, mock_config, mock_agentrouter, mock_mark_reset):
-        mock_agentrouter.return_value = {"tiers": []}
-
-        test_args = ["limitlens", "--reset-spend"]
-        buf = io.StringIO()
-        with patch.object(sys, "argv", test_args), \
-             redirect_stdout(buf):
-            main()
-
-        self.assertIn("failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", buf.getvalue())
-        mock_mark_reset.assert_called_once()
-        extra_data = mock_mark_reset.call_args.kwargs["extra_data"]
-        self.assertIsNone(extra_data["agentrouter_offset"])
-
     @patch("limitlens.cli.print_c")
     @patch("limitlens.cli.display_pi_text")
     @patch("limitlens.cli.get_pi_data")
@@ -979,7 +887,6 @@ class TestCLI(unittest.TestCase):
             "commandcode": {"enabled": False},
             "custom_tools": {"enabled": False},
             "pioneer": {"enabled": False},
-            "agentrouter": {"enabled": False},
             "opencode": {"enabled": False},
             "pi": {"enabled": False},
             "cursor": {"enabled": False},
@@ -1025,7 +932,6 @@ class TestCLI(unittest.TestCase):
             "commandcode": {"enabled": False},
             "custom_tools": {"enabled": False},
             "pioneer": {"enabled": False},
-            "agentrouter": {"enabled": False},
             "opencode": {"enabled": False},
             "pi": {"enabled": False},
             "cursor": {"enabled": False},
@@ -1091,38 +997,28 @@ class TestCLIThreadPool(unittest.TestCase):
 
 class TestCLIDebugAndLogging(unittest.TestCase):
     def test_cli_debug_flag_prints_traceback_and_logs(self):
-        import shutil
         from limitlens.cli import main
 
         test_args = ["limitlens", "--debug"]
-        log_dir = os.path.expanduser("~/.cache/limitlens")
-        log_file = os.path.join(log_dir, "limitlens.log")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = os.path.join(tmpdir, "limitlens.log")
+            err_output = io.StringIO()
+            with patch.object(sys, "argv", test_args), \
+                 patch.dict(os.environ, {"LIMITLENS_LOG_PATH": log_file}), \
+                 patch("limitlens.cli._main", side_effect=ValueError("Test Debug Exception")), \
+                 patch("sys.stderr", err_output), \
+                 self.assertRaises(SystemExit) as cm:
+                main()
 
-        backup_log_file = log_file + ".bak"
-        if os.path.exists(log_file):
-            shutil.copy2(log_file, backup_log_file)
-            os.remove(log_file)
+            self.assertEqual(cm.exception.code, 1)
+            self.assertIn("Test Debug Exception", err_output.getvalue())
+            self.assertIn("traceback", err_output.getvalue().lower())
 
-        err_output = io.StringIO()
-        with patch.object(sys, "argv", test_args), \
-             patch("limitlens.cli._main", side_effect=ValueError("Test Debug Exception")), \
-             patch("sys.stderr", err_output), \
-             self.assertRaises(SystemExit) as cm:
-            main()
-
-        self.assertEqual(cm.exception.code, 1)
-        self.assertIn("Test Debug Exception", err_output.getvalue())
-        self.assertIn("traceback", err_output.getvalue().lower())
-
-        self.assertTrue(os.path.exists(log_file))
-        with open(log_file, "r") as f:
-            content = f.read()
-            self.assertIn("Test Debug Exception", content)
-            self.assertIn("Traceback", content)
-
-        os.remove(log_file)
-        if os.path.exists(backup_log_file):
-            shutil.move(backup_log_file, log_file)
+            self.assertTrue(os.path.exists(log_file))
+            with open(log_file, "r") as f:
+                content = f.read()
+                self.assertIn("Test Debug Exception", content)
+                self.assertIn("Traceback", content)
 
 
 if __name__ == "__main__":
