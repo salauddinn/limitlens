@@ -24,7 +24,6 @@ from .providers import (
     get_commandcode_data,
     get_custom_data,
 )
-from .providers.agentrouter import is_agentrouter_enabled
 from .recommendations import compute_recommendations
 
 
@@ -283,15 +282,6 @@ def collect_quota_data(config: Optional[Mapping[str, Any]] = None) -> Dict[str, 
         fetchers.append(("antigravity", lambda: get_antigravity_data(args, config)))
     if is_provider_enabled(config, "commandcode", default=False):
         fetchers.append(("commandcode", lambda: get_commandcode_data(args, config)))
-    if is_agentrouter_enabled(config):
-        # AgentRouter/Kilo is IDE-oriented today, so we collect it only for the
-        # recommendation context rather than mapping it to a default CLI.
-        try:
-            from .providers import get_agentrouter_data
-
-            fetchers.append(("agentrouter", lambda: get_agentrouter_data(args, config)))
-        except Exception:
-            pass
     if is_provider_enabled(config, "custom_tools", default=False):
         fetchers.append(("custom", lambda: get_custom_data(args, config)))
 

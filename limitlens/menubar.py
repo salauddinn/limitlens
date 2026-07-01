@@ -631,23 +631,6 @@ class LimitLensApp(rumps.App):
                 ))
                 check_low_quota(f"custom-{tool.get('id', tool_name)}-{label}", tool_name, pct)
 
-        # AgentRouter / Kilo Code API quotas
-        agentrouter = data.get("agentrouter") or {}
-        if agentrouter and "error" not in agentrouter:
-            ar_name = agentrouter.get("display_name") or agentrouter.get("username") or agentrouter.get("group") or "Kilo Code"
-            for tier in agentrouter.get("tiers", []):
-                if tier.get("visible", True) is False:
-                    continue
-                label = tier.get("label", "quota")
-                pct = self._safe_float(tier.get("pct_left"))
-                rows.append(self._row(
-                    "Kilo", ar_name, label, pct,
-                    remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit") or agentrouter.get("unit"),
-                    used=tier.get("used"), pct_used=tier.get("pct_used"),
-                    notify_id=f"agentrouter-{label}", notify_label=f"Kilo Code {label}",
-                ))
-                check_low_quota(f"agentrouter-{label}", f"Kilo Code {label}", pct)
-
         # Codex
         codex = data.get("codex") or {}
         for acc in codex.get("accounts", []):

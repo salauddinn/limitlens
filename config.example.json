@@ -51,12 +51,6 @@
     "team_id": "your-team-id",
     "team_name": "Your Team"
   },
-  "agentrouter": {
-    "enabled": false,
-    "provider": "agentrouter",
-    "quota_url": "https://agentrouter.org/api/user/self",
-    "unit_label": "units"
-  },
   "commandcode": {
     "enabled": false,
     "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
@@ -90,7 +84,7 @@
         "total": 84917038,
         "used": 2582962,
         "request_count": 42,
-        "note": "manual AgentRouter quota"
+        "note": "manual Kilo Code quota"
       },
       "cmd": {
         "enabled": false,
