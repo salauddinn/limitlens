@@ -474,14 +474,14 @@ class LimitLensApp(rumps.App):
             y -= 24
 
         list_top = min(y + 14, 320)
-        list_title = "Other quotas" if low_rows else "All quotas"
-        root.addSubview_(self._label(list_title, 18, list_top, 180, 18, size=12, weight="bold"))
+        root.addSubview_(self._label("All quotas", 18, list_top, 180, 18, size=12, weight="bold"))
         scroll_height = list_top - 132
         scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 132, POPOVER_WIDTH - 28, max(112, scroll_height)))
         scroll.setHasVerticalScroller_(True)
+        scroll.setHasHorizontalScroller_(False)
+        scroll.setAutohidesScrollers_(False)
         scroll.setBorderType_(0)
-        low_keys = {(row["title"], row["detail"]) for row in low_rows}
-        content_rows = [row for row in model.get("rows") or [] if (row["title"], row["detail"]) not in low_keys]
+        content_rows = model.get("rows") or []
         content_height = max(112, len(content_rows) * 44 + 8)
         doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 44, content_height))
         row_y = content_height - 42
@@ -490,8 +490,7 @@ class LimitLensApp(rumps.App):
                 self._add_row_view(doc, row, row_y, compact=False)
                 row_y -= 44
         else:
-            empty_text = "Low quotas are shown above." if low_rows else "Refresh or run Doctor to find providers."
-            doc.addSubview_(self._label(empty_text, 8, content_height - 34, 320, 20, size=12, color="muted"))
+            doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
         scroll.setDocumentView_(doc)
         root.addSubview_(scroll)
 
