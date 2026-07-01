@@ -956,12 +956,12 @@ class LimitLensApp(rumps.App):
     def _make_overview_menu(self, rec_rows, low_rows):
         items = []
         if rec_rows:
-            items.append("✨ Recommended")
+            items.append("Recommended next")
             items.extend(rec_rows)
         if low_rows:
             if items:
                 items.append(rumps.separator)
-            items.append("⚠️ Low quota")
+            items.append("Low quota alerts")
             items.extend(self._format_usage_compact(row) for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3])
         if self._last_refresh_label:
             if items:
@@ -971,15 +971,9 @@ class LimitLensApp(rumps.App):
             items.append("No active recommendations")
         return ("submenu", "Overview", items)
 
-    def _make_doctor_menu(self):
-        return ("submenu", "Doctor", [
-            ("callback", "Run Doctor", self._on_doctor),
-            ("callback", "Copy Doctor Report", self._on_doctor_report),
-        ])
-
     def _make_actions_menu(self):
         return ("submenu", "Actions", [
-            ("callback", "Open Dashboard", self._on_open_dashboard),
+            ("callback", "Open Dashboard…", self._on_open_dashboard),
             ("callback", "Refresh", self._on_refresh),
             ("callback", "Quick Refresh", self._on_quick_refresh),
             ("callback", "Open Config", self._on_open_config),
@@ -1199,7 +1193,6 @@ class LimitLensApp(rumps.App):
         menu_items.append(self._make_overview_menu(formatted_recs, low_rows))
         if display_rows:
             menu_items.append(self._make_all_quotas_menu(display_rows))
-        menu_items.append(self._make_doctor_menu())
         menu_items.append(self._make_actions_menu())
 
         self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, display_rows)

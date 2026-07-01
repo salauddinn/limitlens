@@ -165,15 +165,14 @@ def test_build_menu_items_groups_dropdown_like_tabs(app):
     items = app._build_menu_items({"recommendations": {"hard": []}}, [row])
     submenu_titles = [item[1] for item in items if isinstance(item, tuple) and item[0] == "submenu"]
 
-    assert submenu_titles == ["Overview", "All Quotas", "Doctor", "Actions"]
+    assert submenu_titles == ["Overview", "All Quotas", "Actions"]
     overview = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Overview"))
-    doctor = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Doctor"))
     actions = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Actions"))
     assert "Last refreshed: 7:00 PM" in overview[2]
-    assert "Run Doctor" in "\n".join(str(item) for item in doctor[2])
-    assert "Copy Doctor Report" in "\n".join(str(item) for item in doctor[2])
-    assert "Open Dashboard" in "\n".join(str(item) for item in actions[2])
+    assert "Open Dashboard…" in "\n".join(str(item) for item in actions[2])
     assert "Refresh" in "\n".join(str(item) for item in actions[2])
+    assert "Run Doctor" in "\n".join(str(item) for item in actions[2])
+    assert "Copy Doctor Report" in "\n".join(str(item) for item in actions[2])
 
 
 def test_build_dashboard_model_prioritizes_recommendation_and_two_line_rows(app):
@@ -457,10 +456,10 @@ def test_fetch_data_success_with_quotas(app):
 
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)
-        assert "✨ Recommended" in menu_text
+        assert "Recommended next" in menu_text
         assert "ag-prof:model" in menu_text
         assert "25%" in menu_text
-        assert "⚠️ Low quota" in menu_text
+        assert "Low quota alerts" in menu_text
         assert "All Quotas" in menu_text
         assert "Last refreshed:" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
