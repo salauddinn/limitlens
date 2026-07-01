@@ -7,6 +7,16 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Add Cline CLI provider: local `cline` readiness/version checks, `--tool cline` filter, and `limitlens run --tool cline` launcher routing.
 - Fetch ClinePass quota windows (5-hour, weekly, monthly) with reset times using the locally stored Cline OAuth token, including automatic token refresh.
+- Add Claude Code and Copilot CLI observed-usage provider wiring.
+
+### Changed
+- Improve the macOS menubar app with a richer dashboard UI and explicit Cocoa dependency for the mac extra.
+
+### Fixed
+- Fix Command Code credit percentage handling so balance-only payloads do not fabricate 100% remaining.
+
+### Removed
+- Remove AgentRouter provider support; keep legacy `agentrouter` config accepted during validation so existing local configs do not fail immediately.
 
 ## [1.7.0] - 2026-06-29
 

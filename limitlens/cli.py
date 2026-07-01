@@ -10,7 +10,7 @@ import json
 import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime
 
 from .core import (
     print_c,
