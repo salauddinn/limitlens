@@ -467,21 +467,7 @@ class LimitLensApp(rumps.App):
         else:
             root.addSubview_(self._label(model.get("message") or "No recommendation available", 18, y + 18, 360, 22, size=13, color="muted"))
 
-        y = 402
-        low_rows = model.get("low_rows") or []
-        if low_rows:
-            count = len(low_rows)
-            label = "1 quota needs attention" if count == 1 else f"{count} quotas need attention"
-            root.addSubview_(self._label(label, 18, y + 8, 220, 18, size=12, weight="bold", color="warn"))
-            y -= 28
-            for row in low_rows[:2]:
-                self._add_row_view(root, row, y, compact=True)
-                y -= 38
-        else:
-            root.addSubview_(self._label("No low quotas", 18, y + 8, 180, 18, size=12, weight="bold", color="good"))
-            y -= 24
-
-        list_top = min(y + 14, 320)
+        list_top = 410
         root.addSubview_(self._label("All quotas", 18, list_top, 180, 18, size=12, weight="bold"))
         scroll_height = list_top - 132
         scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 132, POPOVER_WIDTH - 28, max(112, scroll_height)))
