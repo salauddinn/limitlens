@@ -430,6 +430,13 @@ def test_fetch_data_success_with_quotas(app):
                 {"label": "C1", "pct_left": 50.0, "used": 50},
                 {"label": "C2", "pct_left": None, "used": 120}
             ]
+        },
+        "cline": {
+            "name": "Cline CLI",
+            "windows": [
+                {"type": "fiveHour", "label": "5h", "pct_used": 90.0, "pct_left": 10.0},
+                {"type": "weekly", "label": "week", "pct_used": 30.0, "pct_left": 70.0}
+            ]
         }
     }
 
@@ -471,6 +478,8 @@ def test_fetch_data_success_with_quotas(app):
         assert "Pioneer" in menu_text and "P1" in menu_text and "2%" in menu_text
         assert "Cursor" in menu_text and "C1" in menu_text and "50%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
+        assert "Cline" in menu_text and "5h" in menu_text and "10%" in menu_text
+        assert "Cline" in menu_text and "week" in menu_text and "70%" in menu_text
         assert "Refresh" in menu_text
         assert "Quick Refresh" in menu_text
         assert "Open Config" in menu_text

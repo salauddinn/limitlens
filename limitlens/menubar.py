@@ -63,6 +63,7 @@ try:
         NSColor,
         NSControlSizeSmall,
         NSFont,
+        NSMakePoint,
         NSMakeRect,
         NSMinYEdge,
         NSPopover,
@@ -88,6 +89,7 @@ except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
     NSColor = None
     NSControlSizeSmall = None
     NSFont = None
+    NSMakePoint = None
     NSMakeRect = None
     NSMinYEdge = None
     NSPopover = None
@@ -113,8 +115,8 @@ PAD_Y = 16
 CARD_RADIUS = 16
 ROW_RADIUS = 12
 PROGRESS_HEIGHT = 6
-ROW_HEIGHT = 58
-ROW_GAP = 6
+ROW_HEIGHT = 66
+ROW_GAP = 8
 
 
 class LimitLensApp(rumps.App):
@@ -411,9 +413,11 @@ class LimitLensApp(rumps.App):
         if level == "card":
             return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.22, 0.25, 0.30, 0.45)
         if level == "row":
-            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.24, 0.27, 0.32, 0.35)
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.23, 0.26, 0.31, 0.62)
+        if level == "button":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.31, 0.35, 0.42, 0.78)
         if level == "track":
-            return NSColor.colorWithCalibratedWhite_alpha_(0.28, 0.45)
+            return NSColor.colorWithCalibratedWhite_alpha_(0.36, 0.38)
         return NSColor.colorWithCalibratedWhite_alpha_(0.96, 1.0)
 
     @staticmethod
@@ -463,6 +467,10 @@ class LimitLensApp(rumps.App):
         button.setFont_(NSFont.systemFontOfSize_(11))
         button.setTarget_(self)
         button.setAction_(action)
+        button.setWantsLayer_(True)
+        if button.layer():
+            button.layer().setBackgroundColor_(LimitLensApp._cg_color("button"))
+            button.layer().setCornerRadius_(height / 2.0)
         return button
 
     @staticmethod
@@ -531,14 +539,6 @@ class LimitLensApp(rumps.App):
         root.addSubview_(self._card(PAD_X, hero_y, hero_w, hero_h, material="card"))
 
         if rec:
-            # Colored top accent bar reflecting the recommendation level.
-            accent = NSView.alloc().initWithFrame_(NSMakeRect(PAD_X, hero_y + hero_h - 4, hero_w, 4))
-            accent.setWantsLayer_(True)
-            if accent.layer():
-                accent.layer().setBackgroundColor_(LimitLensApp._cg_color(rec["level"]))
-                accent.layer().setCornerRadius_(2.0)
-            root.addSubview_(accent)
-
             root.addSubview_(self._section_header("Best option", PAD_X + 16, hero_y + hero_h - 22, 120, color="subtle"))
             root.addSubview_(self._label(rec["icon"], PAD_X + 16, hero_y + hero_h - 60, 32, 28, size=24))
             title_w = hero_w - 120
@@ -552,13 +552,18 @@ class LimitLensApp(rumps.App):
         # All quotas list
         list_top = POPOVER_HEIGHT - 178
         root.addSubview_(self._label("All quotas", PAD_X, list_top, 180, 18, size=12, weight="bold"))
-        scroll_y = 124
+        scroll_y = 118
         scroll_h = max(112, list_top - scroll_y - 12)
         scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD_X - 2, scroll_y, POPOVER_WIDTH - 2 * PAD_X + 4, scroll_h))
         scroll.setHasVerticalScroller_(True)
         scroll.setHasHorizontalScroller_(False)
         scroll.setAutohidesScrollers_(False)
         scroll.setBorderType_(0)
+        try:
+            scroll.setDrawsBackground_(False)
+            scroll.contentView().setDrawsBackground_(False)
+        except Exception:
+            pass
         # Force a light scroller knob so it stays visible on the dark vibrancy
         # material; overlay scrollers with the default knob can be hard to see.
         _vscroller = scroll.verticalScroller()
@@ -576,13 +581,17 @@ class LimitLensApp(rumps.App):
         else:
             doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
         scroll.setDocumentView_(doc)
+        try:
+            clip = scroll.contentView()
+            clip.scrollToPoint_(NSMakePoint(0, max(0, content_height - scroll_h)))
+            scroll.reflectScrolledClipView_(clip)
+        except Exception:
+            pass
         root.addSubview_(scroll)
 
-        # Actions
-        actions_header_y = 116
-        root.addSubview_(self._section_header("Actions", PAD_X, actions_header_y, 120, color="subtle"))
-        self._add_button_row(root, [("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)], 84)
-        self._add_button_row(root, [("Copy Status", "copyStatusDashboard:", 104), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 58)], 48)
+        # Footer actions: keep diagnostics out of the dashboard chrome.
+        self._add_button_row(root, [("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)], 70)
+        self._add_button_row(root, [("Copy Status", "copyStatusDashboard:", 104), ("Quit", "quitDashboard:", 58)], 34)
 
         return root
 
@@ -598,18 +607,19 @@ class LimitLensApp(rumps.App):
             bg.layer().setCornerRadius_(ROW_RADIUS)
         parent.addSubview_(bg)
 
-        icon_x = 12 if not compact else 8
-        title_x = icon_x + 30
-        title_width = 234 if not compact else 190
-        pct_x = int(width - 70)
-        pct_width = 60
-        bar_width = 56
+        icon_x = 14 if not compact else 8
+        title_x = icon_x + 34
+        pct_width = 62
+        pct_x = int(width - pct_width - 14)
+        title_width = max(120, pct_x - title_x - 10)
+        bar_x = title_x
+        bar_width = max(80, width - title_x - 18)
 
-        parent.addSubview_(self._label(row["icon"], icon_x, y + 18, 24, 22, size=19))
-        parent.addSubview_(self._label(row["title"], title_x, y + 29, title_width, 17, size=12, weight="bold"))
-        parent.addSubview_(self._label(row["detail"], title_x, y + 9, title_width, 16, size=10, color="muted"))
-        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 30, pct_width, 18, size=13, weight="bold", color=row["level"], alignment="right"))
-        parent.addSubview_(self._progress_bar(row["pct"], pct_x, y + 12, bar_width, 5, level=row["level"]))
+        parent.addSubview_(self._label(row["icon"], icon_x, y + 22, 26, 26, size=20))
+        parent.addSubview_(self._label(row["title"], title_x, y + 39, title_width, 18, size=12, weight="bold"))
+        parent.addSubview_(self._label(row["detail"], title_x, y + 22, title_width, 16, size=10, color="muted"))
+        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 39, pct_width, 18, size=13, weight="bold", color=row["level"], alignment="right"))
+        parent.addSubview_(self._progress_bar(row["pct"], bar_x, y + 10, bar_width, 5, level=row["level"]))
 
     @staticmethod
     def _safe_float(value):
@@ -1287,6 +1297,19 @@ class LimitLensApp(rumps.App):
                 notify_id=f"cursor-{label}", notify_label=f"Cursor {label}",
             ))
             check_low_quota(f"cursor-{label}", f"Cursor {label}", pct)
+
+        # Cline CLI (ClinePass quota windows)
+        cline = data.get("cline") or {}
+        for win in cline.get("windows", []):
+            label = win.get("label") or win.get("type") or "quota"
+            pct = self._safe_float(win.get("pct_left"))
+            rows.append(self._row(
+                "Cline", "Cline", label, pct,
+                remaining=pct, total=100, unit="% left",
+                status=cline.get("status"),
+                notify_id=f"cline-{label}", notify_label=f"Cline {label}",
+            ))
+            check_low_quota(f"cline-{label}", f"Cline {label}", pct)
 
         return rows
 
