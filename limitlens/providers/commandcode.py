@@ -27,6 +27,24 @@ def _number(value, default=0.0):
         return default
 
 
+def _optional_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_number(mapping, keys):
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        if key in mapping:
+            value = _optional_number(mapping.get(key))
+            if value is not None:
+                return max(0.0, value)
+    return None
+
+
 def _millis_to_iso(value):
     try:
         if value is None:
@@ -112,16 +130,42 @@ def parse_commandcode_credits(payload, args=None, cfg=None):
     # opensource monthly values are informational sub-buckets and should not be
     # added again or they will double-count the total available credits.
     available = credits["monthly"] + credits["purchased"]
-    total = max(available, _number(cfg.get("total"), 0.0))
-    pct_left = (available / total * 100.0) if total > 0 else 0.0
+    used = _first_number(data, (
+        "usedCredits",
+        "creditsUsed",
+        "creditUsed",
+        "usageCredits",
+        "used",
+        "spent",
+    ))
+    total = _first_number(data, (
+        "totalCredits",
+        "creditsTotal",
+        "creditLimit",
+        "credit_limit",
+        "limit",
+        "total",
+    ))
+    cfg_total = _optional_number(cfg.get("total"))
+    if cfg_total is not None:
+        total = max(total or 0.0, cfg_total)
+    if total is None and used is not None:
+        total = available + used
+    elif total is not None:
+        total = max(total, available)
+        if used is None:
+            used = max(0.0, total - available)
+
+    pct_left = (available / total * 100.0) if total and total > 0 else None
+    pct_used = 100.0 - pct_left if pct_left is not None else None
 
     tiers = [{
         "label": "credits",
         "remaining": available,
         "total": total,
-        "used": max(0.0, total - available),
+        "used": used,
         "pct_left": pct_left,
-        "pct_used": 100.0 - pct_left,
+        "pct_used": pct_used,
         "unit": "credits",
     }]
 
@@ -271,12 +315,18 @@ def display_commandcode_text(data, args):
     identity_line("cmd", data.get("name") or "Command Code", args)
 
     for tier in visible_tiers:
-        pct_left = tier.get("pct_left", 0.0)
-        pct_used = tier.get("pct_used", 0.0)
+        pct_left = tier.get("pct_left")
+        pct_used = tier.get("pct_used")
         unit = tier.get("unit") or data.get("unit_label") or "credits"
         label = str(tier.get("label") or unit)[:16]
-        b = bar(pct_used, no_color=getattr(args, 'no_color', False))
-        print(f"    {label:<16} {b}  {pct_left:5.1f}% left  {tier['remaining']:.4f}/{tier['total']:.4f} {unit}")
+        b = bar(pct_used or 0.0, no_color=getattr(args, 'no_color', False))
+        remaining = tier.get("remaining", 0.0)
+        total = tier.get("total")
+        if pct_left is None:
+            total_text = "?" if total is None else f"{total:.4f}"
+            print(f"    {label:<16} {b}    ?% left  {remaining:.4f}/{total_text} {unit}")
+        else:
+            print(f"    {label:<16} {b}  {pct_left:5.1f}% left  {remaining:.4f}/{total:.4f} {unit}")
 
     if data.get("plan"):
         print_c(f"    plan             {data['plan']}", "\033[90m", getattr(args, 'no_color', False))

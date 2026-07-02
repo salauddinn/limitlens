@@ -10,10 +10,12 @@ desktop notifications when quotas run critically low.
 import json
 import os
 import re
+import shlex
 import subprocess  # nosec B404
 import sys
 import threading
 import time
+import warnings
 from datetime import datetime
 
 MENUBAR_REFRESH_TIMEOUT_SECONDS = 45
@@ -51,6 +53,72 @@ except ImportError:  # pragma: no cover - exercised only on non-macOS without ma
     rumps = _UnavailableRumps()
 
 
+_APPKIT_AVAILABLE = True
+try:
+    from AppKit import (  # type: ignore
+        NSAppearance,
+        NSBezelStyleInline,
+        NSBezelStyleRounded,
+        NSButton,
+        NSColor,
+        NSControlSizeSmall,
+        NSFont,
+        NSMakePoint,
+        NSMakeRect,
+        NSMinYEdge,
+        NSPopover,
+        NSPopoverBehaviorTransient,
+        NSProgressIndicator,
+        NSScrollView,
+        NSTextField,
+        NSView,
+        NSViewController,
+        NSVisualEffectBlendingModeBehindWindow,
+        NSVisualEffectMaterialHUDWindow,
+        NSVisualEffectView,
+        NSViewWidthSizable,
+        NSViewHeightSizable,
+    )
+except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
+    _APPKIT_AVAILABLE = False
+
+    NSAppearance = None
+    NSBezelStyleInline = None
+    NSBezelStyleRounded = None
+    NSButton = None
+    NSColor = None
+    NSControlSizeSmall = None
+    NSFont = None
+    NSMakePoint = None
+    NSMakeRect = None
+    NSMinYEdge = None
+    NSPopover = None
+    NSPopoverBehaviorTransient = None
+    NSProgressIndicator = None
+    NSScrollView = None
+    NSTextField = None
+    NSView = None
+    NSViewController = None
+    NSVisualEffectBlendingModeBehindWindow = None
+    NSVisualEffectMaterialHUDWindow = None
+    NSVisualEffectView = None
+    NSViewWidthSizable = None
+    NSViewHeightSizable = None
+
+
+POPOVER_WIDTH = 420
+POPOVER_HEIGHT = 540
+
+# Modern dashboard layout constants.
+PAD_X = 18
+PAD_Y = 16
+CARD_RADIUS = 16
+ROW_RADIUS = 12
+PROGRESS_HEIGHT = 6
+ROW_HEIGHT = 66
+ROW_GAP = 8
+
+
 class LimitLensApp(rumps.App):
     def __init__(self):
         import os
@@ -71,23 +139,32 @@ class LimitLensApp(rumps.App):
         self._item_quick_refresh = rumps.MenuItem("Quick Refresh", callback=self._on_quick_refresh)
         self._item_open_config = rumps.MenuItem("Open Config", callback=self._on_open_config)
         self._item_copy_status = rumps.MenuItem("Copy Status", callback=self._on_copy_status)
+        self._item_open_dashboard = rumps.MenuItem("Open Dashboard", callback=self._on_open_dashboard)
+        self._item_doctor = rumps.MenuItem("Run Doctor", callback=self._on_doctor)
+        self._item_doctor_report = rumps.MenuItem("Copy Doctor Report", callback=self._on_doctor_report)
         self._item_quit    = rumps.MenuItem("Quit",    callback=self._on_quit)
         self._sep_top      = rumps.separator
         self._sep_bot      = rumps.separator
 
-        self.menu = [self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
+        self.menu = [self._item_open_dashboard, self._item_refresh, self._item_quick_refresh, self._sep_top, self._item_quit]
 
         self._is_fetching = False
         self._queued_sync_codex = None
         self._fetch_lock = threading.Lock()
         self._pending_title = None
         self._pending_menu_items = None
+        self._pending_dashboard_model = None
+        self._dashboard_model = self._empty_dashboard_model()
+        self._popover = None
+        self._popover_content = None
+        self._popover_installed = False
         self._notified_set = set()
         self._has_loaded_once = False
         self._last_refresh_label = None
         self._last_status_summary = "LimitLens status\nNo data loaded yet."
         # Keep the macOS menubar compact. Full details live in the dropdown.
         self._max_title_items = 2
+        self._install_popover()
 
         # Load display config for thresholds and refresh interval.
         try:
@@ -178,11 +255,62 @@ class LimitLensApp(rumps.App):
         except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
+    def _on_open_dashboard(self, _):
+        self._show_dashboard()
+
+    def _on_doctor(self, _):
+        try:
+            cmd = f"{shlex.quote(sys.executable)} -m limitlens doctor"
+            script = f'tell application "Terminal" to do script {json.dumps(cmd)}'
+            subprocess.Popen(["osascript", "-e", script])  # nosec B603 B607
+            self._pending_title = "Doctor opened"
+        except Exception as e:  # pragma: no cover - depends on macOS desktop state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
+
+    def _on_doctor_report(self, _):
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "limitlens", "doctor", "--report"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+                stdin=subprocess.DEVNULL,
+            )  # nosec B603
+            text = proc.stdout.strip() or proc.stderr.strip() or "No doctor report output."
+            subprocess.run(["pbcopy"], input=text, text=True, check=False, timeout=5)  # nosec B603 B607
+            self._pending_title = "✓ Report copied"
+        except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
+            self._pending_title = f"⚠️ {str(e)[:15]}"
+
     def _on_quit(self, _):
         rumps.quit_application()
 
+    def refreshDashboard_(self, _):
+        self._on_refresh(None)
+
+    def quickRefreshDashboard_(self, _):
+        self._on_quick_refresh(None)
+
+    def openConfigDashboard_(self, _):
+        self._on_open_config(None)
+
+    def copyStatusDashboard_(self, _):
+        self._on_copy_status(None)
+
+    def doctorDashboard_(self, _):
+        self._on_doctor(None)
+
+    def doctorReportDashboard_(self, _):
+        self._on_doctor_report(None)
+
+    def quitDashboard_(self, _):
+        self._on_quit(None)
+
     @rumps.timer(1)
     def check_updates(self, _):
+        if not self._popover_installed:
+            self._install_popover()
         if self._pending_title is not None:
             self.title = self._pending_title
             self._pending_title = None
@@ -196,7 +324,11 @@ class LimitLensApp(rumps.App):
                         submenu = rumps.MenuItem(item[1])
                         for child in item[2]:
                             if isinstance(child, tuple) and len(child) == 3 and child[0] == "callback":
-                                submenu.add(child[2])
+                                callback = child[2]
+                                if hasattr(callback, "callback") and hasattr(callback, "title"):
+                                    submenu.add(callback)
+                                else:
+                                    submenu.add(rumps.MenuItem(child[1], callback=callback))
                             elif hasattr(child, "callback") and hasattr(child, "title"):
                                 submenu.add(child)
                             else:
@@ -209,10 +341,285 @@ class LimitLensApp(rumps.App):
             self.menu.add(self._sep_bot)
             self.menu.add(self._item_quit)
             self._pending_menu_items = None
+        if self._pending_dashboard_model is not None:
+            self._dashboard_model = self._pending_dashboard_model
+            self._pending_dashboard_model = None
+            self._refresh_dashboard()
 
     def notify(self, title, message):
         script = 'on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\n end run'
         subprocess.Popen(["osascript", "-e", script, message, title])  # nosec B603 B607
+
+    def _install_popover(self):
+        if not _APPKIT_AVAILABLE:
+            return
+        status_item = self._status_item()
+        if status_item is None:
+            return
+        try:
+            self._popover = NSPopover.alloc().init()
+            self._popover.setBehavior_(NSPopoverBehaviorTransient)
+            self._popover.setContentSize_((POPOVER_WIDTH, POPOVER_HEIGHT))
+            controller = NSViewController.alloc().init()
+            controller.setView_(self._render_dashboard_view(self._dashboard_model))
+            self._popover.setContentViewController_(controller)
+            self._popover_content = controller
+            self._popover_installed = True
+        except Exception:
+            self._popover = None
+            self._popover_content = None
+            self._popover_installed = False
+
+    def _status_item(self):
+        nsapp = getattr(self, "_nsapp", None)
+        return getattr(nsapp, "nsstatusitem", None)
+
+    def _show_dashboard(self):
+        self._refresh_dashboard()
+        if not self._popover_installed or self._popover is None:
+            return
+        try:
+            status_item = self._status_item()
+            if status_item is None:
+                return
+            button = status_item.button()
+            if self._popover.isShown():
+                self._popover.performClose_(None)
+            else:
+                self._popover.showRelativeToRect_ofView_preferredEdge_(button.bounds(), button, NSMinYEdge)
+        except Exception:
+            return
+
+    def _refresh_dashboard(self):
+        if not self._popover_installed or self._popover_content is None:
+            return
+        try:
+            self._popover_content.setView_(self._render_dashboard_view(self._dashboard_model))
+        except Exception:
+            self._popover_installed = False
+
+    @staticmethod
+    def _ns_color(level="text"):
+        if level == "good":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.26, 0.86, 0.42, 1.0)
+        if level == "warn":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.76, 0.18, 1.0)
+        if level == "bad":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.36, 0.30, 1.0)
+        if level == "muted":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.78, 0.85)
+        if level == "subtle":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.55, 0.90)
+        if level == "card":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.22, 0.25, 0.30, 0.45)
+        if level == "row":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.23, 0.26, 0.31, 0.62)
+        if level == "button":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.31, 0.35, 0.42, 0.78)
+        if level == "track":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.36, 0.38)
+        return NSColor.colorWithCalibratedWhite_alpha_(0.96, 1.0)
+
+    @staticmethod
+    def _cg_color(level="text"):
+        color = LimitLensApp._ns_color(level)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return color.CGColor()
+
+    @staticmethod
+    def _card(x, y, width, height, material="card"):
+        card = NSView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        card.setWantsLayer_(True)
+        if card.layer():
+            card.layer().setBackgroundColor_(LimitLensApp._cg_color(material))
+            card.layer().setCornerRadius_(CARD_RADIUS)
+        return card
+
+    @staticmethod
+    def _progress_bar(pct, x, y, width, height, level="text"):
+        track = NSView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        track.setWantsLayer_(True)
+        if track.layer():
+            track.layer().setBackgroundColor_(LimitLensApp._cg_color("track"))
+            track.layer().setCornerRadius_(height / 2.0)
+
+        fill_width = 0 if pct is None else int(width * max(0.0, min(100.0, float(pct))) / 100.0)
+        if fill_width < 1 and pct is not None and float(pct) > 0:
+            fill_width = 1
+        fill = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, fill_width, height))
+        fill.setWantsLayer_(True)
+        if fill.layer():
+            fill.layer().setBackgroundColor_(LimitLensApp._cg_color(level))
+            fill.layer().setCornerRadius_(height / 2.0)
+        track.addSubview_(fill)
+        return track
+
+    @staticmethod
+    def _section_header(text, x, y, width, color="subtle"):
+        return LimitLensApp._label(text, x, y, width, 16, size=11, weight="bold", color=color)
+
+    def _pill_button(self, title, action, x, y, width, height):
+        button = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        button.setTitle_(title)
+        button.setBezelStyle_(NSBezelStyleInline)
+        button.setControlSize_(NSControlSizeSmall)
+        button.setFont_(NSFont.systemFontOfSize_(11))
+        button.setTarget_(self)
+        button.setAction_(action)
+        button.setWantsLayer_(True)
+        if button.layer():
+            button.layer().setBackgroundColor_(LimitLensApp._cg_color("button"))
+            button.layer().setCornerRadius_(height / 2.0)
+        return button
+
+    @staticmethod
+    def _label(text, x, y, width, height, size=13, weight="regular", color="text", alignment="left"):
+        label = NSTextField.labelWithString_(str(text or ""))
+        label.setFrame_(NSMakeRect(x, y, width, height))
+        if weight == "bold":
+            font = NSFont.boldSystemFontOfSize_(size)
+        elif weight == "semibold":
+            if hasattr(NSFont, "systemFontOfSize_weight_"):
+                font = NSFont.systemFontOfSize_weight_(size, 0.65)
+            else:
+                font = NSFont.boldSystemFontOfSize_(size)
+        else:
+            font = NSFont.systemFontOfSize_(size)
+        label.setFont_(font)
+        label.setTextColor_(LimitLensApp._ns_color(color))
+        label.setBezeled_(False)
+        label.setDrawsBackground_(False)
+        label.setEditable_(False)
+        label.setSelectable_(False)
+        if alignment == "right":
+            try:
+                label.setAlignment_(2)
+            except Exception:
+                pass
+        return label
+
+    def _button(self, title, action, x, y, width, height):
+        return self._pill_button(title, action, x, y, width, height)
+
+    def _add_button_row(self, parent, actions, y, height=26):
+        gap = 8
+        total_width = sum(width for _, _, width in actions) + gap * (len(actions) - 1)
+        x = int((POPOVER_WIDTH - total_width) / 2)
+        for title, action, width in actions:
+            parent.addSubview_(self._pill_button(title, action, x, y, width, height))
+            x += width + gap
+
+    @staticmethod
+    def _progress(pct, x, y, width, height):
+        return LimitLensApp._progress_bar(pct, x, y, width, height, level="text")
+
+    def _render_dashboard_view(self, model):
+        root = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH, POPOVER_HEIGHT))
+        root.setMaterial_(NSVisualEffectMaterialHUDWindow)
+        root.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
+        root.setState_(1)
+        root.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        try:
+            root.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
+        except Exception:
+            pass
+
+        # Header
+        root.addSubview_(self._label("LimitLens", PAD_X, POPOVER_HEIGHT - 28, 130, 24, size=17, weight="bold"))
+        refreshed = model.get("last_refresh")
+        subtitle = f"Updated {refreshed}" if refreshed else (model.get("subtitle") or "")
+        root.addSubview_(self._label(subtitle, POPOVER_WIDTH - 258, POPOVER_HEIGHT - 26, 240, 16, size=10, color="subtle", alignment="right"))
+
+        # Hero card
+        rec = model.get("recommendation")
+        hero_y = POPOVER_HEIGHT - 148
+        hero_h = 110
+        hero_w = POPOVER_WIDTH - 2 * PAD_X
+        root.addSubview_(self._card(PAD_X, hero_y, hero_w, hero_h, material="card"))
+
+        if rec:
+            root.addSubview_(self._section_header("Best option", PAD_X + 16, hero_y + hero_h - 22, 120, color="subtle"))
+            root.addSubview_(self._label(rec["icon"], PAD_X + 16, hero_y + hero_h - 60, 32, 28, size=24))
+            title_w = hero_w - 120
+            root.addSubview_(self._label(rec["title"], PAD_X + 56, hero_y + hero_h - 52, title_w, 20, size=15, weight="bold"))
+            root.addSubview_(self._label(rec["subtitle"], PAD_X + 56, hero_y + hero_h - 72, title_w, 18, size=11, color="muted"))
+            root.addSubview_(self._label(self._pct_label(rec["pct"]), PAD_X + hero_w - 86, hero_y + hero_h - 54, 64, 24, size=18, weight="bold", color=rec["level"], alignment="right"))
+            root.addSubview_(self._progress_bar(rec["pct"], PAD_X + 16, hero_y + 18, hero_w - 32, 8, level=rec["level"]))
+        else:
+            root.addSubview_(self._label(model.get("message") or "No recommendation available", PAD_X + 16, hero_y + hero_h / 2 - 10, hero_w - 32, 22, size=13, color="muted"))
+
+        # All quotas list
+        list_top = POPOVER_HEIGHT - 178
+        root.addSubview_(self._label("All quotas", PAD_X, list_top, 180, 18, size=12, weight="bold"))
+        scroll_y = 118
+        scroll_h = max(112, list_top - scroll_y - 12)
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD_X - 2, scroll_y, POPOVER_WIDTH - 2 * PAD_X + 4, scroll_h))
+        scroll.setHasVerticalScroller_(True)
+        scroll.setHasHorizontalScroller_(False)
+        scroll.setAutohidesScrollers_(False)
+        scroll.setBorderType_(0)
+        try:
+            scroll.setDrawsBackground_(False)
+            scroll.contentView().setDrawsBackground_(False)
+        except Exception:
+            pass
+        # Force a light scroller knob so it stays visible on the dark vibrancy
+        # material; overlay scrollers with the default knob can be hard to see.
+        _vscroller = scroll.verticalScroller()
+        if _vscroller is not None:
+            _vscroller.setKnobStyle_(2)  # NSScrollerKnobStyleLight
+
+        content_rows = model.get("rows") or []
+        content_height = max(112, len(content_rows) * (ROW_HEIGHT + ROW_GAP) + 8)
+        doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 2 * PAD_X, content_height))
+        row_y = content_height - ROW_HEIGHT - 4
+        if content_rows:
+            for row in content_rows:
+                self._add_row_view(doc, row, row_y, compact=False)
+                row_y -= (ROW_HEIGHT + ROW_GAP)
+        else:
+            doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
+        scroll.setDocumentView_(doc)
+        try:
+            clip = scroll.contentView()
+            clip.scrollToPoint_(NSMakePoint(0, max(0, content_height - scroll_h)))
+            scroll.reflectScrolledClipView_(clip)
+        except Exception:
+            pass
+        root.addSubview_(scroll)
+
+        # Footer actions: keep diagnostics out of the dashboard chrome.
+        self._add_button_row(root, [("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)], 70)
+        self._add_button_row(root, [("Copy Status", "copyStatusDashboard:", 104), ("Quit", "quitDashboard:", 58)], 34)
+
+        return root
+
+    def _add_row_view(self, parent, row, y, compact=False):
+        width = parent.frame().size.width if parent.frame() else (POPOVER_WIDTH - 2 * PAD_X)
+        height = ROW_HEIGHT if not compact else 44
+
+        # Rounded row background
+        bg = NSView.alloc().initWithFrame_(NSMakeRect(0, y, width, height))
+        bg.setWantsLayer_(True)
+        if bg.layer():
+            bg.layer().setBackgroundColor_(LimitLensApp._cg_color("row"))
+            bg.layer().setCornerRadius_(ROW_RADIUS)
+        parent.addSubview_(bg)
+
+        icon_x = 14 if not compact else 8
+        title_x = icon_x + 34
+        pct_width = 62
+        pct_x = int(width - pct_width - 14)
+        title_width = max(120, pct_x - title_x - 10)
+        bar_x = title_x
+        bar_width = max(80, width - title_x - 18)
+
+        parent.addSubview_(self._label(row["icon"], icon_x, y + 22, 26, 26, size=20))
+        parent.addSubview_(self._label(row["title"], title_x, y + 39, title_width, 18, size=12, weight="bold"))
+        parent.addSubview_(self._label(row["detail"], title_x, y + 22, title_width, 16, size=10, color="muted"))
+        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 39, pct_width, 18, size=13, weight="bold", color=row["level"], alignment="right"))
+        parent.addSubview_(self._progress_bar(row["pct"], bar_x, y + 10, bar_width, 5, level=row["level"]))
 
     @staticmethod
     def _safe_float(value):
@@ -345,6 +752,23 @@ class LimitLensApp(rumps.App):
         return "   ".join(parts)
 
     @classmethod
+    def _format_dashboard_window_parts(cls, row):
+        parts = []
+        window_parts = row.get("window_parts")
+        if not window_parts and row.get("window_label"):
+            window_parts = [{"window_label": row.get("window_label"), "pct_left": row.get("pct_left")}]
+        for part in window_parts or []:
+            pct = cls._safe_float(part.get("pct_left"))
+            pct_str = "n/a" if pct is None else f"{cls._format_number(pct)}%"
+            w_lbl = part.get("window_label")
+            if w_lbl == "5h":
+                w_lbl = "5h"
+            elif w_lbl == "week":
+                w_lbl = "week"
+            parts.append(f"{w_lbl} {pct_str}")
+        return " · ".join(parts)
+
+    @classmethod
     def _group_antigravity_window_rows(cls, rows):
         grouped = {}
         display_rows = []
@@ -376,6 +800,117 @@ class LimitLensApp(rumps.App):
                 combined["pct_left"] = pct_left
 
         return display_rows
+
+    def _empty_dashboard_model(self):
+        return {
+            "state": "loading",
+            "title": "LimitLens",
+            "subtitle": "Loading quota data...",
+            "recommendation": None,
+            "low_rows": [],
+            "rows": [],
+            "last_refresh": None,
+            "message": None,
+        }
+
+    def _recommendation_model(self, item):
+        pct = self._safe_float(item.get("headroom_pct"))
+        if pct is None:
+            return None
+        name = item.get("name") or item.get("tool") or "quota"
+        if " (" in name:
+            name = name.split(" (", 1)[0]
+        if " → " in name:
+            profile, model = name.split(" → ", 1)
+            profile = profile.split(":", 1)[-1]
+            name = f"{profile} / {model}"
+        name = name.replace("codex-", "").strip()
+        name = {"amp": "Amp", "pioneer": "Pioneer"}.get(name.lower(), name)
+        note = item.get("note") or item.get("reset_label") or item.get("command") or "Best available right now"
+        return {
+            "icon": self._tool_icon(item.get("tool", ""), name),
+            "title": name,
+            "subtitle": note,
+            "pct": pct,
+            "level": self._level_for_pct(pct),
+        }
+
+    def _row_model(self, row):
+        pct = row.get("pct_left")
+        section = str(row.get("section") or "")
+        name = str(row.get("name") or "")
+        label = str(row.get("label") or "")
+        title = label if section.lower() in name.lower() else f"{name} / {label}"
+        window_parts = self._format_dashboard_window_parts(row)
+        if window_parts:
+            detail = window_parts
+        elif pct is None and row.get("used") is not None:
+            unit = str(row.get("unit") or "").strip()
+            suffix = f" {unit}" if unit else ""
+            detail = f"{self._format_number(row['used'])}{suffix} used"
+        else:
+            detail = self._format_ratio(row.get("remaining"), row.get("total"), row.get("unit"))
+        status = row.get("status")
+        if status and status != "running":
+            detail = f"{detail} · {status}" if detail and detail != "?" else status
+        return {
+            "icon": self._tool_icon(section=section),
+            "section": section,
+            "title": title,
+            "detail": detail if detail != "?" else "No usage details",
+            "pct": pct,
+            "pct_label": self._pct_label(pct),
+            "level": self._level_for_pct(pct),
+        }
+
+    def _build_dashboard_model(self, data, display_rows, low_rows):
+        recs = (data.get("recommendations") or {}).get("hard") or []
+        fresh_recs = [r for r in recs if not r.get("stale")]
+        recommendation = None
+        for rec in fresh_recs or recs:
+            recommendation = self._recommendation_model(rec)
+            if recommendation:
+                break
+
+        sorted_rows = sorted(display_rows, key=lambda r: (r.get("pct_left") is None, -(r.get("pct_left") or -1)))
+        if recommendation:
+            title = "Use this next"
+            subtitle = "Best recommendation from current quota data"
+        elif display_rows:
+            title = "Quota dashboard"
+            subtitle = "No recommendation available yet"
+        else:
+            title = "No active quotas"
+            subtitle = "Refresh or check provider setup"
+
+        return {
+            "state": "ready",
+            "title": title,
+            "subtitle": subtitle,
+            "recommendation": recommendation,
+            "low_rows": [self._row_model(row) for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:4]],
+            "rows": [self._row_model(row) for row in sorted_rows],
+            "last_refresh": self._last_refresh_label,
+            "message": None,
+        }
+
+    @staticmethod
+    def _pct_label(pct):
+        if pct is None:
+            return "n/a"
+        if 0 < pct < 1:
+            return f"{pct:.1f}%"
+        return f"{pct:.0f}%"
+
+    @staticmethod
+    def _level_for_pct(pct):
+        if pct is None:
+            return "neutral"
+        if pct >= 50:
+            return "good"
+        if pct >= 15:
+            return "warn"
+        return "bad"
 
     def _format_title(self, display_items):
         visible = display_items[:self._max_title_items]
@@ -542,12 +1077,12 @@ class LimitLensApp(rumps.App):
     def _make_overview_menu(self, rec_rows, low_rows):
         items = []
         if rec_rows:
-            items.append("✨ Recommended")
+            items.append("Recommended next")
             items.extend(rec_rows)
         if low_rows:
             if items:
                 items.append(rumps.separator)
-            items.append("⚠️ Low quota")
+            items.append("Low quota alerts")
             items.extend(self._format_usage_compact(row) for row in sorted(low_rows, key=lambda r: r.get("pct_left") or 0)[:3])
         if self._last_refresh_label:
             if items:
@@ -557,18 +1092,15 @@ class LimitLensApp(rumps.App):
             items.append("No active recommendations")
         return ("submenu", "Overview", items)
 
-    def _make_doctor_menu(self):
-        return ("submenu", "Doctor", [
-            "Run `limitlens doctor`",
-            "Run `limitlens doctor --report` for beta feedback",
-        ])
-
     def _make_actions_menu(self):
         return ("submenu", "Actions", [
-            ("callback", "Refresh", self._item_refresh),
-            ("callback", "Quick Refresh", self._item_quick_refresh),
-            ("callback", "Open Config", self._item_open_config),
-            ("callback", "Copy Status", self._item_copy_status),
+            ("callback", "Open Dashboard…", self._on_open_dashboard),
+            ("callback", "Refresh", self._on_refresh),
+            ("callback", "Quick Refresh", self._on_quick_refresh),
+            ("callback", "Open Config", self._on_open_config),
+            ("callback", "Copy Status", self._on_copy_status),
+            ("callback", "Run Doctor", self._on_doctor),
+            ("callback", "Copy Doctor Report", self._on_doctor_report),
         ])
 
     def _build_status_summary(self, rec_rows, low_rows, rows):
@@ -605,11 +1137,22 @@ class LimitLensApp(rumps.App):
             f"⚠️ Refresh failed: {message[:48]}",
             "Try Quick Refresh",
             "Run `limitlens doctor` in Terminal",
+            self._item_open_dashboard,
             self._item_refresh,
             self._item_quick_refresh,
             self._item_open_config,
             self._item_copy_status,
         ]
+        self._pending_dashboard_model = {
+            "state": "error",
+            "title": "Refresh failed",
+            "subtitle": "Try Quick Refresh or run Doctor",
+            "recommendation": None,
+            "low_rows": [],
+            "rows": [],
+            "last_refresh": self._last_refresh_label,
+            "message": message,
+        }
 
     def _collect_rows(self, data, check_low_quota):
         rows = []
@@ -630,23 +1173,6 @@ class LimitLensApp(rumps.App):
                     notify_id=f"custom-{tool.get('id', tool_name)}-{label}", notify_label=tool_name,
                 ))
                 check_low_quota(f"custom-{tool.get('id', tool_name)}-{label}", tool_name, pct)
-
-        # AgentRouter / Kilo Code API quotas
-        agentrouter = data.get("agentrouter") or {}
-        if agentrouter and "error" not in agentrouter:
-            ar_name = agentrouter.get("display_name") or agentrouter.get("username") or agentrouter.get("group") or "Kilo Code"
-            for tier in agentrouter.get("tiers", []):
-                if tier.get("visible", True) is False:
-                    continue
-                label = tier.get("label", "quota")
-                pct = self._safe_float(tier.get("pct_left"))
-                rows.append(self._row(
-                    "Kilo", ar_name, label, pct,
-                    remaining=tier.get("remaining"), total=tier.get("total"), unit=tier.get("unit") or agentrouter.get("unit"),
-                    used=tier.get("used"), pct_used=tier.get("pct_used"),
-                    notify_id=f"agentrouter-{label}", notify_label=f"Kilo Code {label}",
-                ))
-                check_low_quota(f"agentrouter-{label}", f"Kilo Code {label}", pct)
 
         # Codex
         codex = data.get("codex") or {}
@@ -772,6 +1298,19 @@ class LimitLensApp(rumps.App):
             ))
             check_low_quota(f"cursor-{label}", f"Cursor {label}", pct)
 
+        # Cline CLI (ClinePass quota windows)
+        cline = data.get("cline") or {}
+        for win in cline.get("windows", []):
+            label = win.get("label") or win.get("type") or "quota"
+            pct = self._safe_float(win.get("pct_left"))
+            rows.append(self._row(
+                "Cline", "Cline", label, pct,
+                remaining=pct, total=100, unit="% left",
+                status=cline.get("status"),
+                notify_id=f"cline-{label}", notify_label=f"Cline {label}",
+            ))
+            check_low_quota(f"cline-{label}", f"Cline {label}", pct)
+
         return rows
 
     def _build_menu_items(self, data, rows):
@@ -788,10 +1327,10 @@ class LimitLensApp(rumps.App):
         menu_items.append(self._make_overview_menu(formatted_recs, low_rows))
         if display_rows:
             menu_items.append(self._make_all_quotas_menu(display_rows))
-        menu_items.append(self._make_doctor_menu())
         menu_items.append(self._make_actions_menu())
 
         self._last_status_summary = self._build_status_summary(formatted_recs, low_rows, display_rows)
+        self._pending_dashboard_model = self._build_dashboard_model(data, display_rows, low_rows)
 
         return menu_items
 

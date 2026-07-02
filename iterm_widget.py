@@ -113,7 +113,7 @@ async def main(connection):
             # Fallback when installed via pipx and package is unresolvable
             known = {
                 "antigravity": "🪐", "codex": "⚡", "amp": "🔥", "pioneer": "🧭",
-                "agentrouter": "🔶", "commandcode": "🖥️", "claude": "🤖", "copilot": "✈️"
+                "kilo": "🔶", "commandcode": "🖥️", "claude": "🤖", "copilot": "✈️"
             }
             return known.get(tool_key, "▪️")
 

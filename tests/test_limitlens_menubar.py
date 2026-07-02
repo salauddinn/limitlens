@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 import pytest
 import subprocess
 from unittest.mock import patch, MagicMock
@@ -42,7 +43,7 @@ def app():
 
 def test_init(app):
     assert app.title == "⏳ Loading..."
-    assert len(app.menu) == 4
+    assert len(app.menu) == 5
     assert not app._is_fetching
     assert app._queued_sync_codex is None
     assert app._pending_title is None
@@ -164,13 +165,88 @@ def test_build_menu_items_groups_dropdown_like_tabs(app):
     items = app._build_menu_items({"recommendations": {"hard": []}}, [row])
     submenu_titles = [item[1] for item in items if isinstance(item, tuple) and item[0] == "submenu"]
 
-    assert submenu_titles == ["Overview", "All Quotas", "Doctor", "Actions"]
+    assert submenu_titles == ["Overview", "All Quotas", "Actions"]
     overview = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Overview"))
-    doctor = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Doctor"))
     actions = next(item for item in items if isinstance(item, tuple) and item[:2] == ("submenu", "Actions"))
     assert "Last refreshed: 7:00 PM" in overview[2]
-    assert "Run `limitlens doctor`" in doctor[2]
+    assert "Open Dashboard…" in "\n".join(str(item) for item in actions[2])
     assert "Refresh" in "\n".join(str(item) for item in actions[2])
+    assert "Run Doctor" in "\n".join(str(item) for item in actions[2])
+    assert "Copy Doctor Report" in "\n".join(str(item) for item in actions[2])
+
+
+def test_build_dashboard_model_prioritizes_recommendation_and_two_line_rows(app):
+    rows = [
+        app._row("Codex", "p1", "weekly", 71.0, display_group="codex-p1", display_label="quota", window_label="week"),
+        app._row("Codex", "p1", "5h window", 89.0, display_group="codex-p1", display_label="quota", window_label="5h"),
+        app._row("Amp", "Amp", "Amp Free", 100.0, remaining=5, total=5, unit="$"),
+        app._row("Antigrav", "ide", "Gemini", 17.99, remaining=17.99, total=100, unit="% left"),
+    ]
+    display_rows = app._group_antigravity_window_rows(rows)
+    data = {
+        "recommendations": {
+            "hard": [
+                {"tool": "codex", "name": "codex-p1", "headroom_pct": 89, "note": "best coding fit"}
+            ]
+        }
+    }
+
+    model = app._build_dashboard_model(data, display_rows, [display_rows[-1]])
+
+    assert model["title"] == "Use this next"
+    assert model["recommendation"]["title"] == "p1"
+    assert model["recommendation"]["subtitle"] == "best coding fit"
+    assert model["low_rows"][0]["title"] == "ide / Gemini"
+    codex_row = next(row for row in model["rows"] if row["title"] == "p1 / quota")
+    assert "5h 89%" in codex_row["detail"]
+    assert "week 71%" in codex_row["detail"]
+    assert "<object object" not in json.dumps(model)
+
+
+def test_refresh_failure_updates_dashboard_model(app):
+    app._last_refresh_label = "7:00 PM"
+
+    app._set_refresh_failure("provider boom token=<sensitive-value>")
+
+    assert app._pending_dashboard_model["state"] == "error"
+    assert app._pending_dashboard_model["title"] == "Refresh failed"
+    assert "<sensitive-value>" not in app._pending_dashboard_model["message"]
+    assert "token=<redacted>" in app._pending_dashboard_model["message"]
+
+
+def test_popover_uses_rumps_nsstatusitem_anchor(app):
+    app._nsapp = MagicMock()
+    app._nsapp.nsstatusitem = MagicMock()
+
+    assert app._status_item() is app._nsapp.nsstatusitem
+
+
+def test_check_updates_installs_popover_after_rumps_statusbar_exists(app):
+    app._popover_installed = False
+    app._install_popover = MagicMock()
+
+    app.check_updates(None)
+
+    app._install_popover.assert_called_once_with()
+
+
+@pytest.mark.skipif(
+    os.environ.get("LIMITLENS_APPKIT_SMOKE") != "1",
+    reason="AppKit view smoke requires an explicit macOS app-context run",
+)
+def test_render_dashboard_view_smoke_when_appkit_available(app):
+    if not limitlens.menubar._APPKIT_AVAILABLE:
+        pytest.skip("AppKit is not available in this environment")
+    model = app._build_dashboard_model(
+        {"recommendations": {"hard": [{"tool": "amp", "name": "amp", "headroom_pct": 100}]}},
+        [app._row("Amp", "Amp", "Amp Free", 100.0, remaining=5, total=5, unit="$")],
+        [],
+    )
+
+    view = app._render_dashboard_view(model)
+
+    assert view is not None
+    assert len(view.subviews()) > 0
 
 
 def test_copy_status_uses_readable_summary(app):
@@ -354,6 +430,13 @@ def test_fetch_data_success_with_quotas(app):
                 {"label": "C1", "pct_left": 50.0, "used": 50},
                 {"label": "C2", "pct_left": None, "used": 120}
             ]
+        },
+        "cline": {
+            "name": "Cline CLI",
+            "windows": [
+                {"type": "fiveHour", "label": "5h", "pct_used": 90.0, "pct_left": 10.0},
+                {"type": "weekly", "label": "week", "pct_used": 30.0, "pct_left": 70.0}
+            ]
         }
     }
 
@@ -380,10 +463,10 @@ def test_fetch_data_success_with_quotas(app):
 
         menu = app._pending_menu_items
         menu_text = "\n".join(str(item) for item in menu)
-        assert "✨ Recommended" in menu_text
+        assert "Recommended next" in menu_text
         assert "ag-prof:model" in menu_text
         assert "25%" in menu_text
-        assert "⚠️ Low quota" in menu_text
+        assert "Low quota alerts" in menu_text
         assert "All Quotas" in menu_text
         assert "Last refreshed:" in menu_text
         assert "Codex" in menu_text and "Acc1" in menu_text and "Reqs" in menu_text and "5%" in menu_text
@@ -395,6 +478,8 @@ def test_fetch_data_success_with_quotas(app):
         assert "Pioneer" in menu_text and "P1" in menu_text and "2%" in menu_text
         assert "Cursor" in menu_text and "C1" in menu_text and "50%" in menu_text
         assert "Cursor" in menu_text and "C2" in menu_text and "120 used" in menu_text
+        assert "Cline" in menu_text and "5h" in menu_text and "10%" in menu_text
+        assert "Cline" in menu_text and "week" in menu_text and "70%" in menu_text
         assert "Refresh" in menu_text
         assert "Quick Refresh" in menu_text
         assert "Open Config" in menu_text
@@ -621,16 +706,10 @@ def test_main():
         mock_app.run.assert_called_once()
 
 
-def test_fetch_data_logging(app):
-    import os
-    import shutil
+def test_fetch_data_logging(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
     log_dir = os.path.expanduser("~/.cache/limitlens")
     log_file = os.path.join(log_dir, "limitlens.log")
-
-    backup_log_file = log_file + ".bak"
-    if os.path.exists(log_file):
-        shutil.copy2(log_file, backup_log_file)
-        os.remove(log_file)
 
     try:
         mock_proc = MagicMock()
@@ -691,8 +770,6 @@ def test_fetch_data_logging(app):
     finally:
         if os.path.exists(log_file):
             os.remove(log_file)
-        if os.path.exists(backup_log_file):
-            shutil.move(backup_log_file, log_file)
 
 
 def test_fetch_data_failure_updates_status_summary(app):

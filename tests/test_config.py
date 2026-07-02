@@ -114,6 +114,9 @@ class TestValidateConfigTypes(unittest.TestCase):
     def test_valid_bool_passes(self):
         validate_config_types({"cursor": {"enabled": True}})
 
+    def test_cline_config_passes(self):
+        validate_config_types({"cline": {"enabled": True}})
+
     def test_runner_config_passes(self):
         validate_config_types(
             {
@@ -137,6 +140,13 @@ class TestValidateConfigTypes(unittest.TestCase):
     def test_wrong_type_string_raises(self):
         with self.assertRaises(ConfigValidationError):
             validate_config_types({"commandcode": {"credits_url": 123}})
+
+    def test_commandcode_total_accepts_number(self):
+        validate_config_types({"commandcode": {"total": 10.0}})
+
+    def test_commandcode_total_rejects_string(self):
+        with self.assertRaises(ConfigValidationError):
+            validate_config_types({"commandcode": {"total": "10"}})
 
     def test_wrong_type_float_raises(self):
         with self.assertRaises(ConfigValidationError):
@@ -182,9 +192,9 @@ class TestApplyEnvOverrides(unittest.TestCase):
 
     def test_string_override(self):
         config = copy.deepcopy(DEFAULT_CONFIG)
-        with patch.dict(os.environ, {"LIMITLENS_AGENTROUTER_QUOTA_URL": "https://example.com/quota"}):
+        with patch.dict(os.environ, {"LIMITLENS_COMMANDCODE_CREDITS_URL": "https://example.com/credits"}):
             apply_env_overrides(config)
-        self.assertEqual(config["agentrouter"]["quota_url"], "https://example.com/quota")
+        self.assertEqual(config["commandcode"]["credits_url"], "https://example.com/credits")
 
 
 # ── load_limitlens_config ─────────────────────────────────────────────────────

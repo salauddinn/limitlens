@@ -47,7 +47,8 @@ class TestCommandCodeProvider(unittest.TestCase):
 
         self.assertAlmostEqual(data["available"], 4.3507)
         self.assertAlmostEqual(data["credits"]["purchased"], 4.3507)
-        self.assertEqual(data["tiers"][0]["pct_left"], 100.0)
+        self.assertIsNone(data["tiers"][0]["pct_left"])
+        self.assertIsNone(data["tiers"][0]["total"])
 
     def test_display_credits(self):
         data = parse_commandcode_credits({"credits": {"purchasedCredits": 4.3507}}, self.args)
@@ -58,9 +59,38 @@ class TestCommandCodeProvider(unittest.TestCase):
 
         output = buf.getvalue()
         self.assertIn("Command Code", output)
-        self.assertIn("4.3507/4.3507 credits", output)
+        self.assertIn("?% left", output)
+        self.assertIn("4.3507/? credits", output)
         self.assertIn("purchased", output)
         self.assertIn("4.3507 credits", output)
+
+    def test_parse_credits_with_used_infers_total(self):
+        data = parse_commandcode_credits({
+            "credits": {
+                "monthlyCredits": 3,
+                "purchasedCredits": 2,
+                "usedCredits": 5,
+            }
+        }, self.args)
+
+        tier = data["tiers"][0]
+        self.assertEqual(tier["remaining"], 5.0)
+        self.assertEqual(tier["used"], 5.0)
+        self.assertEqual(tier["total"], 10.0)
+        self.assertEqual(tier["pct_left"], 50.0)
+
+    def test_parse_credits_with_config_total(self):
+        data = parse_commandcode_credits({
+            "credits": {
+                "monthlyCredits": 0,
+                "purchasedCredits": 4,
+            }
+        }, self.args, {"total": 10})
+
+        tier = data["tiers"][0]
+        self.assertEqual(tier["total"], 10.0)
+        self.assertEqual(tier["used"], 6.0)
+        self.assertEqual(tier["pct_left"], 40.0)
 
     def test_parse_merlin_status_response(self):
         data = parse_commandcode_credits({
@@ -107,7 +137,7 @@ class TestCommandCodeProvider(unittest.TestCase):
         self.assertIn("monthly", output)
         self.assertIn("premium monthly", output)
         self.assertIn("opensource monthly", output)
-        self.assertIn("5.6007/5.6007 credits", output)
+        self.assertIn("5.6007/? credits", output)
 
     @patch.dict("os.environ", {"COMMANDCODE_COOKIE": "session=redacted"}, clear=True)
     @patch("limitlens.providers.commandcode.load_limitlens_config", return_value={"commandcode": {}})

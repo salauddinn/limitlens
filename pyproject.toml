@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "limitlens"
 version = "1.7.0"
-description = "Unified quota checker for AI coding tools (Codex, Amp, OpenCode, Antigravity, Cursor, Pi, Pioneer, AgentRouter, Kilo, Command Code)"
+description = "Unified quota checker for AI coding tools (Codex, Amp, OpenCode, Antigravity, Cursor, Pi, Pioneer, Kilo, Command Code)"
 readme = "README.md"
 authors = [
     { name = "Salauddin", email = "salauddinn@users.noreply.github.com" }
@@ -38,6 +38,7 @@ dev = [
 ]
 mac = [
     "rumps>=0.4.0",
+    "pyobjc-framework-Cocoa>=11.1; sys_platform == 'darwin'",
 ]
 
 [project.urls]

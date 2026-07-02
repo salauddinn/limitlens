@@ -10,7 +10,7 @@ import json
 import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime
 
 from .core import (
     print_c,
@@ -33,23 +33,28 @@ from .providers import (
     get_opencode_data, display_opencode_text,
     get_claude_data, display_claude_text,
     get_pi_data, display_pi_text,
+    get_kilo_data, display_kilo_text,
     get_pioneer_data, display_pioneer_text,
-    get_agentrouter_data, display_agentrouter_text,
     get_commandcode_data, display_commandcode_text,
     get_custom_data, display_custom_text,
     get_cursor_data, display_cursor_text,
+    get_cline_data, display_cline_text,
 )
 from .providers.observed import display_at_glance
-from .providers.agentrouter import is_agentrouter_enabled
 
 def log_error(e, context=""):
     import os
     import traceback
     from datetime import datetime
     try:
-        log_dir = os.path.expanduser("~/.cache/limitlens")
+        log_file = os.environ.get("LIMITLENS_LOG_PATH")
+        if log_file:
+            log_file = os.path.expanduser(log_file)
+            log_dir = os.path.dirname(log_file) or "."
+        else:
+            log_dir = os.path.expanduser("~/.cache/limitlens")
+            log_file = os.path.join(log_dir, "limitlens.log")
         os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, "limitlens.log")
         with open(log_file, "a", encoding="utf-8") as f:
             timestamp = datetime.now().isoformat()
             f.write(f"[{timestamp}] {context}Error: {type(e).__name__}: {e}\n")
@@ -73,9 +78,9 @@ def _doctor_rows(config):
         ("claude", "Claude", True),
         ("cursor", "Cursor", True),
         ("pioneer", "Pioneer", False),
-        ("agentrouter", "AgentRouter", False),
         ("commandcode", "CommandCode", False),
         ("custom_tools", "Custom", False),
+        ("cline", "Cline", False),
     ]
 
     def status_for(key, default):
@@ -169,7 +174,7 @@ def _run_subcommand(argv):
   limitlens run --dry-run "Research the migration path"
 """,
     )
-    parser.add_argument("--tool", choices=["auto", "pi", "agy", "antigravity", "amp", "codex", "opencode", "commandcode", "cmd"], default="auto", help="Force a tool instead of auto-routing")
+    parser.add_argument("--tool", choices=["auto", "pi", "kilo", "agy", "antigravity", "amp", "codex", "opencode", "cline", "commandcode", "cmd"], default="auto", help="Force a tool instead of auto-routing")
     parser.add_argument("--dry-run", action="store_true", help="Show the chosen tool and command without launching it")
     parser.add_argument("--cwd", help="Working directory for the launched agent")
     parser.add_argument("--plain", action="store_true", help="Plain output: no color")
@@ -219,7 +224,7 @@ def _main():
         return
 
     parser = argparse.ArgumentParser(
-        description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, AgentRouter, Cursor, and more",
+        description="Unified status checker for Codex, Amp, Antigravity, OpenCode, Pi, Cursor, and more",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Common commands:
   limitlens run "Build a feature"   Launch the best AI agent CLI
@@ -244,7 +249,7 @@ def _main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "claude", "pioneer", "agentrouter", "commandcode", "custom", "cursor", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "kilo", "claude", "pioneer", "commandcode", "custom", "cursor", "cline", "all"], default="all", help="Check specific tool")
     parser.add_argument("-w", "--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -264,7 +269,7 @@ def _main():
     parser.add_argument("--record", action="store_true", help="Quietly record a snapshot for waste tracking, then exit")
     parser.add_argument("--no-record", action="store_true", help="Skip snapshot recording on this run")
     parser.add_argument("--reset-waste", action="store_true", help="Delete all recorded waste snapshots, then exit")
-    parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and Kilo Code via configured providers)")
+    parser.add_argument("--reset-spend", action="store_true", help="Reset observed spend tracking (Pi, OpenCode, Copilot CLI, and manual custom tools)")
     parser.add_argument("--init-config", action="store_true", help="Detect installed tools and write an initial config file, then exit")
     parser.add_argument("--store-token", metavar="PROVIDER", help="Securely store an API token in the OS keychain (e.g. pioneer, commandcode). Prompts for token securely.")
     parser.add_argument("--store-token-stdin", metavar="PROVIDER", help="Securely store an API token in the OS keychain reading from stdin")
@@ -298,10 +303,10 @@ def _main():
         "pi": "Pi sessions",
         "claude": "Claude Code usage",
         "pioneer": "Pioneer team quota",
-        "agentrouter": "AgentRouter credits",
         "commandcode": "CommandCode credits",
         "custom": "custom tools",
         "cursor": "Cursor usage",
+        "cline": "Cline CLI",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -355,15 +360,17 @@ def _main():
             enabled_count += 1
         if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
             enabled_count += 1
-        if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
+        if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
             enabled_count += 1
-        if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
+        if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
             enabled_count += 1
         if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
             enabled_count += 1
         if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
             enabled_count += 1
         if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
+            enabled_count += 1
+        if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
             enabled_count += 1
 
         max_workers = max(16, enabled_count)
@@ -381,16 +388,18 @@ def _main():
                 fetchers["claude"] = executor.submit(get_claude_data, args, config)
             if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
+            if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
+                fetchers["kilo"] = executor.submit(get_kilo_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-            if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
-                fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
             if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
                 fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
             if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
                 fetchers["custom"] = executor.submit(get_custom_data, args, config)
             if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
                 fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
+            if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
+                fetchers["cline"] = executor.submit(get_cline_data, args, config)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -563,24 +572,6 @@ def _main():
         from .providers.observed import mark_spend_reset
         extra_data = {}
 
-        # If Kilo is configured to use AgentRouter locally, capture the raw
-        # gateway totals as the reset baseline.
-        if is_agentrouter_enabled(config):
-            import limitlens.providers.agentrouter as ar
-            ar_data = ar.get_agentrouter_data(args, config, apply_reset_offset=False)
-            if "error" in ar_data or not ar_data.get("tiers"):
-                print_c("  ⚠ failed to capture AgentRouter/Kilo reset baseline; clearing previous baseline", "\033[33m", args.no_color)
-                if "error" in ar_data:
-                    print_c(f"    Details: {ar_data['error']}", "\033[90m", args.no_color)
-                extra_data["agentrouter_offset"] = None
-            else:
-                tier = ar_data["tiers"][0]
-                extra_data["agentrouter_offset"] = {
-                    "used": tier["used"],
-                    "request_count": ar_data.get("request_count", 0),
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-
         # Reset any manual 'used' and 'request_count' fields in custom_tools inside config.json
         try:
             if reset_custom_tool_spend(limitlens_config_path()):
@@ -657,7 +648,7 @@ def _main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "pioneer", "agentrouter", "commandcode", "custom", "cursor")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "kilo", "pioneer", "commandcode", "custom", "cursor", "cline")):
             print()
             print_c("  ═══ Quota Left ═══", "\033[1;36m", args.no_color)
 
@@ -669,14 +660,14 @@ def _main():
             display_antigravity_text(result["antigravity"], args)
         if "pioneer" in result:
             display_pioneer_text(result["pioneer"], args)
-        if "agentrouter" in result:
-            display_agentrouter_text(result["agentrouter"], args)
         if "commandcode" in result:
             display_commandcode_text(result["commandcode"], args)
         if "custom" in result:
             display_custom_text(result["custom"], args)
         if "cursor" in result:
             display_cursor_text(result["cursor"], args)
+        if "cline" in result:
+            display_cline_text(result["cline"], args)
 
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)
@@ -685,6 +676,8 @@ def _main():
                 display_claude_text(result["claude"], args)
             if "pi" in result:
                 display_pi_text(result["pi"], args)
+            if "kilo" in result:
+                display_kilo_text(result["kilo"], args)
 
         # Removed bottom border
         if args.watch:

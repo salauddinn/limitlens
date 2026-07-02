@@ -91,6 +91,35 @@ def test_build_command_uses_production_cli_defaults():
     assert build_command("codex", "hello") == (("codex", "hello"), None)
     assert build_command("opencode", "hello") == (("opencode", "run", "hello"), None)
     assert build_command("commandcode", "hello") == (("cmd", "hello"), None)
+    assert build_command("cline", "hello") == (("cline", "hello"), None)
+    assert build_command("kilo", "hello") == (("kilo", "run", "hello"), None)
+
+
+def test_route_can_force_cline_when_enabled_without_quota():
+    decision = route_prompt(
+        "Build the dashboard",
+        config={"cline": {"enabled": True}},
+        preferred_tool="cline",
+        quota_data={},
+        require_executable=False,
+    )
+
+    assert decision.tool_id == "cline"
+    assert decision.label == "Cline CLI"
+    assert decision.reason == "enabled; no hard quota source"
+
+
+def test_route_can_force_cline_with_default_config():
+    decision = route_prompt(
+        "Build the dashboard",
+        config={},
+        preferred_tool="cline",
+        quota_data={},
+        require_executable=False,
+    )
+
+    assert decision.tool_id == "cline"
+    assert decision.reason == "enabled; no hard quota source"
 
 
 def test_build_command_rejects_unknown_prompt_mode():

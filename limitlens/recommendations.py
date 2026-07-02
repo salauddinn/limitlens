@@ -257,37 +257,6 @@ def _pioneer_candidates(pioneer_data):
     }]
 
 
-def _agentrouter_candidates(agentrouter_data):
-    """One pooled AgentRouter/Kilo Code candidate."""
-    if not agentrouter_data or "error" in agentrouter_data:
-        return []
-    tiers = agentrouter_data.get("tiers") or []
-    if not tiers:
-        return []
-    total = sum((t.get("total") or 0) for t in tiers)
-    left = sum((t.get("remaining") or 0) for t in tiers)
-    if total <= 0 or left <= 0.5:
-        return []
-    headroom = (left / total) * 100.0
-    requests = agentrouter_data.get("request_count") or 0
-    note = f"{left:.0f}/{total:.0f} units left"
-    if requests:
-        note += f", {requests} requests"
-    return [{
-        "tool": "agentrouter",
-        "name": f"kilo ({agentrouter_data.get('display_name') or agentrouter_data.get('username') or 'agentrouter'})",
-        "command": "use Kilo Code",
-        "headroom_pct": headroom,
-        "reset_at": None,
-        "reset_label": None,
-        "quality": "premium",
-        "cost_class": "prepaid",
-        "surface": "ide",
-        "stale": False,
-        "note": note,
-    }]
-
-
 def _commandcode_candidates(commandcode_data):
     """One pooled Command Code candidate from available credits."""
     if not commandcode_data or "error" in commandcode_data:
@@ -297,7 +266,8 @@ def _commandcode_candidates(commandcode_data):
         return []
     tiers = commandcode_data.get("tiers") or []
     unit = commandcode_data.get("unit_label") or (tiers[0].get("unit") if tiers else None) or "credits"
-    headroom = float(tiers[0].get("pct_left", 100.0)) if tiers else 100.0
+    pct_left = tiers[0].get("pct_left") if tiers else None
+    headroom = float(pct_left) if pct_left is not None else 100.0
     return [{
         "tool": "commandcode",
         "name": "command code",
@@ -343,13 +313,35 @@ def _custom_candidates(custom_data):
     return out
 
 
+def _claude_candidates(claude_data):
+    if not claude_data or not claude_data.get("models"):
+        return []
+    models = claude_data["models"]
+    cands = []
+    for m in models:
+        cands.append({
+            "tool": "claude",
+            "name": f"claude ({m.get('id', 'unknown')})",
+            "command": "claude",
+            "headroom_pct": float(m.get("pct_left", 100.0)),
+            "reset_at": m.get("reset_at"),
+            "reset_label": m.get("reset_label"),
+            "quality": "premium",
+            "cost_class": "prepaid" if m.get("limit") else "metered",
+            "surface": "cli",
+            "stale": claude_data.get("stale", False),
+            "note": "Claude CLI provider",
+        })
+    return cands
+
+
 def _all_candidates(result, parse_to_utc, fmt_reset):
     result = result or {}
     cands = []
     cands += _codex_candidates(result.get("codex"))
+    cands += _claude_candidates(result.get("claude"))
     cands += _amp_candidates(result.get("amp"))
     cands += _pioneer_candidates(result.get("pioneer"))
-    cands += _agentrouter_candidates(result.get("agentrouter"))
     cands += _commandcode_candidates(result.get("commandcode"))
     cands += _custom_candidates(result.get("custom"))
     cands += _antigravity_candidates(result.get("antigravity"), fmt_reset)

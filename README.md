@@ -97,10 +97,11 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | **Amp** | macOS, Linux | Executes local `amp` binary to fetch quota and observed dollar usage |
 | **Antigravity** | macOS, Linux | Limited to Darwin/Linux configurations |
 | **Cursor** | macOS, Linux, Win | Fetches active limits across Cursor tiers |
+| **Cline CLI** | macOS, Linux, Win | Reads local `cline` CLI readiness/version and fetches ClinePass quota windows (5h, weekly, monthly) via the stored OAuth token |
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
 | **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
-| **Kilo Code (AgentRouter provider)** | Any OS | Reads AgentRouter quota only when your local LimitLens config explicitly sets the Kilo provider/gateway to `agentrouter` |
+| **Kilo Code (manual custom tool)** | Any OS | Track Kilo quota through `custom_tools` when you want to enter a manual quota budget |
 | **Command Code**| Any OS | Web billing queried using `COMMANDCODE_COOKIE` |
 
 ---
@@ -117,7 +118,7 @@ limitlens --watch    # Keep alive and refresh every 5 seconds
 limitlens --reco     # Only print the smart AI tool recommendation
 limitlens --waste    # Show waste report and Time-To-Exhaustion (TTX) projections
 limitlens --usage    # Show usage history, including observed Amp dollar spend
-limitlens --reset-spend # Reset tracking baseline for observed usage (Pi, OpenCode, Kilo, Copilot CLI)
+limitlens --reset-spend # Reset tracking baseline for observed usage and manual custom tools
 limitlens --store-token pioneer # Securely store an API token in the OS keychain (prompts securely)
 limitlens --init-config # Detect installed tools and write ~/.config/limitlens/config.json
 limitlens run "Fix the failing tests" # Launch the best available agent CLI
@@ -128,9 +129,9 @@ limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with
 
 > **Quota-aware launcher:** `limitlens run "..."` uses fast local heuristics plus LimitLens quota data to choose and launch a CLI agent directly (for example Pi for planning/research, Antigravity CLI for coding, then Amp/Codex/OpenCode-style fallbacks). It honors provider `enabled: false`, existing ignored accounts/models, and optional `runner.ignored_tools`. Override with `limitlens run --tool agy "..."`. Configure commands under the optional `runner.tools` section in `config.json`.
 
-Default launcher commands are intentionally simple and match current CLI help output: `pi <prompt>`, `agy --prompt-interactive <prompt>`, `amp` with the prompt on stdin, `codex <prompt>`, `opencode run <prompt>`, and `cmd <prompt>`. Use `limitlens run --dry-run "..."` to preview the selected command before launching.
+Default launcher commands are intentionally simple and match current CLI help output: `pi <prompt>`, `agy --prompt-interactive <prompt>`, `amp` with the prompt on stdin, `codex <prompt>`, `opencode run <prompt>`, `cline <prompt>`, and `cmd <prompt>`. Use `limitlens run --dry-run "..."` to preview the selected command before launching.
 
-> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, Kilo, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
+> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`, including manual Kilo entries.
 
 > **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
 
@@ -185,16 +186,11 @@ You can edit the config file at `~/.config/limitlens/config.json` to completely 
     "auto_hide_days": 1,
     "amp_usable_pct": 30.0
   },
-  "agentrouter": {
-    "enabled": true,
-    "provider": "agentrouter"
-  },
   "custom_tools": {
     "enabled": true,
     "tools": {
       "kilo": {
         "name": "Kilo Code",
-        "provider": "agentrouter",
         "total": 84917038,
         "used": 2582962
       }

@@ -14,6 +14,9 @@ DEFAULT_CONFIG = {
     "cursor": {
         "enabled": True,
     },
+    "cline": {
+        "enabled": True,
+    },
     "amp": {
         "enabled": True,
         "individual_credits": True,
@@ -39,6 +42,14 @@ DEFAULT_CONFIG = {
         "ignored_models": [],
         "model_parents": {},
     },
+    "kilo": {
+        "enabled": True,
+        "db_path": "~/.local/share/kilo/kilo.db",
+        "days": [1, 7],
+        "providers": [],
+        "ignored_models": [],
+        "model_parents": {},
+    },
     "copilot_cli": {
         "enabled": True,
         "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
@@ -57,15 +68,10 @@ DEFAULT_CONFIG = {
         "team_id": "",
         "team_name": "",
     },
-    "agentrouter": {
-        "enabled": False,
-        "provider": "agentrouter",
-        "quota_url": "https://agentrouter.org/api/user/self",
-        "unit_label": "units",
-    },
     "commandcode": {
         "enabled": False,
         "credits_url": "https://api.commandcode.ai/internal/billing/credits?",
+        "total": 0.0,
     },
     "custom_tools": {
         "enabled": False,
@@ -73,7 +79,6 @@ DEFAULT_CONFIG = {
     },
     "runner": {
         "ignored_tools": [],
-        "ignore_tools": [],
         "tools": {},
     },
     "display": {
@@ -101,11 +106,13 @@ def limitlens_config_path():
     return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
 
 def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
+    legacy_sections = {"agentrouter"}
     for key, value in config.items():
+        if path == "" and key in legacy_sections:
+            continue
         if (
             path == "custom_tools.tools."
             or path == "pioneer."
-            or path == "agentrouter."
             or path == "runner.tools."
             or path.endswith("model_parents.")
             or path.endswith("parents.")
@@ -408,10 +415,10 @@ def auto_detect_providers(path, write=True, interactive=True):
     check("antigravity", safe_exists("~/.agy-p1-home") or safe_exists("~/.config/agy"))
     check("pi", safe_exists("~/.pi/agent/sessions"))
     check("pioneer", "PIONEER_API_TOKEN" in os.environ)
-    check("agentrouter", safe_exists("~/.config/agentrouter"))
     check("opencode", safe_exists("~/.local/share/opencode"))
     check("copilot_cli", safe_exists("~/.cache/limitlens/copilot-otel.jsonl") or safe_exists("~/.config/github-copilot"))
     check("claude", safe_exists("~/.claude") or safe_exists("~/.config/claude"))
+    check("cline", safe_which("cline") or safe_exists("~/.cline"))
     check("commandcode", False)
 
     is_interactive = interactive and write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()

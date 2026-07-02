@@ -28,6 +28,6 @@ LimitLens reads data from the following external tools to provide your unified d
 
 ## 3. Environment Variables
 
-LimitLens can be configured via environment variables (e.g., `LIMITLENS_CONFIG`, `LIMITLENS_SNAPSHOT_PATH`, `LIMITLENS_IMPORTED_USAGE_PATH`) and securely reads authentication tokens for API-based providers via variables like `PIONEER_API_TOKEN`, `AGENTROUTER_API_TOKEN`, and `COMMANDCODE_COOKIE`.
+LimitLens can be configured via environment variables (e.g., `LIMITLENS_CONFIG`, `LIMITLENS_SNAPSHOT_PATH`, `LIMITLENS_IMPORTED_USAGE_PATH`) and securely reads authentication tokens for API-based providers via variables like `PIONEER_API_TOKEN` and `COMMANDCODE_COOKIE`.
 
 **Privacy Guarantee:** Any sensitive identifiers found in external databases (like email addresses or absolute home directory paths) are automatically redacted on-the-fly before being displayed or saved to the snapshot logs.

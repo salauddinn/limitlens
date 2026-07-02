@@ -52,7 +52,7 @@ def mark_spend_reset(tool_name=None, extra_data=None):
             if tool_name:
                 data[tool_name] = now_iso
             else:
-                for t in ["opencode", "pi", "copilot_cli", "claude"]:
+                for t in ["opencode", "pi", "kilo", "copilot_cli", "claude"]:
                     data[t] = now_iso
 
             if extra_data:
@@ -614,6 +614,93 @@ def get_pi_usage(config):
         ],
     }
 
+def get_kilo_usage(config):
+    """Aggregate Kilo Code usage from its local SQLite database.
+
+    Kilo stores per-session token/cost aggregates in a SQLite db (default
+    ``~/.local/share/kilo/kilo.db``). The ``session`` table exposes cost and
+    token columns plus a ``model`` JSON blob like
+    ``{"id": "kimi-k2.5", "providerID": "bluesminds"}``.
+    """
+    cfg = config.get("kilo", {})
+    if not cfg.get("enabled", True):
+        return {"disabled": True}
+    db_path = os.path.expanduser(cfg.get("db_path") or "~/.local/share/kilo/kilo.db")
+    if not os.path.exists(db_path):
+        return {"error": f"Kilo database not found: {redact_path(db_path)}"}
+
+    providers = set(cfg.get("providers") or [])
+    ignored_models = cfg.get("ignored_models") or []
+    model_parents = cfg.get("model_parents") or cfg.get("parents") or {}
+    days_list = configured_days(cfg)
+    reset_time = get_spend_reset_time("kilo")
+    windows = {
+        str(days): {"days": days, "since": usage_window_start(days, reset_time), "by_key": {}}
+        for days in days_list
+    }
+
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
+        cur = con.cursor()
+        rows = cur.execute(
+            "SELECT model, cost, tokens_input, tokens_output, tokens_reasoning, "
+            "tokens_cache_read, tokens_cache_write, time_created FROM session"
+        ).fetchall()
+        con.close()
+    except sqlite3.Error as e:
+        return {"error": f"Kilo database read error: {e}"}
+
+    for raw_model, cost, t_in, t_out, t_reason, t_cr, t_cw, tc in rows:
+        if tc is None:
+            continue
+        try:
+            ts = datetime.fromtimestamp(tc / 1000.0, tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            continue
+        provider = "unknown"
+        model = "unknown"
+        if raw_model:
+            try:
+                mdata = json.loads(raw_model)
+                if isinstance(mdata, dict):
+                    provider = mdata.get("providerID") or mdata.get("provider") or "unknown"
+                    model = mdata.get("id") or mdata.get("model") or "unknown"
+            except (json.JSONDecodeError, TypeError):
+                model = str(raw_model)
+        if providers and provider not in providers:
+            continue
+        if model_is_ignored(provider, model, ignored_models):
+            continue
+        tokens = {
+            "total": (t_in or 0) + (t_out or 0) + (t_reason or 0) + (t_cr or 0) + (t_cw or 0),
+            "input": t_in or 0,
+            "output": t_out or 0,
+            "reasoning": t_reason or 0,
+            "cache_read": t_cr or 0,
+            "cache_write": t_cw or 0,
+        }
+        for win in windows.values():
+            if ts < win["since"]:
+                continue
+            key = (provider, model)
+            totals = win["by_key"].setdefault(key, empty_usage_totals())
+            parent = model_parent_label(provider, model, model_parents)
+            if parent:
+                totals["parent"] = parent
+            add_usage(totals, cost=cost or 0, tokens=tokens)
+
+    return {
+        "db_path": redact_path(db_path),
+        "windows": [
+            {
+                "days": win["days"],
+                "since": win["since"].isoformat(),
+                "models": usage_summary_rows(win["by_key"]),
+            }
+            for win in windows.values()
+        ],
+    }
+
 def claude_usage_tokens(usage):
     if not isinstance(usage, dict):
         return {}
@@ -745,6 +832,7 @@ def get_opencode_data(args, config):
     return {
         "opencode": get_opencode_usage(config),
         "pi": get_pi_usage(config),
+        "kilo": get_kilo_usage(config),
         "claude": get_claude_usage(config),
         "copilot_cli": get_copilot_cli_usage(config),
     }
@@ -754,6 +842,12 @@ def get_pi_data(args, config):
 
 def display_pi_text(data, args):
     display_opencode_text({"pi": data}, args)
+
+def get_kilo_data(args, config):
+    return get_kilo_usage(config)
+
+def display_kilo_text(data, args):
+    display_opencode_text({"kilo": data}, args)
 
 def get_claude_data(args, config):
     return get_claude_usage(config)

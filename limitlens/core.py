@@ -149,7 +149,6 @@ TOOL_ICONS = {
     "codex": "⚡",
     "amp": "🔥",
     "pioneer": "🧭",
-    "agentrouter": "🔶",
     "kilo": "🔶",
     "commandcode": "🖥️",
     "claude": "🤖",

@@ -18,12 +18,10 @@ from .providers import (
     get_opencode_data,
     get_pi_data,
     get_pioneer_data,
-    get_agentrouter_data,
     get_commandcode_data,
     get_custom_data,
     get_cursor_data,
 )
-from .providers.agentrouter import is_agentrouter_enabled
 
 class SwitchArgs:
     def __init__(self, tool="all", json=False, redact=True, sync_codex=False, verbose=False, no_color=False):
@@ -49,8 +47,6 @@ def collect_results(config, args):
         enabled_count += 1
     if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
         enabled_count += 1
-    if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
-        enabled_count += 1
     if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
         enabled_count += 1
     if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
@@ -73,8 +69,6 @@ def collect_results(config, args):
             fetchers["pi"] = executor.submit(get_pi_data, args, config)
         if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
             fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-        if args.tool == "agentrouter" or (args.tool == "all" and is_agentrouter_enabled(config)):
-            fetchers["agentrouter"] = executor.submit(get_agentrouter_data, args, config)
         if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
             fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
         if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):

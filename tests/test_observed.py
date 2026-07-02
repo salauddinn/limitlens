@@ -14,6 +14,7 @@ from limitlens.providers.observed import (
     first_number_for_keys, first_string_for_keys, parse_otel_timestamp,
     get_copilot_cli_usage, pi_usage_cost, pi_usage_tokens, get_pi_usage,
     get_opencode_data, get_pi_data, display_pi_text, display_usage_rows,
+    get_kilo_usage, get_kilo_data,
     display_usage_rows_detailed, format_credit_amount, format_credit_pair,
     display_credit_limits, display_usage_source, display_opencode_text,
     compact_reco_name, display_at_glance
@@ -394,6 +395,53 @@ def test_get_claude_usage(claude_sessions):
 
     assert get_claude_usage({"claude": {"enabled": False}}) == {"disabled": True}
     assert "error" in get_claude_usage({"claude": {"sessions_dir": "/nonexistent/claude/dir"}})
+
+@pytest.fixture
+def kilo_db(tmp_path):
+    import sqlite3
+    db = tmp_path / "kilo.db"
+    con = sqlite3.connect(str(db))
+    con.execute(
+        "CREATE TABLE session (id TEXT, model TEXT, cost REAL, "
+        "tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, "
+        "tokens_cache_read INTEGER, tokens_cache_write INTEGER, time_created INTEGER)"
+    )
+    now_ms = millis_from_dt(datetime.now(timezone.utc))
+    old_ms = millis_from_dt(datetime.now(timezone.utc) - timedelta(days=30))
+    rows = [
+        ('s1', '{"id":"kimi-k2.5","providerID":"bluesminds"}', 0.01, 100, 50, 0, 1152, 0, now_ms),
+        ('s2', None, 2.35, 2262101, 0, 0, 0, 0, now_ms),
+        ('s3', '{"id":"deepseek-v4-pro","providerID":"agentrouter"}', 0.0, 154891, 0, 0, 0, 0, old_ms),
+    ]
+    con.executemany("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    con.commit()
+    con.close()
+    return str(db)
+
+def test_get_kilo_usage(kilo_db):
+    config = {"kilo": {"enabled": True, "db_path": kilo_db, "days": [1, 7]}}
+    usage = get_kilo_usage(config)
+    assert "error" not in usage
+    # 1-day window should include the two recent sessions but not the 30-day-old one
+    day1 = usage["windows"][0]
+    models = {row["model"]: row for row in day1["models"]}
+    assert "kimi-k2.5" in models
+    assert models["kimi-k2.5"]["provider"] == "bluesminds"
+    assert models["kimi-k2.5"]["tokens"]["input"] == 100
+    # 7-day window should also exclude the 30-day-old row
+    assert all(row["model"] != "deepseek-v4-pro" for row in day1["models"])
+
+    # provider filter
+    filtered = get_kilo_usage({"kilo": {"enabled": True, "db_path": kilo_db, "days": [1], "providers": ["agentrouter"]}})
+    day1f = filtered["windows"][0]["models"]
+    assert all(row["provider"] == "agentrouter" for row in day1f)
+
+    # disabled + missing db
+    assert get_kilo_usage({"kilo": {"enabled": False}}) == {"disabled": True}
+    assert "error" in get_kilo_usage({"kilo": {"db_path": "/nonexistent/kilo.db"}})
+
+def test_get_kilo_data():
+    assert "error" in get_kilo_data({}, {"kilo": {"db_path": "/non/ex"}})
 
 # Output tests
 class DummyArgs:
