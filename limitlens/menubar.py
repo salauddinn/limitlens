@@ -15,6 +15,7 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+import warnings
 from datetime import datetime
 
 MENUBAR_REFRESH_TIMEOUT_SECONDS = 45
@@ -56,9 +57,11 @@ _APPKIT_AVAILABLE = True
 try:
     from AppKit import (  # type: ignore
         NSAppearance,
+        NSBezelStyleInline,
         NSBezelStyleRounded,
         NSButton,
         NSColor,
+        NSControlSizeSmall,
         NSFont,
         NSMakeRect,
         NSMinYEdge,
@@ -79,9 +82,11 @@ except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
     _APPKIT_AVAILABLE = False
 
     NSAppearance = None
+    NSBezelStyleInline = None
     NSBezelStyleRounded = None
     NSButton = None
     NSColor = None
+    NSControlSizeSmall = None
     NSFont = None
     NSMakeRect = None
     NSMinYEdge = None
@@ -100,7 +105,16 @@ except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
 
 
 POPOVER_WIDTH = 420
-POPOVER_HEIGHT = 560
+POPOVER_HEIGHT = 540
+
+# Modern dashboard layout constants.
+PAD_X = 18
+PAD_Y = 16
+CARD_RADIUS = 16
+ROW_RADIUS = 12
+PROGRESS_HEIGHT = 6
+ROW_HEIGHT = 58
+ROW_GAP = 6
 
 
 class LimitLensApp(rumps.App):
@@ -385,23 +399,83 @@ class LimitLensApp(rumps.App):
     @staticmethod
     def _ns_color(level="text"):
         if level == "good":
-            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.22, 0.84, 0.38, 1.0)
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.26, 0.86, 0.42, 1.0)
         if level == "warn":
-            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.73, 0.12, 1.0)
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.76, 0.18, 1.0)
         if level == "bad":
-            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.32, 0.26, 1.0)
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.36, 0.30, 1.0)
         if level == "muted":
-            return NSColor.colorWithCalibratedWhite_alpha_(0.78, 0.72)
+            return NSColor.colorWithCalibratedWhite_alpha_(0.78, 0.85)
         if level == "subtle":
-            return NSColor.colorWithCalibratedWhite_alpha_(0.55, 0.72)
+            return NSColor.colorWithCalibratedWhite_alpha_(0.55, 0.90)
+        if level == "card":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.22, 0.25, 0.30, 0.45)
+        if level == "row":
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.24, 0.27, 0.32, 0.35)
+        if level == "track":
+            return NSColor.colorWithCalibratedWhite_alpha_(0.28, 0.45)
         return NSColor.colorWithCalibratedWhite_alpha_(0.96, 1.0)
 
     @staticmethod
-    def _label(text, x, y, width, height, size=13, weight="regular", color="text"):
+    def _cg_color(level="text"):
+        color = LimitLensApp._ns_color(level)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return color.CGColor()
+
+    @staticmethod
+    def _card(x, y, width, height, material="card"):
+        card = NSView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        card.setWantsLayer_(True)
+        if card.layer():
+            card.layer().setBackgroundColor_(LimitLensApp._cg_color(material))
+            card.layer().setCornerRadius_(CARD_RADIUS)
+        return card
+
+    @staticmethod
+    def _progress_bar(pct, x, y, width, height, level="text"):
+        track = NSView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        track.setWantsLayer_(True)
+        if track.layer():
+            track.layer().setBackgroundColor_(LimitLensApp._cg_color("track"))
+            track.layer().setCornerRadius_(height / 2.0)
+
+        fill_width = 0 if pct is None else int(width * max(0.0, min(100.0, float(pct))) / 100.0)
+        if fill_width < 1 and pct is not None and float(pct) > 0:
+            fill_width = 1
+        fill = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, fill_width, height))
+        fill.setWantsLayer_(True)
+        if fill.layer():
+            fill.layer().setBackgroundColor_(LimitLensApp._cg_color(level))
+            fill.layer().setCornerRadius_(height / 2.0)
+        track.addSubview_(fill)
+        return track
+
+    @staticmethod
+    def _section_header(text, x, y, width, color="subtle"):
+        return LimitLensApp._label(text, x, y, width, 16, size=11, weight="bold", color=color)
+
+    def _pill_button(self, title, action, x, y, width, height):
+        button = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        button.setTitle_(title)
+        button.setBezelStyle_(NSBezelStyleInline)
+        button.setControlSize_(NSControlSizeSmall)
+        button.setFont_(NSFont.systemFontOfSize_(11))
+        button.setTarget_(self)
+        button.setAction_(action)
+        return button
+
+    @staticmethod
+    def _label(text, x, y, width, height, size=13, weight="regular", color="text", alignment="left"):
         label = NSTextField.labelWithString_(str(text or ""))
         label.setFrame_(NSMakeRect(x, y, width, height))
         if weight == "bold":
             font = NSFont.boldSystemFontOfSize_(size)
+        elif weight == "semibold":
+            if hasattr(NSFont, "systemFontOfSize_weight_"):
+                font = NSFont.systemFontOfSize_weight_(size, 0.65)
+            else:
+                font = NSFont.boldSystemFontOfSize_(size)
         else:
             font = NSFont.systemFontOfSize_(size)
         label.setFont_(font)
@@ -410,34 +484,27 @@ class LimitLensApp(rumps.App):
         label.setDrawsBackground_(False)
         label.setEditable_(False)
         label.setSelectable_(False)
+        if alignment == "right":
+            try:
+                label.setAlignment_(2)
+            except Exception:
+                pass
         return label
 
-    @staticmethod
-    def _button(title, action, x, y, width, height, target):
-        button = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
-        button.setTitle_(title)
-        button.setBezelStyle_(NSBezelStyleRounded)
-        button.setFont_(NSFont.systemFontOfSize_(11))
-        button.setTarget_(target)
-        button.setAction_(action)
-        return button
+    def _button(self, title, action, x, y, width, height):
+        return self._pill_button(title, action, x, y, width, height)
 
-    def _add_button_row(self, parent, actions, y):
+    def _add_button_row(self, parent, actions, y, height=26):
         gap = 8
         total_width = sum(width for _, _, width in actions) + gap * (len(actions) - 1)
         x = int((POPOVER_WIDTH - total_width) / 2)
         for title, action, width in actions:
-            parent.addSubview_(self._button(title, action, x, y, width, 24, self))
+            parent.addSubview_(self._pill_button(title, action, x, y, width, height))
             x += width + gap
 
     @staticmethod
     def _progress(pct, x, y, width, height):
-        indicator = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
-        indicator.setIndeterminate_(False)
-        indicator.setMinValue_(0)
-        indicator.setMaxValue_(100)
-        indicator.setDoubleValue_(0 if pct is None else max(0.0, min(100.0, float(pct))))
-        return indicator
+        return LimitLensApp._progress_bar(pct, x, y, width, height, level="text")
 
     def _render_dashboard_view(self, model):
         root = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH, POPOVER_HEIGHT))
@@ -450,64 +517,99 @@ class LimitLensApp(rumps.App):
         except Exception:
             pass
 
-        root.addSubview_(self._label("LimitLens", 18, 526, 130, 22, size=16, weight="bold"))
+        # Header
+        root.addSubview_(self._label("LimitLens", PAD_X, POPOVER_HEIGHT - 28, 130, 24, size=17, weight="bold"))
         refreshed = model.get("last_refresh")
         subtitle = f"Updated {refreshed}" if refreshed else (model.get("subtitle") or "")
-        root.addSubview_(self._label(subtitle, 150, 528, 240, 16, size=10, color="subtle"))
+        root.addSubview_(self._label(subtitle, POPOVER_WIDTH - 258, POPOVER_HEIGHT - 26, 240, 16, size=10, color="subtle", alignment="right"))
 
+        # Hero card
         rec = model.get("recommendation")
-        y = 468
-        if rec:
-            root.addSubview_(self._label("Best option", 18, y + 42, 140, 16, size=11, weight="bold", color="subtle"))
-            root.addSubview_(self._label(rec["icon"], 18, y + 10, 28, 24, size=22))
-            root.addSubview_(self._label(rec["title"], 50, y + 23, 220, 18, size=14, weight="bold"))
-            root.addSubview_(self._label(rec["subtitle"], 50, y + 5, 220, 18, size=10, color="muted"))
-            root.addSubview_(self._label(self._pct_label(rec["pct"]), 324, y + 22, 64, 20, size=15, weight="bold", color=rec["level"]))
-            root.addSubview_(self._progress(rec["pct"], 324, y + 8, 58, 8))
-        else:
-            root.addSubview_(self._label(model.get("message") or "No recommendation available", 18, y + 18, 360, 22, size=13, color="muted"))
+        hero_y = POPOVER_HEIGHT - 148
+        hero_h = 110
+        hero_w = POPOVER_WIDTH - 2 * PAD_X
+        root.addSubview_(self._card(PAD_X, hero_y, hero_w, hero_h, material="card"))
 
-        list_top = 410
-        root.addSubview_(self._label("All quotas", 18, list_top, 180, 18, size=12, weight="bold"))
-        scroll_height = list_top - 132
-        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(14, 132, POPOVER_WIDTH - 28, max(112, scroll_height)))
+        if rec:
+            # Colored top accent bar reflecting the recommendation level.
+            accent = NSView.alloc().initWithFrame_(NSMakeRect(PAD_X, hero_y + hero_h - 4, hero_w, 4))
+            accent.setWantsLayer_(True)
+            if accent.layer():
+                accent.layer().setBackgroundColor_(LimitLensApp._cg_color(rec["level"]))
+                accent.layer().setCornerRadius_(2.0)
+            root.addSubview_(accent)
+
+            root.addSubview_(self._section_header("Best option", PAD_X + 16, hero_y + hero_h - 22, 120, color="subtle"))
+            root.addSubview_(self._label(rec["icon"], PAD_X + 16, hero_y + hero_h - 60, 32, 28, size=24))
+            title_w = hero_w - 120
+            root.addSubview_(self._label(rec["title"], PAD_X + 56, hero_y + hero_h - 52, title_w, 20, size=15, weight="bold"))
+            root.addSubview_(self._label(rec["subtitle"], PAD_X + 56, hero_y + hero_h - 72, title_w, 18, size=11, color="muted"))
+            root.addSubview_(self._label(self._pct_label(rec["pct"]), PAD_X + hero_w - 86, hero_y + hero_h - 54, 64, 24, size=18, weight="bold", color=rec["level"], alignment="right"))
+            root.addSubview_(self._progress_bar(rec["pct"], PAD_X + 16, hero_y + 18, hero_w - 32, 8, level=rec["level"]))
+        else:
+            root.addSubview_(self._label(model.get("message") or "No recommendation available", PAD_X + 16, hero_y + hero_h / 2 - 10, hero_w - 32, 22, size=13, color="muted"))
+
+        # All quotas list
+        list_top = POPOVER_HEIGHT - 178
+        root.addSubview_(self._label("All quotas", PAD_X, list_top, 180, 18, size=12, weight="bold"))
+        scroll_y = 124
+        scroll_h = max(112, list_top - scroll_y - 12)
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD_X - 2, scroll_y, POPOVER_WIDTH - 2 * PAD_X + 4, scroll_h))
         scroll.setHasVerticalScroller_(True)
         scroll.setHasHorizontalScroller_(False)
         scroll.setAutohidesScrollers_(False)
         scroll.setBorderType_(0)
+        # Force a light scroller knob so it stays visible on the dark vibrancy
+        # material; overlay scrollers with the default knob can be hard to see.
+        _vscroller = scroll.verticalScroller()
+        if _vscroller is not None:
+            _vscroller.setKnobStyle_(2)  # NSScrollerKnobStyleLight
+
         content_rows = model.get("rows") or []
-        content_height = max(112, len(content_rows) * 44 + 8)
-        doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 44, content_height))
-        row_y = content_height - 42
+        content_height = max(112, len(content_rows) * (ROW_HEIGHT + ROW_GAP) + 8)
+        doc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, POPOVER_WIDTH - 2 * PAD_X, content_height))
+        row_y = content_height - ROW_HEIGHT - 4
         if content_rows:
             for row in content_rows:
                 self._add_row_view(doc, row, row_y, compact=False)
-                row_y -= 44
+                row_y -= (ROW_HEIGHT + ROW_GAP)
         else:
             doc.addSubview_(self._label("Refresh or run Doctor to find providers.", 8, content_height - 34, 320, 20, size=12, color="muted"))
         scroll.setDocumentView_(doc)
         root.addSubview_(scroll)
 
-        actions = [
-            (("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)),
-            (("Copy Status", "copyStatusDashboard:", 104), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 58)),
-        ]
-        root.addSubview_(self._label("Actions", 18, 96, 120, 14, size=10, weight="bold", color="subtle"))
-        self._add_button_row(root, actions[0], 66)
-        self._add_button_row(root, actions[1], 34)
+        # Actions
+        actions_header_y = 116
+        root.addSubview_(self._section_header("Actions", PAD_X, actions_header_y, 120, color="subtle"))
+        self._add_button_row(root, [("Refresh", "refreshDashboard:", 82), ("Quick Refresh", "quickRefreshDashboard:", 112), ("Open Config", "openConfigDashboard:", 100)], 84)
+        self._add_button_row(root, [("Copy Status", "copyStatusDashboard:", 104), ("Doctor", "doctorDashboard:", 72), ("Report", "doctorReportDashboard:", 72), ("Quit", "quitDashboard:", 58)], 48)
 
         return root
 
     def _add_row_view(self, parent, row, y, compact=False):
-        icon_x = 8 if not compact else 18
-        title_x = icon_x + 28
-        pct_x = 324 if not compact else 324
-        title_width = 220 if not compact else 218
-        parent.addSubview_(self._label(row["icon"], icon_x, y + 11, 24, 20, size=17))
-        parent.addSubview_(self._label(row["title"], title_x, y + 21, title_width, 17, size=12, weight="bold"))
-        parent.addSubview_(self._label(row["detail"], title_x, y + 5, title_width, 16, size=10, color="muted"))
-        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 20, 54, 17, size=12, weight="bold", color=row["level"]))
-        parent.addSubview_(self._progress(row["pct"], pct_x, y + 7, 54, 7))
+        width = parent.frame().size.width if parent.frame() else (POPOVER_WIDTH - 2 * PAD_X)
+        height = ROW_HEIGHT if not compact else 44
+
+        # Rounded row background
+        bg = NSView.alloc().initWithFrame_(NSMakeRect(0, y, width, height))
+        bg.setWantsLayer_(True)
+        if bg.layer():
+            bg.layer().setBackgroundColor_(LimitLensApp._cg_color("row"))
+            bg.layer().setCornerRadius_(ROW_RADIUS)
+        parent.addSubview_(bg)
+
+        icon_x = 12 if not compact else 8
+        title_x = icon_x + 30
+        title_width = 234 if not compact else 190
+        pct_x = int(width - 70)
+        pct_width = 60
+        bar_width = 56
+
+        parent.addSubview_(self._label(row["icon"], icon_x, y + 18, 24, 22, size=19))
+        parent.addSubview_(self._label(row["title"], title_x, y + 29, title_width, 17, size=12, weight="bold"))
+        parent.addSubview_(self._label(row["detail"], title_x, y + 9, title_width, 16, size=10, color="muted"))
+        parent.addSubview_(self._label(row["pct_label"], pct_x, y + 30, pct_width, 18, size=13, weight="bold", color=row["level"], alignment="right"))
+        parent.addSubview_(self._progress_bar(row["pct"], pct_x, y + 12, bar_width, 5, level=row["level"]))
 
     @staticmethod
     def _safe_float(value):
