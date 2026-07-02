@@ -100,8 +100,10 @@ LimitLens natively parses configs, SQLite databases, and APIs for leading tools.
 | **Cline CLI** | macOS, Linux, Win | Reads local `cline` CLI readiness/version and fetches ClinePass quota windows (5h, weekly, monthly) via the stored OAuth token |
 | **OpenCode** | macOS, Linux, Win | Reads directly from the local OpenCode SQLite database |
 | **Pi** | macOS, Linux, Win | Reads local `~/.pi/agent/sessions` JSONL usage data |
+| **Kilo Code** | Any OS | Reads local Kilo SQLite usage from `~/.local/share/kilo/kilo.db` by default; runner launches `kilo run` |
+| **Claude Code** | macOS, Linux, Win | Reads local Claude project/session usage from `~/.claude/projects` |
+| **Copilot CLI** | macOS, Linux, Win | Reads observed CLI usage from the configured OTel JSONL cache |
 | **Pioneer** | Any OS | Reads `PIONEER_API_TOKEN` environment variable and queries API |
-| **Kilo Code (manual custom tool)** | Any OS | Track Kilo quota through `custom_tools` when you want to enter a manual quota budget |
 | **Command Code**| Any OS | Web billing queried using `COMMANDCODE_COOKIE` |
 
 ---
@@ -129,9 +131,9 @@ limitlens-switch -t amp "refactor code" # Immediately switch to and run amp with
 
 > **Quota-aware launcher:** `limitlens run "..."` uses fast local heuristics plus LimitLens quota data to choose and launch a CLI agent directly (for example Pi for planning/research, Antigravity CLI for coding, then Amp/Codex/OpenCode-style fallbacks). It honors provider `enabled: false`, existing ignored accounts/models, and optional `runner.ignored_tools`. Override with `limitlens run --tool agy "..."`. Configure commands under the optional `runner.tools` section in `config.json`.
 
-Default launcher commands are intentionally simple and match current CLI help output: `pi <prompt>`, `agy --prompt-interactive <prompt>`, `amp` with the prompt on stdin, `codex <prompt>`, `opencode run <prompt>`, `cline <prompt>`, and `cmd <prompt>`. Use `limitlens run --dry-run "..."` to preview the selected command before launching.
+Default launcher commands are intentionally simple and match current CLI help output: `pi <prompt>`, `kilo run <prompt>`, `agy --prompt-interactive <prompt>`, `amp` with the prompt on stdin, `codex <prompt>`, `opencode run <prompt>`, `cline <prompt>`, and `cmd <prompt>`. Use `limitlens run --dry-run "..."` to preview the selected command before launching.
 
-> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, OpenCode, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`, including manual Kilo entries.
+> **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, Kilo, OpenCode, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 
 > **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
 
@@ -217,6 +219,27 @@ This is useful when you have multiple Codex accounts or Antigravity profiles and
 
 > **Codex** accounts map to `~/.codex-<name>` directories. Use the account name (e.g. `work`, `default`, `codex-work`).
 > **Antigravity** profiles include named IDE profiles and CLI profiles (e.g. `ide`, `agy-cli`). Matching is case-insensitive.
+
+### Provider configuration reference
+
+For a complete copy-pasteable schema, see [`config.example.json`](config.example.json). Common provider keys are:
+
+| Provider | Default source / setup | Useful config keys |
+|:---|:---|:---|
+| Codex | Auto-discovers `~/.codex-*`; use `--sync-codex` to force refresh | `codex.enabled`, `codex.auto_refresh`, `codex.ignored_accounts` |
+| Amp | Runs local `amp` command | `amp.enabled`, `amp.individual_credits` |
+| Antigravity | Reads local Antigravity profiles/CLI state | `antigravity.enabled`, `antigravity.ignored_accounts` |
+| Cursor | Reads local Cursor account/limit state | `cursor.enabled` |
+| Cline CLI | Requires local `cline`; ClinePass quotas use Cline's stored OAuth token | `cline.enabled`; runner override under `runner.tools.cline` |
+| OpenCode | Reads SQLite DB at `~/.local/share/opencode/opencode.db` | `opencode.db_path`, `opencode.days`, `opencode.providers`, `opencode.ignored_models`, `opencode.model_parents`, `opencode.credit_limits` |
+| Pi | Reads JSONL sessions from `~/.pi/agent/sessions` | `pi.sessions_dir`, `pi.days`, `pi.providers`, `pi.ignored_models`, `pi.model_parents` |
+| Kilo Code | Reads SQLite DB at `~/.local/share/kilo/kilo.db`; runner uses `kilo run` | `kilo.db_path`, `kilo.days`, `kilo.providers`, `kilo.ignored_models`, `kilo.model_parents`; `runner.tools.kilo.command` |
+| Claude Code | Reads project/session usage from `~/.claude/projects` | `claude.sessions_dir`, `claude.days`, `claude.providers`, `claude.ignored_models`, `claude.model_parents` |
+| Copilot CLI | Reads configured OTel JSONL cache | `copilot_cli.otel_jsonl_path`, `copilot_cli.days` |
+| Pioneer | Set `PIONEER_API_TOKEN` or run `limitlens --store-token pioneer`; configure team metadata when needed | `pioneer.enabled`, `pioneer.team_id`, `pioneer.team_name` |
+| Command Code | Set `COMMANDCODE_COOKIE`; configure billing URL/total if needed | `commandcode.enabled`, `commandcode.credits_url`, `commandcode.total` |
+| Custom tools | Manual quotas for anything not natively supported | `custom_tools.enabled`, `custom_tools.tools.<id>.total`, `remaining`, `used`, `request_count` |
+| Runner | Optional overrides for `limitlens run` command routing | `runner.ignored_tools`, `runner.tools.<id>.command`, `runner.tools.<id>.prompt_mode` (`arg` or `stdin`) |
 
 ### 🔒 Privacy Guarantee
 * `limitlens` does **not** store or transmit any sensitive information (such as API keys, secrets, or session cookies).
