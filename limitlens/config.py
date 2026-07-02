@@ -42,6 +42,14 @@ DEFAULT_CONFIG = {
         "ignored_models": [],
         "model_parents": {},
     },
+    "kilo": {
+        "enabled": True,
+        "db_path": "~/.local/share/kilo/kilo.db",
+        "days": [1, 7],
+        "providers": [],
+        "ignored_models": [],
+        "model_parents": {},
+    },
     "copilot_cli": {
         "enabled": True,
         "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",

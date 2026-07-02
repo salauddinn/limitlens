@@ -41,6 +41,14 @@
     "ignored_models": [],
     "model_parents": {}
   },
+  "kilo": {
+    "enabled": true,
+    "db_path": "~/.local/share/kilo/kilo.db",
+    "days": [1, 7],
+    "providers": [],
+    "ignored_models": [],
+    "model_parents": {}
+  },
   "copilot_cli": {
     "enabled": true,
     "otel_jsonl_path": "~/.cache/limitlens/copilot-otel.jsonl",
@@ -107,6 +115,7 @@
       "codex": {"command": "codex", "prompt_mode": "arg"},
       "opencode": {"command": "opencode run", "prompt_mode": "arg"},
       "cline": {"command": "cline", "prompt_mode": "arg"},
+      "kilo": {"command": "kilo run", "prompt_mode": "arg"},
       "claude": {"command": "claude", "prompt_mode": "arg"},
       "commandcode": {"command": "cmd", "prompt_mode": "arg"}
     }

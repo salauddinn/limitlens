@@ -92,6 +92,7 @@ def test_build_command_uses_production_cli_defaults():
     assert build_command("opencode", "hello") == (("opencode", "run", "hello"), None)
     assert build_command("commandcode", "hello") == (("cmd", "hello"), None)
     assert build_command("cline", "hello") == (("cline", "hello"), None)
+    assert build_command("kilo", "hello") == (("kilo", "run", "hello"), None)
 
 
 def test_route_can_force_cline_when_enabled_without_quota():

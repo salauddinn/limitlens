@@ -33,6 +33,7 @@ from .providers import (
     get_opencode_data, display_opencode_text,
     get_claude_data, display_claude_text,
     get_pi_data, display_pi_text,
+    get_kilo_data, display_kilo_text,
     get_pioneer_data, display_pioneer_text,
     get_commandcode_data, display_commandcode_text,
     get_custom_data, display_custom_text,
@@ -173,7 +174,7 @@ def _run_subcommand(argv):
   limitlens run --dry-run "Research the migration path"
 """,
     )
-    parser.add_argument("--tool", choices=["auto", "pi", "agy", "antigravity", "amp", "codex", "opencode", "cline", "commandcode", "cmd"], default="auto", help="Force a tool instead of auto-routing")
+    parser.add_argument("--tool", choices=["auto", "pi", "kilo", "agy", "antigravity", "amp", "codex", "opencode", "cline", "commandcode", "cmd"], default="auto", help="Force a tool instead of auto-routing")
     parser.add_argument("--dry-run", action="store_true", help="Show the chosen tool and command without launching it")
     parser.add_argument("--cwd", help="Working directory for the launched agent")
     parser.add_argument("--plain", action="store_true", help="Plain output: no color")
@@ -248,7 +249,7 @@ def _main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "claude", "pioneer", "commandcode", "custom", "cursor", "cline", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "kilo", "claude", "pioneer", "commandcode", "custom", "cursor", "cline", "all"], default="all", help="Check specific tool")
     parser.add_argument("-w", "--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -359,6 +360,8 @@ def _main():
             enabled_count += 1
         if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
             enabled_count += 1
+        if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
+            enabled_count += 1
         if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
             enabled_count += 1
         if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
@@ -385,6 +388,8 @@ def _main():
                 fetchers["claude"] = executor.submit(get_claude_data, args, config)
             if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
                 fetchers["pi"] = executor.submit(get_pi_data, args, config)
+            if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
+                fetchers["kilo"] = executor.submit(get_kilo_data, args, config)
             if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
                 fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
             if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
@@ -643,7 +648,7 @@ def _main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "pioneer", "commandcode", "custom", "cursor", "cline")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "kilo", "pioneer", "commandcode", "custom", "cursor", "cline")):
             print()
             print_c("  ═══ Quota Left ═══", "\033[1;36m", args.no_color)
 
@@ -671,6 +676,8 @@ def _main():
                 display_claude_text(result["claude"], args)
             if "pi" in result:
                 display_pi_text(result["pi"], args)
+            if "kilo" in result:
+                display_kilo_text(result["kilo"], args)
 
         # Removed bottom border
         if args.watch:

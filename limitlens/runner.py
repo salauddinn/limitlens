@@ -58,6 +58,7 @@ class RouteDecision:
 
 TOOL_SPECS: Dict[str, ToolSpec] = {
     "pi": ToolSpec("pi", "Pi", "pi", ("pi",), quota_optional=True),
+    "kilo": ToolSpec("kilo", "Kilo Code", "kilo", ("kilo", "run"), quota_optional=True),
     "agy": ToolSpec("agy", "Antigravity CLI", "antigravity", ("agy", "--prompt-interactive"), aliases=("antigravity",)),
     "amp": ToolSpec("amp", "Amp", "amp", ("amp",)),
     "codex": ToolSpec("codex", "Codex", "codex", ("codex",)),
@@ -114,16 +115,17 @@ CLI_KEYWORDS = {
 }
 
 ROUTE_PREFERENCES: Dict[TaskKind, Tuple[str, ...]] = {
-    "planning": ("pi", "amp", "codex", "commandcode", "agy", "opencode", "cline"),
-    "coding": ("agy", "amp", "codex", "commandcode", "opencode", "cline", "pi"),
-    "cli": ("amp", "codex", "opencode", "commandcode", "cline", "pi", "agy"),
-    "general": ("pi", "amp", "agy", "codex", "commandcode", "opencode", "cline"),
+    "planning": ("pi", "amp", "codex", "commandcode", "agy", "opencode", "cline", "kilo"),
+    "coding": ("agy", "amp", "codex", "commandcode", "kilo", "opencode", "cline", "pi"),
+    "cli": ("amp", "codex", "opencode", "commandcode", "cline", "kilo", "pi", "agy"),
+    "general": ("pi", "amp", "agy", "codex", "commandcode", "opencode", "cline", "kilo"),
 }
 
 RECOMMENDATION_TOOL_ALIASES = {
     "agy": "antigravity",
     "commandcode": "commandcode",
     "pi": "pi",
+    "kilo": "kilo",
     "amp": "amp",
     "codex": "codex",
     "opencode": "opencode",
