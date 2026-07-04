@@ -80,7 +80,8 @@ def _snapshot_unit_for_key(key):
 def _since_for_days(days):
     if days is None:
         return None
-    return datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return since.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def compute_consolidated_usage(days, config=None):
@@ -108,10 +109,18 @@ def compute_consolidated_usage(days, config=None):
 
             usage = 0.0
             if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
-                p_remaining = _snapshot_float(prev, "remaining")
-                c_remaining = _snapshot_float(curr, "remaining")
-                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
-                    usage = p_remaining - c_remaining
+                p_used = _snapshot_float(prev, "used")
+                c_used = _snapshot_float(curr, "used")
+                if p_used is not None and c_used is not None:
+                    if c_used > p_used:
+                        usage = c_used - p_used
+                    elif c_used < p_used:
+                        usage = c_used
+                else:
+                    p_remaining = _snapshot_float(prev, "remaining")
+                    c_remaining = _snapshot_float(curr, "remaining")
+                    if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                        usage = p_remaining - c_remaining
             elif waste_tracker._is_reset_event(prev, curr):
                 usage = 100.0 - float(curr.get("pct_left") or 0.0)
             else:
@@ -168,10 +177,18 @@ def compute_daily_usage(days=365, config=None):
 
             usage = 0.0
             if _is_amp_snapshot(prev, key) or _is_amp_snapshot(curr, key):
-                p_remaining = _snapshot_float(prev, "remaining")
-                c_remaining = _snapshot_float(curr, "remaining")
-                if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
-                    usage = p_remaining - c_remaining
+                p_used = _snapshot_float(prev, "used")
+                c_used = _snapshot_float(curr, "used")
+                if p_used is not None and c_used is not None:
+                    if c_used > p_used:
+                        usage = c_used - p_used
+                    elif c_used < p_used:
+                        usage = c_used
+                else:
+                    p_remaining = _snapshot_float(prev, "remaining")
+                    c_remaining = _snapshot_float(curr, "remaining")
+                    if p_remaining is not None and c_remaining is not None and c_remaining < p_remaining:
+                        usage = p_remaining - c_remaining
             elif waste_tracker._is_reset_event(prev, curr):
                 usage = 100.0 - float(curr.get("pct_left") or 0.0)
             else:

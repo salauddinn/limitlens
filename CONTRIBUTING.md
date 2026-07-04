@@ -6,7 +6,7 @@ Thank you for your interest in contributing to `limitlens`! We welcome community
 
 ## Design Philosophy
 
-*   **Zero Dependencies:** The core CLI must run using only the Python standard library. No third-party package dependencies (like `requests`, `pandas`, or `click`) should be added to the runtime code.
+*   **Minimal Dependencies:** The core CLI must run using the Python standard library and minimal dependencies (e.g. `keyring`). No heavy third-party package dependencies (like `requests`, `pandas`, or `click`) should be added to the runtime code.
 *   **Error Tolerance:** If a provider is not installed, fails to respond, or is offline, the tool must fail gracefully and continue showing the status of other providers rather than raising an unhandled exception.
 *   **Privacy First:** Sensitive identifiers like email addresses, API tokens, home directories, and full absolute paths must be redacted or normalized before display in CLI output or widgets. Use the helper functions in `limitlens/core.py`.
 

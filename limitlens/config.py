@@ -465,7 +465,8 @@ def auto_detect_providers(path, write=True, interactive=True):
         try:
             dir_path = os.path.dirname(path)
             if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
+                os.makedirs(dir_path, mode=0o700, exist_ok=True)
+                os.chmod(dir_path, 0o700)
             atomic_write_json(path, detected)
 
             if "--json" not in sys.argv:

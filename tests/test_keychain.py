@@ -14,13 +14,8 @@ from limitlens.keychain import set_keychain_token, get_keychain_token  # noqa: E
 class TestKeychain(unittest.TestCase):
     @patch("limitlens.keychain._keyring_available", False)
     @patch("limitlens.keychain.sys.platform", "darwin")
-    @patch("limitlens.keychain.subprocess.run")
-    def test_set_keychain_token_mac(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        self.assertTrue(set_keychain_token("test_acc", "test_tok"))
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        self.assertEqual(args[0], "security")
+    def test_set_keychain_token_mac(self):
+        self.assertFalse(set_keychain_token("test_acc", "test_tok"))
 
     @patch("limitlens.keychain._keyring_available", False)
     @patch("limitlens.keychain.sys.platform", "linux")
@@ -67,13 +62,10 @@ class TestKeychain(unittest.TestCase):
     @patch("limitlens.keychain._keyring_available", True)
     @patch("keyring.set_password")
     @patch("limitlens.keychain.sys.platform", "darwin")
-    @patch("limitlens.keychain.subprocess.run")
-    def test_set_keychain_token_keyring_fails_fallback(self, mock_run, mock_set):
+    def test_set_keychain_token_keyring_fails_fallback(self, mock_set):
         mock_set.side_effect = RuntimeError("error")
-        mock_run.return_value = MagicMock(returncode=0)
-        self.assertTrue(set_keychain_token("test_acc", "test_tok"))
+        self.assertFalse(set_keychain_token("test_acc", "test_tok"))
         mock_set.assert_called_once()
-        mock_run.assert_called_once()
 
     @patch("limitlens.keychain._keyring_available", True)
     @patch("keyring.get_password")

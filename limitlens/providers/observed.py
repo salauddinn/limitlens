@@ -641,12 +641,14 @@ def get_kilo_usage(config):
 
     try:
         con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
-        cur = con.cursor()
-        rows = cur.execute(
-            "SELECT model, cost, tokens_input, tokens_output, tokens_reasoning, "
-            "tokens_cache_read, tokens_cache_write, time_created FROM session"
-        ).fetchall()
-        con.close()
+        try:
+            cur = con.cursor()
+            rows = cur.execute(
+                "SELECT model, cost, tokens_input, tokens_output, tokens_reasoning, "
+                "tokens_cache_read, tokens_cache_write, time_created FROM session"
+            ).fetchall()
+        finally:
+            con.close()
     except sqlite3.Error as e:
         return {"error": f"Kilo database read error: {e}"}
 

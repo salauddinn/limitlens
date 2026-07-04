@@ -219,6 +219,8 @@ def _validated_web_url(url):
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("URL must use http or https")
+    if parsed.netloc not in ("api.commandcode.ai", "uam.getmerlin.in"):
+        raise ValueError(f"Untrusted URL domain: {parsed.netloc}. Must be api.commandcode.ai or uam.getmerlin.in")
     return url
 
 

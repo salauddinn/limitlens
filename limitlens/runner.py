@@ -190,10 +190,15 @@ def _coerce_command(value: Any, default: Sequence[str]) -> Tuple[str, ...]:
     if not value:
         return tuple(default)
     if isinstance(value, str):
-        return tuple(shlex.split(value))
-    if isinstance(value, (list, tuple)):
-        return tuple(str(part) for part in value)
-    return tuple(default)
+        parts = list(shlex.split(value))
+    elif isinstance(value, (list, tuple)):
+        parts = [str(part) for part in value]
+    else:
+        return tuple(default)
+        
+    if parts and "=" in parts[0] and not parts[0].startswith("/"):
+        parts.insert(0, "env")
+    return tuple(parts)
 
 
 def _format_arg(template: Any, prompt: str) -> str:
@@ -247,7 +252,16 @@ def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]]
 def _executable_exists(command: Sequence[str]) -> bool:
     if not command:
         return False
-    executable = command[0]
+    
+    executable = None
+    for part in command:
+        if part in ("env", "/usr/bin/env"):
+            continue
+        if "=" in part:
+            continue
+        executable = part
+        break
+        
     if not executable:
         return False
     return shutil.which(executable) is not None

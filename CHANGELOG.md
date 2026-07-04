@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 ### Removed
 - Remove AgentRouter provider support; keep legacy `agentrouter` config accepted during validation so existing local configs do not fail immediately.
 
-## [1.7.0] - 2026-06-29
+## [0.7.0] - 2026-06-29
 
 ### Added
 - Add `limitlens doctor` readiness checks and a sanitized `doctor --report` output for support/debugging.
@@ -39,14 +39,14 @@ All notable changes to this project will be documented in this file.
 - Keep Antigravity low-quota notifications distinct for separate 5-hour and weekly windows.
 - Sanitize menubar refresh failures before displaying or copying status text.
 
-## [1.6.1] - 2026-06-26
+## [0.6.1] - 2026-06-26
 
 ### Fixed
 - Queue menubar refresh requests instead of dropping manual refresh clicks while another refresh is already running.
 - Preserve manual refresh intent so queued refreshes still perform the stronger Codex sync.
 - Show an in-progress menubar title while refresh is running and include a last-refreshed timestamp in populated menus.
 
-## [1.6.0] - 2026-06-26
+## [0.6.0] - 2026-06-26
 
 ### Added
 - Add `limitlens run "..."`, a quota-aware launcher that chooses and starts the best available AI CLI for a task.
@@ -62,7 +62,7 @@ All notable changes to this project will be documented in this file.
 - Harden runner launch defaults so Amp receives prompts on stdin, Antigravity uses `--prompt-interactive`, and OpenCode uses `run`.
 - Reject invalid runner `prompt_mode` values with a clear error instead of silently falling back.
 
-## [1.5.0] - 2026-06-21
+## [0.5.0] - 2026-06-21
 
 ### Added
 - Add common command aliases: `suggest`/`s`, `usage`/`u`, `all`/`a`, and `watch`/`w`.
@@ -78,12 +78,12 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Add regression coverage so provider errors remain visible and directly requested providers still run even when disabled in the all-dashboard config.
 
-## [1.4.0] - 2026-06-14
+## [0.4.0] - 2026-06-14
 
 ### Added
 - Add `individual_credits` configuration option for Amp to selectively hide credit-only tiers.
 
-## [1.3.3] - 2026-06-14
+## [0.3.3] - 2026-06-14
 
 ### Added
 - Add Claude Code local session usage tracking.
@@ -109,7 +109,7 @@ All notable changes to this project will be documented in this file.
 - Include top-level Claude usage in `--usage --tool claude` analytics.
 - Make the iTerm widget gracefully fall back when shared icon helpers are not importable.
 
-## [1.3.2] - 2026-06-10
+## [0.3.2] - 2026-06-10
 
 ### Added
 - Add `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status
@@ -130,19 +130,19 @@ All notable changes to this project will be documented in this file.
 - Display Amp missed-refill waste as dollar estimates instead of percent-unused reset waste
 - Sanitize Command Code environment-derived request headers before API calls
 
-## [1.2.3] - 2026-06-04
+## [0.2.3] - 2026-06-04
 
 ### Fixed
 - Sanitize AgentRouter auth-related environment headers before API requests
 - Add Windows CI coverage and package classifier to match documented support
 - Keep the CI matrix running after a single job failure so release failures are diagnosable
 
-## [1.2.2] - 2026-06-04
+## [0.2.2] - 2026-06-04
 
 ### Fixed
 - Avoid duplicate cache directory setup during snapshot pruning so CI and first-run snapshot recording remain stable
 
-## [1.2.1] - 2026-06-04
+## [0.2.1] - 2026-06-04
 
 ### Fixed
 - Prevent `limitlens-menubar` from crashing at import time on non-macOS systems without `rumps`
@@ -155,7 +155,7 @@ All notable changes to this project will be documented in this file.
 - Block unexpected redirects and validate web URL schemes before sending provider auth headers
 - Align internal package version and dev dependency bounds
 
-## [1.2.0] - 2026-06-04
+## [0.2.0] - 2026-06-04
 
 ### Added
 - Add native macOS menubar app with low-quota desktop notifications, refresh, and quit actions
@@ -179,7 +179,7 @@ All notable changes to this project will be documented in this file.
 - Fix provider edge cases including auth fallbacks, header handling, cache behavior, and stale recommendations
 - Remove unused imports and clean up lint/whitespace issues
 
-## [1.1.0] - 2026-05-31
+## [0.1.0] - 2026-05-31
 
 ### Added
 - Detect stale Codex limit data when the latest session is older than the limit window
@@ -193,7 +193,7 @@ All notable changes to this project will be documented in this file.
 - Improve Antigravity CLI process tracing to properly discover descendant language server processes and extract dynamic ports
 - Fix redundant configuration parsing in CommandCode, AgentRouter, and Pioneer providers
 
-## [1.0.0] - 2026-05-28
+## [0.0.0] - 2026-05-28
 
 ### Added
 - Unified CLI to check quotas across Codex, Amp, Antigravity, and OpenCode

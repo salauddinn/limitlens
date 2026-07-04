@@ -45,7 +45,14 @@ def redact_text(text):
 # ── Formatting helpers ──────────────────────────────────────────────────────
 
 def bar(pct, width=20, no_color=False):
-    pct = max(0.0, min(100.0, float(pct)))
+    import math
+    try:
+        pct = float(pct)
+        if math.isnan(pct):
+            pct = 0.0
+    except (ValueError, TypeError):
+        pct = 0.0
+    pct = max(0.0, min(100.0, pct))
     filled_fraction = (pct / 100.0) * width
     full_blocks = int(filled_fraction)
     fraction = filled_fraction - full_blocks
@@ -306,15 +313,32 @@ def file_lock(lock_path, timeout=5.0, delay=0.05):
                             active.add(lock_path)
                             break
                         except FileExistsError:
-                            pass
+                            continue
                 except OSError:
                     pass
                 raise TimeoutError(f"Could not acquire lock on {lock_path} within {timeout} seconds")
             time.sleep(delay)
+
+    stop_event = threading.Event()
+    def touch_lock():
+        while not stop_event.wait(3.0):
+            try:
+                os.utime(lock_path, None)
+            except OSError:
+                break
+
+    touch_thread = None
+    if acquired:
+        touch_thread = threading.Thread(target=touch_lock, daemon=True)
+        touch_thread.start()
+
     try:
         yield
     finally:
         if acquired:
+            stop_event.set()
+            if touch_thread:
+                touch_thread.join(timeout=1.0)
             active.discard(lock_path)
             try:
                 os.rmdir(lock_path)

@@ -506,7 +506,8 @@ def _main():
             print_c(f"  ✓ usage exported to {args.export_usage}", "\033[32m", args.no_color)
         else:
             print_c(f"  ⚠ failed to export usage to {args.export_usage}", "\033[31m", args.no_color)
-        return
+        if not (args.usage or getattr(args, "run", False) or args.waste):
+            return
 
     if args.import_usage:
         ok = usage_tracker.import_usage(args.import_usage)
@@ -514,7 +515,8 @@ def _main():
             print_c(f"  ✓ usage imported from {args.import_usage}", "\033[32m", args.no_color)
         else:
             print_c(f"  ⚠ failed to import usage from {args.import_usage}", "\033[31m", args.no_color)
-        return
+        if not (args.usage or getattr(args, "run", False) or args.waste):
+            return
 
     if args.usage:
         if getattr(args, "days", None):
@@ -732,8 +734,13 @@ def main():
         import sys
         import traceback
         debug_enabled = "--debug" in sys.argv or "-d" in sys.argv
+        no_color_enabled = "--no-color" in sys.argv or "--plain" in sys.argv
         if debug_enabled:
             traceback.print_exc(file=sys.stderr)
+        elif no_color_enabled:
+            print("\n  [LimitLens] An unexpected error occurred.")
+            print(f"  Details: {e}")
+            print("  If this persists, please open an issue on GitHub.\n")
         else:
             print("\n  \033[31m[LimitLens] An unexpected error occurred.\033[0m")
             print(f"  \033[90mDetails:\033[0m {e}")

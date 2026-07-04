@@ -13,7 +13,7 @@
   <a href="https://limitlens.vercel.app">🌐 limitlens.vercel.app</a>
 </div>
 
-If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **zero-dependency, local CLI tool**—along with a macOS menubar app and an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
+If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **lightweight, local CLI tool**—along with a macOS menubar app and an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
 
 <p align="center">
   <img src="assets/limitlens_status.png" alt="LimitLens Status Dashboard" width="45%" style="border-radius: 8px;">
@@ -53,7 +53,9 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 One command to install everything — automatically detects your OS, installs `pipx` if needed, and optionally registers the menubar app to start at login:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/install.sh -o install.sh
+# Inspect the script before running: cat install.sh
+bash install.sh
 ```
 
 ### Manual Install (pipx)
@@ -74,7 +76,8 @@ Modern systems (like macOS with Homebrew or recent Linux distributions) block gl
 To completely remove LimitLens, the menubar LaunchAgent, and optionally your config:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall.sh -o uninstall.sh
+bash uninstall.sh
 ```
 
 

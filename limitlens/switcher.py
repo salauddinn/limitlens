@@ -190,6 +190,13 @@ def main():
         target_cand = runnable_candidates[choice_idx - 1]
 
     cmd_str = target_cand["command"]
+    cmd_binary = shlex.split(cmd_str)[0] if cmd_str else None
+    if cmd_binary:
+        import shutil
+        if not shutil.which(cmd_binary):
+            print_c(f"  ⚠ Tool '{cmd_binary}' is not installed or not in PATH.", "\033[31m", no_color)
+            sys.exit(1)
+
     if forwarded:
         args_str = " ".join(shlex.quote(a) for a in forwarded)
         full_command = f"{cmd_str} {args_str}"

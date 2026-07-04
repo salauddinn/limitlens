@@ -25,13 +25,9 @@ def set_keychain_token(account: str, token: str) -> bool:
             pass
 
     if sys.platform == "darwin":
-        # macOS
-        cmd = ["security", "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", account, "-w", token]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)  # nosec B603
-            return True
-        except subprocess.CalledProcessError:
-            return False
+        # macOS: passing token via CLI argument exposes it in `ps`. Require keyring.
+        print("\n[LimitLens] ERROR: Setting tokens securely requires the 'keyring' package. Please run 'pip install keyring'.\n", file=sys.stderr)
+        return False
     elif sys.platform.startswith("linux"):
         # Linux
         cmd = ["secret-tool", "store", "--label", f"LimitLens {account} Token", "service", SERVICE_NAME, "account", account]

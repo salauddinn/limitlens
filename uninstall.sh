@@ -79,6 +79,13 @@ if $IS_MAC; then
     rm -f "$LOG_FILE"
     success "Log file removed."
   fi
+
+  # Remove iTerm2 widget
+  WIDGET_FILE="$HOME/Library/Application Support/iTerm2/Scripts/limitlens_widget.py"
+  if [[ -f "$WIDGET_FILE" ]]; then
+    rm -f "$WIDGET_FILE"
+    success "iTerm2 widget removed."
+  fi
 fi
 
 # ── Uninstall via pipx ─────────────────────────────────────────────────────────

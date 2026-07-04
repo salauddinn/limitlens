@@ -105,6 +105,10 @@ def _reset_at_seconds(value):
         return float(value)
     if isinstance(value, str):
         try:
+            return float(value)
+        except ValueError:
+            pass
+        try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
@@ -216,6 +220,7 @@ def _maybe_prune_old_snapshots():
         prune_old_snapshots()
         with open(marker, "a", encoding="utf-8"):
             pass
+        os.utime(marker, None)
         os.chmod(marker, 0o600)
     except OSError:
         pass
@@ -502,7 +507,7 @@ def compute_ttx(snapshots, key):
         if not valid_snaps:
             valid_snaps.append(snap)
         else:
-            if float(snap["pct_left"]) < float(valid_snaps[-1]["pct_left"]):
+            if float(valid_snaps[-1]["pct_left"]) - float(snap["pct_left"]) >= RESET_DETECT_PCT:
                 break  # Reset boundary detected
             valid_snaps.append(snap)
             if len(valid_snaps) == 6:
