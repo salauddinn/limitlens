@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>limitlens — P1 Issue Breakdown</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #181b23;
+    --text: #e6e8ee;
+    --muted: #9aa1b2;
+    --border: #2a2f3d;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --green: #4ade80;
+    --accent: #60a5fa;
+    --violet: #a78bfa;
+    --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 1.7rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 32px; font-size: 0.95rem; }
+  h2 {
+    font-size: 1.2rem; margin: 56px 0 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.0rem; margin: 28px 0 10px; color: var(--accent); }
+  h4 { font-size: 0.95rem; margin: 18px 0 8px; color: var(--violet); }
+  .tag {
+    display: inline-block; font-size: 0.7rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px; vertical-align: middle;
+    margin-left: 8px; letter-spacing: 0.05em;
+  }
+  .tag.file { background: rgba(96,165,250,.12); color: var(--accent); font-family: "SF Mono", Menlo, monospace; }
+  .tag.line { background: rgba(167,139,250,.12); color: var(--violet); font-family: "SF Mono", Menlo, monospace; }
+  pre, code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre {
+    background: #0a0c12; border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+    overflow-x: auto; font-size: 0.78rem; line-height: 1.55;
+    color: #c9d1e0;
+  }
+  pre.bad { border-left: 3px solid var(--red); }
+  pre.good { border-left: 3px solid var(--green); }
+  p code, li code, td code {
+    background: rgba(96,165,250,.12); color: var(--accent);
+    padding: 1px 6px; border-radius: 4px; font-size: 0.85em;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin: 14px 0;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(96,165,250,.06);
+    padding: 12px 16px; border-radius: 0 8px 8px 0;
+    margin: 14px 0; font-size: 0.92rem;
+  }
+  .callout.danger { border-left-color: var(--red); background: rgba(248,113,113,.06); }
+  .callout.warn { border-left-color: var(--amber); background: rgba(251,191,36,.06); }
+  .callout.ok { border-left-color: var(--green); background: rgba(74,222,128,.06); }
+  .callout strong { color: var(--accent); }
+  .callout.danger strong { color: var(--red); }
+  .callout.warn strong { color: var(--amber); }
+  .callout.ok strong { color: var(--green); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr.drift td { background: rgba(248,113,113,.06); }
+  .diagram {
+    background: #0a0c12; border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 0.78rem; line-height: 1.5;
+    color: var(--text); overflow-x: auto;
+    white-space: pre;
+  }
+  .diagram .box { color: var(--accent); }
+  .diagram .arrow { color: var(--muted); }
+  .diagram .hot { color: var(--red); }
+  .diagram .ok { color: var(--green); }
+  .diagram .violet { color: var(--violet); }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .effort {
+    display: inline-block; font-size: 0.75rem;
+    background: var(--border); color: var(--muted);
+    padding: 2px 10px; border-radius: 999px; margin-left: 8px;
+  }
+  .effort.hot { background: rgba(248,113,113,.15); color: var(--red); }
+  .effort.warm { background: rgba(251,191,36,.15); color: var(--amber); }
+  .effort.cool { background: rgba(74,222,128,.15); color: var(--green); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .pulse {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin: 14px 0;
+  }
+  .pulse .title { font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+  .legend { font-size: 0.78rem; color: var(--muted); margin: 8px 0; }
+  .legend span { margin-right: 14px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>limitlens — P1 Code Quality Breakdown</h1>
+  <p class="sub">From the audit on 2026-07-13 · v0.8.0 pending release · issues #5–#11, with diagrams and code references</p>
+
+  <div class="callout">
+    <strong>Read order:</strong> Start with #10 (one-line bug), then #8 (parser), then #6 (defaults drift), then #7/#11 (logging & error handling), then #5 (registry), then #9 (menubar split). Items 5 and 9 are coupled — #9 consumes the model from #5.
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--red)"></span>broken / risk</span>
+    <span><span class="swatch" style="background:var(--amber)"></span>drift / partial</span>
+    <span><span class="swatch" style="background:var(--green)"></span>proposed fix</span>
+    <span><span class="swatch" style="background:var(--accent)"></span>data / registry</span>
+    <span><span class="swatch" style="background:var(--violet)"></span>UI / display</span>
+  </div>
+
+  <!-- ============================================== -->
+  <h2>Issue #10 · stdout mutation in watch mode <span class="effort cool">~5 min</span></h2>
+
+  <p><span class="tag file">limitlens/cli.py</span><span class="tag line">700–730</span></p>
+
+  <p>In <code>--watch</code> mode, the CLI captures rendered output by swapping the global <code>sys.stdout</code> to a <code>StringIO</code>, then restores it after rendering. But there is <strong>no <code>finally</code> guard</strong>, so any exception during rendering leaves <code>sys.stdout</code> permanently bound to the discarded buffer — and every subsequent <code>print()</code> in the process writes into the void.</p>
+
+  <h3>The bug</h3>
+  <pre class="bad">700:     if args.watch:
+701:         _prev_lines = [0]
+702:
+703:         def _clear_watch():
+704:             n = _prev_lines[0]
+705:             if n > 0:
+706:                 print(f"\033[{n}A\033[J", end="", flush=True)
+707:
+708:         try:
+709:             while True:
+710:                 result = fetch_and_refresh()
+711:                 _record(result)
+712:                 if not args.json:
+713:                     import io as _io
+714:                     import sys as _sys
+715:                     _clear_watch()
+716:                     buf = _io.StringIO()
+717:                     _orig = _sys.stdout
+718:                     _sys.stdout = buf                 <span class="hot"># &lt;-- sys.stdout swapped to buf</span>
+719:                     display_result(result)            <span class="hot"># &lt;-- can raise</span>
+720:                     _sys.stdout = _orig               <span class="hot"># &lt;-- only on success</span>
+721:                     output = buf.getvalue()
+722:                     print(output, end="", flush=True)
+723:                     _prev_lines[0] = output.count("\n")
+724:                 else:
+725:                     display_result(result)
+726:                 time.sleep(args.interval)
+727:         except KeyboardInterrupt:                     <span class="hot"># &lt;-- only KeyboardInterrupt caught</span>
+728:             if not args.json:
+729:                 print()
+730:         return</pre>
+
+  <h3>Failure mode</h3>
+  <div class="diagram">
+   <span class="ok">t=0</span>    sys.stdout = real terminal
+   <span class="arrow">--&gt;</span> <span class="box">display_result()</span> <span class="arrow">--&gt;</span> exception raised
+   <span class="arrow">--&gt;</span> <span class="box">main() except</span> tries to print "[LimitLens] An unexpected error occurred."
+   <span class="arrow">--&gt;</span> <span class="hot">print() writes into the dead StringIO</span>
+   <span class="arrow">--&gt;</span> process exits, <span class="hot">user sees nothing</span></div>
+
+  <h3>Fix</h3>
+  <pre class="good">_orig = _sys.stdout
+_sys.stdout = buf
+try:
+    display_result(result)
+finally:
+    _sys.stdout = _orig            # &lt;-- always restored</pre>
+
+  <p class="callout ok"><strong>Even better:</strong> refactor <code>display_result</code> to <em>return</em> a string instead of printing. Then watch mode never mutates <code>sys.stdout</code> at all, and the <code>StringIO</code> hack disappears. This also fixes a subtler bug: <code>sys.stdout.isatty()</code> returns <code>False</code> for the <code>StringIO</code>, so color/width detection is wrong during capture.</p>
+
+  <!-- ============================================== -->
+  <h2>Issue #8 · Hand-rolled gRPC parser <span class="effort warm">~2 h</span></h2>
+
+  <p><span class="tag file">limitlens/providers/grok.py</span><span class="tag line">106–130</span></p>
+
+  <p><code>_parse_grpc_percent()</code> extracts a float from a gRPC-Web + protobuf response by hand-parsing the byte stream. It assumes an undocumented, unversioned wire layout and makes <strong>no bounds checks</strong>. The <code>try/except Exception: return None</code> at the bottom guarantees it can never crash — but it also means any malformed input looks identical to "no data".</p>
+
+  <h3>Current implementation with unchecked assumptions</h3>
+  <pre class="bad">106: def _parse_grpc_percent(data):
+107:     """Extract float from gRPC-Web proto (field 1 of outer field 1)."""
+108:     try:
+109:         idx = 0
+110:         while idx + 5 &lt;= len(data):
+111:             flag = data[idx]
+112:             length = struct.unpack('>I', data[idx+1:idx+5])[0]
+113:             body = data[idx+5:idx+5+length]    <span class="hot"># [A4] no len(body) == length check</span>
+114:             idx += 5 + length                  <span class="hot"># [A5] can jump past EOF on bogus length</span>
+115:             if flag == 0 and len(body) &gt; 6 and body[0] == 0x0a:
+116:                 pos = 1
+117:                 val = 0
+118:                 shift = 0
+119:                 while pos &lt; len(body):        <span class="hot"># [A7] no iteration cap</span>
+120:                     b = body[pos]
+121:                     pos += 1
+122:                     val |= (b &amp; 0x7f) &lt;&lt; shift  <span class="hot"># [A8] val unused, shift unbounded</span>
+123:                     if not (b &amp; 0x80):
+124:                         break
+125:                     shift += 7
+126:                 if pos &lt; len(body) and body[pos] == 0x0d:
+127:                     return struct.unpack('&lt;f', body[pos+1:pos+5])[0]   <span class="hot"># [A10] no pos+5 &lt;= len</span>
+128:     except Exception:                          <span class="hot"># [A11] swallows every error → return None</span>
+129:         pass
+130:     return None</pre>
+
+  <h3>Byte layout it assumes (undocumented endpoint)</h3>
+  <pre>┌─────────────── gRPC-Web frame ───────────────┐ ┌─── protobuf body ───┐
+│ flag(1) │ length(4 BE) │   body(L bytes)      │ │ tag 0x0a │ len(V)  │ 0x0d │ float(4 LE) │
+└─────────┴──────────────┴──────────────────────┘ └─────────┴─────────┘ └─────┴────────────┘
+   [0]        [1..5]          [5..5+L]                      [0]       [1..V+1]   pos    pos+1..pos+4</pre>
+
+  <p>The <code>val</code> varint (the submessage's declared length <code>V</code>) is <em>computed but never used</em>. The parser works only because the submessage's first and only field is the float, so the byte right after the length varint happens to be <code>0x0d</code>. Add a sibling field and the parser silently misfires.</p>
+
+  <h3>What each missing check costs</h3>
+  <table>
+    <tr><th>Tag</th><th>Missing check</th><th>Failure mode</th></tr>
+    <tr><td>[A4]</td><td><code>len(body) == length</code></td><td>Truncated frame → silent data loss; loop ends</td></tr>
+    <tr><td>[A5]</td><td>Bogus length doesn't re-sync</td><td>All subsequent valid frames skipped</td></tr>
+    <tr><td>[A7]</td><td>Varint iteration cap (max 10)</td><td>All-high-bit bytes spin until EOF</td></tr>
+    <tr><td>[A8]</td><td>Cap <code>val</code> against submessage size</td><td>Crafted body can place "float" anywhere</td></tr>
+    <tr><td>[A10]</td><td><code>pos+5 &lt;= len(body)</code> before unpack</td><td>Truncated tail → <code>struct.error</code> → caught → <code>None</code></td></tr>
+  </table>
+
+  <h3>Proposed fix shape</h3>
+  <pre class="good">def _parse_grpc_percent(data):
+    try:
+        if not isinstance(data, (bytes, bytearray)) or len(data) &lt; 6:
+            return None
+        idx = 0
+        while idx + 5 &lt;= len(data):
+            flag   = data[idx]
+            length = struct.unpack('>I', data[idx+1:idx+5])[0]
+            if idx + 5 + length &gt; len(data) or length &gt; 1 &lt;&lt; 20:   # cap frame size
+                return None
+            body = data[idx+5:idx+5+length]
+            idx += 5 + length
+            if flag == 0 and body[:1] == b'\x0a':
+                pos, val, shift = 1, 0, 0
+                for _ in range(10):                                  # varint cap
+                    if pos &gt;= len(body): break
+                    b = body[pos]; pos += 1
+                    val |= (b &amp; 0x7f) &lt;&lt; shift
+                    if not (b &amp; 0x80): break
+                    shift += 7
+                if pos + 5 &lt;= len(body) and body[pos] == 0x0d:
+                    return struct.unpack('&lt;f', body[pos+1:pos+5])[0]
+    except (struct.error, IndexError) as e:
+        log.debug("grok parser: malformed frame: %s", e)
+        return None
+    return None</pre>
+
+  <p class="callout"><strong>Add fixtures:</strong> truncated frame, oversized length, malformed varint, submessage with sibling field, trailer frame. Currently zero parser tests exist.</p>
+
+  <!-- ============================================== -->
+  <h2>Issue #6 · Drifted provider defaults <span class="effort warm">with #5</span></h2>
+
+  <p><span class="tag file">limitlens/config.py</span><span class="tag line">8–97</span> &nbsp;|&nbsp; <span class="tag file">limitlens/cli.py</span><span class="tag line">73–86, 355–379</span></p>
+
+  <p><code>DEFAULT_CONFIG</code> declares one set of "enabled by default" booleans. The CLI's <code>enabled_count</code> and doctor rows declare <em>different</em> booleans. They have already drifted, and there is no single source of truth.</p>
+
+  <h3>Drift table</h3>
+  <table>
+    <tr><th>Provider</th><th>DEFAULT_CONFIG</th><th>CLI enabled_count</th><th>Doctor list</th><th>Status</th></tr>
+    <tr class="drift"><td><code>pi</code></td><td>True</td><td>False</td><td>False</td><td>config says on, CLI treats as off</td></tr>
+    <tr class="drift"><td><code>kilo</code></td><td>True</td><td>False</td><td>missing</td><td>config says on, CLI never counts it; missing from doctor</td></tr>
+    <tr class="drift"><td><code>copilot_cli</code></td><td>True</td><td>not counted</td><td>missing</td><td>enabled by config, invisible to CLI</td></tr>
+    <tr class="drift"><td><code>cline</code></td><td>True</td><td>True</td><td>False</td><td>doctor list says off, but everything else says on</td></tr>
+    <tr><td><code>claude</code></td><td>True</td><td>(missing from count block)</td><td>True</td><td><code>enabled_count</code> undercounts by 1 when claude is in play</td></tr>
+  </table>
+
+  <h3>Why it bites users</h3>
+  <ul>
+    <li>A user who runs <code>limitlens --init-config</code> gets <code>pi: enabled: true</code> and <code>kilo: enabled: true</code> in their config, but <code>limitlens status</code> never fetches them unless they pass <code>--tool pi</code> or <code>--tool kilo</code> explicitly. The <code>enabled_count</code> block is the gate, and it gates them out.</li>
+    <li><code>limitlens doctor</code> tells the user "Grok: not configured" (correct) and "Cline: configured" (correct), but never even lists Kilo — so the user can't tell from doctor whether Kilo is reachable.</li>
+    <li>Two pi defaults disagree across files, so the same config behaves differently depending on which code path reads it.</li>
+  </ul>
+
+  <p class="callout"><strong>Falls out of #5</strong> — once each provider descriptor owns its <code>default_enabled</code> bool, every other site (config defaults, CLI gating, doctor rows, menubar row collection) reads from the descriptor and the drift vanishes.</p>
+
+  <!-- ============================================== -->
+  <h2>Issue #5 · Provider descriptor registry <span class="effort hot">~1 day</span></h2>
+
+  <p><span class="tag file">limitlens/cli.py</span><span class="tag line">29–43, 73–86, 179, 254, 300–314, 344–351, 355–409, 530, 549–559, 660, 664–691</span></p>
+
+  <p><code>cli.py</code> hand-wires every provider in <strong>~8 distinct spots</strong>. A registry (<code>limitlens/providers/__init__.py:20–35</code>) already exists but is unused by <code>cli.py</code> and lacks the metadata the CLI actually needs (default-enabled, label, display handler, call signature). Adding a new provider means editing 8+ places; getting one wrong silently breaks gating or display.</p>
+
+  <h3>The 8 hand-wiring spots</h3>
+  <div class="diagram">
+ <span class="box">1. Imports</span>                cli.py:29–43     13 names enumerated
+ <span class="arrow">|</span>
+ <span class="box">2a. --tool (run) choices</span>    cli.py:179       11 names + aliases (agy, cmd)
+ <span class="box">2b. --tool (main) choices</span>   cli.py:254       13 names — <span class="hot">disagrees with 2a</span>
+ <span class="arrow">|</span>
+ <span class="box">3. Doctor rows</span>             cli.py:73–86     12 names, hand-set default-enabled
+ <span class="box">4. tool_label dict</span>          cli.py:300–314   11 names, missing <code>kilo</code>
+ <span class="arrow">|</span>
+ <span class="box">5. enabled_count</span>           cli.py:355–379   12 ifs — <span class="hot">missing claude, wrong defaults</span>
+ <span class="box">6. Fetch dispatch</span>          cli.py:384–409   13 ifs, in <span class="hot">different order</span> from #5
+ <span class="box">6b. opencode→copilot case</span>  cli.py:344–351   hardcoded special-case
+ <span class="box">6c. observed group</span>         cli.py:530,549–559 "opencode","pi","copilot_cli","claude" 3x
+ <span class="arrow">|</span>
+ <span class="box">7. "any present" check</span>     cli.py:660       11 names, <span class="hot">missing claude</span>
+ <span class="box">8. Display dispatch</span>        cli.py:664–691   12 ifs, opencode mutually exclusive with claude/pi/kilo</div>
+
+  <p>Total: <strong>~96 hand-edited references</strong> to specific provider names in <code>cli.py</code> alone (plus another ~30 in <code>config.py</code> and <code>menubar.py</code>).</p>
+
+  <h3>Proposed descriptor shape</h3>
+  <pre class="good"># limitlens/providers/__init__.py
+@dataclass(frozen=True)
+class ProviderDescriptor:
+    key: str                       # canonical key, matches config["key"]
+    label: str                     # display label, e.g. "Codex"
+    aliases: tuple[str, ...]       # CLI aliases, e.g. ("agy", "antigravity")
+    config_key: str                # config dict key (default = key); "custom" → "custom_tools"
+    default_enabled: bool
+    fetch: Callable                # get_*_data
+    display: Callable | None       # display_*_text, or None
+    display_section: str           # "Quota" or "Observed" — for grouping
+    auto_detect: Callable | None   # for config.auto_detect_providers
+    unit_hint: str = "%"           # "$", "%", etc. for menubar
+
+PROVIDERS: dict[str, ProviderDescriptor] = { ... }   # 13 entries, one per provider</pre>
+
+  <h3>What becomes data-driven</h3>
+  <ul>
+    <li><strong>Imports</strong> — descriptor holds the function reference, no top-level import list needed</li>
+    <li><strong><code>--tool</code> choices</strong> — derived from <code>PROVIDERS.keys()</code> ∪ <code>aliases</code></li>
+    <li><strong>Doctor rows</strong> — derived from <code>(p.label, p.default_enabled)</code></li>
+    <li><strong>Labels</strong> — derived from <code>p.label</code>; <code>--tool kilo</code> can no longer <code>KeyError</code></li>
+    <li><strong><code>enabled_count</code></strong> — <code>sum(1 for p in PROVIDERS.values() if is_active(p))</code></li>
+    <li><strong>Fetch dispatch</strong> — <code>{p.key: ex.submit(p.fetch, args, config) for p in active}</code></li>
+    <li><strong>Display dispatch</strong> — <code>p.display(result[p.key], args) if p.display else None</code></li>
+    <li><strong>Menubar <code>_collect_rows</code></strong> — iterates descriptors, can no longer "forget" a provider</li>
+  </ul>
+
+  <h3>What this is NOT</h3>
+  <div class="callout warn">
+    <strong>It is not a plugin system.</strong> A descriptor is one frozen dataclass per provider, declared in the existing <code>limitlens/providers/__init__.py</code> file. Discovery, registration, and packaging are unchanged. The point is to centralize <em>metadata</em>, not to add indirection.
+  </div>
+
+  <!-- ============================================== -->
+  <h2>Issue #7 · Silent error swallowing <span class="effort hot">~½ day</span></h2>
+
+  <p><span class="tag file">limitlens/providers/grok.py</span><span class="tag line">38–41, 106–149, 186–192</span> &nbsp;|&nbsp; <span class="tag file">limitlens/menubar.py</span> &nbsp;|&nbsp; <span class="tag file">limitlens/cli.py</span> &nbsp;|&nbsp; +11 other files</p>
+
+  <p>Two distinct problems. (a) <code>grok.py</code> has 3 broad <code>except Exception</code> that collapse four different real-world failure modes into one indistinguishable <code>None</code>. (b) Repo-wide, there are <strong>48 broad <code>except Exception</code></strong> (not 47), with 18 of them in <code>menubar.py</code> alone.</p>
+
+  <h3>(a) Grok failure-mode collapse</h3>
+  <pre class="bad">128:     except Exception:        # in _parse_grpc_percent
+129:         pass
+130:     return None               # &lt;-- schema change, struct.error, IndexError all → None
+
+148:     except Exception:        # in fetch_grok_usage
+149:         return None           # &lt;-- DNS failure, HTTP 403, expired cookie all → None
+</pre>
+
+  <div class="diagram">
+ <span class="hot">DNS failure</span>          <span class="arrow">--&gt;</span>  <span class="box">urllib.error.URLError(socket.gaierror)</span>  <span class="arrow">--&gt;</span> <span class="hot">except Exception → None</span>
+ <span class="hot">Expired SSO cookie</span>   <span class="arrow">--&gt;</span>  <span class="box">HTTP 403 from grok.com</span>                <span class="arrow">--&gt;</span> <span class="hot">except Exception → None</span>
+ <span class="hot">HTTP 403 (other)</span>      <span class="arrow">--&gt;</span>  <span class="box">HTTPError</span>                            <span class="arrow">--&gt;</span> <span class="hot">except Exception → None</span>
+ <span class="hot">Schema change</span>         <span class="arrow">--&gt;</span>  <span class="box">struct.error / IndexError</span>           <span class="arrow">--&gt;</span> <span class="hot">except Exception → None</span>
+
+ <span class="violet">All four look identical to the caller:</span> <span class="violet">"Grok has no data"</span></div>
+
+  <h3>Bonus: docstring lies</h3>
+  <p>The module docstring at <code>grok.py:1–5</code> claims:</p>
+  <pre>"No tokens are read, transmitted, or logged."</pre>
+  <p>This is false on the "transmitted" half. <code>fetch_grok_usage</code> reads the SSO token from env or keychain (line 186–192) and attaches it to a POST to <code>grok.com</code> (line 143):</p>
+  <pre class="bad">req.add_header('cookie', f'sso={sso_cookie}; sso-rw={sso_cookie}')</pre>
+  <p class="callout warn">The "not logged" part is true. The "not read" part is true for <code>auth.json</code> only. The "not transmitted" claim is contradicted by <code>fetch_grok_usage</code>. Either narrow the docstring or remove the misleading assertion.</p>
+
+  <h3>(b) Repo-wide tally</h3>
+  <table>
+    <tr><th>File</th><th>Broad excepts</th><th>Hot spots</th></tr>
+    <tr class="drift"><td><code>limitlens/menubar.py</code></td><td>18</td><td>lines 368, 390, 398, 498, 525, 565, 588 — no pragma, no comment, no logging</td></tr>
+    <tr><td><code>limitlens/providers/antigravity.py</code></td><td>7</td><td>lines 465, 482, 751, 763, 972, 1234, 1261</td></tr>
+    <tr><td><code>limitlens/cli.py</code></td><td>7</td><td>lines 64, 208, 413, 501, 539, 608, 742</td></tr>
+    <tr><td><code>limitlens/providers/grok.py</code></td><td>3</td><td>lines 40, 128, 148 — the ones above</td></tr>
+    <tr><td><code>limitlens/keychain.py</code></td><td>3</td><td>lines 14, 23, 48</td></tr>
+    <tr><td><code>limitlens/switcher.py</code></td><td>2</td><td>lines 82, 211</td></tr>
+    <tr><td><code>limitlens/providers/commandcode.py</code></td><td>2</td><td>lines 230, 291</td></tr>
+    <tr><td><code>limitlens/config.py</code></td><td>2</td><td>lines 406, 412</td></tr>
+    <tr><td>others (runner, pioneer, cursor, codex)</td><td>4</td><td>one each</td></tr>
+    <tr><th>Total</th><th>48</th><th></th></tr>
+  </table>
+
+  <h3>Proposed fix (grok.py)</h3>
+  <pre class="good">def fetch_grok_usage(sso_cookie):
+    try:
+        req = urllib.request.Request(...)
+        req.add_header('cookie', f'sso={sso_cookie}; sso-rw={sso_cookie}')
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                log.warning("grok: HTTP %s from billing endpoint", resp.status)
+                return {"error": f"http_{resp.status}"}
+            return _parse_grpc_percent(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return {"error": "auth_expired", "detail": "SSO cookie may have expired; re-auth with grok CLI"}
+        return {"error": f"http_{e.code}"}
+    except urllib.error.URLError as e:
+        return {"error": "network", "detail": str(e.reason)}
+    except (socket.gaierror, TimeoutError) as e:
+        return {"error": "dns_or_timeout", "detail": str(e)}</pre>
+
+  <p class="callout"><strong>Repo-wide pattern:</strong> replace each <code>except Exception</code> with the narrowest set of types the call site can actually raise, and at minimum <code>log.exception(...)</code> on the unexpected remainder. The 18 in <code>menubar.py</code> are most painful because they're in a UI loop — the user has no idea their refresh has been silently failing.</p>
+
+  <!-- ============================================== -->
+  <h2>Issue #9 · menubar.py god module <span class="effort hot">~1–2 days</span></h2>
+
+  <p><span class="tag file">limitlens/menubar.py</span><span class="tag line">1–1461 (1,461 lines)</span></p>
+
+  <p>One file mixing AppKit UI rendering, daemon threading, subprocess fetching, file logging, and per-provider row parsing. <code>_collect_rows()</code> — the per-provider display layer — is already incomplete: it handles 8 providers and silently drops 5.</p>
+
+  <h3>Section map</h3>
+  <pre>lines 1–119     imports, rumps fallback, AppKit import, layout constants
+lines 122–201   __init__: menu setup + config load + lock + popover install + timer startup
+lines 184–197   hand-rolled file logger copy #1
+lines 203–219   _start_refresh_timer + _start_eye_break_timer (daemon threads)
+lines 234–351   menu callbacks (_on_open_config, _on_copy_status, _on_doctor, _on_doctor_report, notify)
+lines 353–622   AppKit UI: _install_popover, _show_dashboard, _render_dashboard_view, _add_row_view
+lines 737–755   _format_window_parts + _format_dashboard_window_parts  (near-duplicates)
+lines 821–828   _recommendation_model  (name normalization)
+lines 897–1120  text/menu formatters + _make_all_quotas_menu / _make_overview_menu / _make_actions_menu
+lines 975–1010  _format_recommendation_row + _format_recommendation_compact  (near-duplicates)
+lines 1014–1100 _format_usage_row + _format_usage_compact  (near-duplicates)
+lines 1122–1155 _set_refresh_failure
+lines 1157–1314 _collect_rows  <span class="hot">-- the per-provider rendering</span>
+lines 1337–1440 fetch_data: spawns subprocess, 4 hand-rolled log calls, parses JSON
+lines 1390–1430 hand-rolled file logger copies #2, #3, #4  <span class="hot">-- proc.stderr written unredacted at 1398</span>
+lines 1443–1461 main()</pre>
+
+  <h3>_collect_rows() — providers handled vs missing</h3>
+  <div class="diagram">
+ <span class="ok">Handled (8):</span>
+   Custom, Codex, Amp, Antigravity, OpenCode, Pioneer, Cursor, Cline
+   <span class="arrow">--&gt;</span>  8 hand-coded blocks, lines 1161–1312
+
+ <span class="hot">Missing (5):</span>
+   <span class="violet">Grok, Kilo, Claude, CommandCode, Pi</span>
+   <span class="arrow">--&gt;</span>  data is fetched by the CLI subprocess but <span class="hot">silently dropped from the menubar</span></pre>
+
+  <h3>Why it's drifted, not just incomplete</h3>
+  <p>Each block in <code>_collect_rows</code> repeats the same six-step recipe with provider-specific constants:</p>
+  <pre class="bad">amp = data.get("amp") or {}
+for tier in amp.get("tiers", []):
+    if tier.get("visible", True) is False:
+        continue
+    label = tier.get("label", "Amp")
+    pct = self._safe_float(tier.get("pct_left"))
+    rows.append(self._row(
+        "Amp", "Amp", label, pct,
+        remaining=tier.get("remaining"), total=tier.get("total"), unit="$",
+        used=tier.get("used"), pct_used=tier.get("pct_used"),
+        notify_id=f"amp-{label}", notify_label=label,
+    ))
+    check_low_quota(f"amp-{label}", label, pct, detail)
+
+# ...then a near-identical block for cursor, codex, antigravity, opencode, pioneer, cline, custom...</pre>
+
+  <p>Every new provider added to the registry means <strong>hand-adding a new block</strong> to <code>_collect_rows</code>. The five missing ones are the ones nobody got around to writing.</p>
+
+  <h3>Proposed split</h3>
+  <div class="grid2">
+    <div class="card">
+      <div class="pulse"><div class="title">limitlens/menubar/</div>package split</div>
+      <ul>
+        <li><code>app.py</code> — <code>LimitLensApp(rumps.App)</code> shell, lifecycle</li>
+        <li><code>fetch.py</code> — subprocess invocation, retry, JSON parse</li>
+        <li><code>model.py</code> — provider-neutral row model (consumed from #5's descriptors)</li>
+        <li><code>rows.py</code> — derive rows from model + check_low_quota</li>
+        <li><code>dashboard.py</code> — AppKit view: <code>_render_dashboard_view</code>, <code>_add_row_view</code></li>
+        <li><code>menu.py</code> — <code>_make_overview_menu</code>, <code>_make_all_quotas_menu</code>, <code>_make_actions_menu</code></li>
+        <li><code>notify.py</code> — low-quota notifications, eye-break reminders</li>
+        <li><code>log.py</code> — shared logger (consumed from #11)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="pulse"><div class="title">Coupling to #5</div></div>
+      <p style="margin:0">Once each provider owns a <code>Descriptor.unit_hint</code> and <code>Descriptor.default_enabled</code>, <code>rows.py</code> becomes:</p>
+      <pre style="margin-top:10px">rows = []
+for p in active_providers(config, data):
+    block = data.get(p.key) or {}
+    for tier in p.iter_tiers(block):
+        rows.append(make_row(p, tier))
+        check_low_quota(p.notify_id(p, tier), tier)
+return rows</pre>
+      <p style="margin:0">No more hand-coded blocks. A new provider registered in <code>providers/__init__.py</code> automatically appears in the menubar.</p>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <h2>Issue #11 · One logging subsystem <span class="effort hot">~½ day</span></h2>
+
+  <p>Two issues: (a) <strong>83 bare <code>print()</code> calls</strong> with no shared logger; (b) <strong>four hand-rolled file loggers</strong> that all write to the same file with subtly different formats — and one of them logs subprocess <strong>stderr unredacted</strong>.</p>
+
+  <h3>(a) print() count per file</h3>
+  <table>
+    <tr><th>File</th><th>print() calls</th></tr>
+    <tr><td><code>limitlens/cli.py</code></td><td>20</td></tr>
+    <tr><td><code>limitlens/usage_tracker.py</code></td><td>10</td></tr>
+    <tr><td><code>limitlens/switcher.py</code></td><td>7</td></tr>
+    <tr><td><code>limitlens/recommendations.py</code></td><td>7</td></tr>
+    <tr><td><code>limitlens/providers/observed.py</code></td><td>7</td></tr>
+    <tr><td><code>limitlens/providers/codex.py</code></td><td>6</td></tr>
+    <tr><td><code>limitlens/core.py</code></td><td>6</td></tr>
+    <tr><td><code>limitlens/waste_tracker.py</code></td><td>4</td></tr>
+    <tr><td><code>limitlens/providers/antigravity.py</code></td><td>4</td></tr>
+    <tr><td><code>limitlens/providers/amp.py</code></td><td>4</td></tr>
+    <tr><td>others (pioneer, custom, commandcode, keychain, menubar)</td><td>8</td></tr>
+    <tr><th>Total</th><th>83</th></tr>
+  </table>
+
+  <h3>(b) The four hand-rolled loggers</h3>
+  <p>All write to <code>~/.cache/limitlens/limitlens.log</code> (or to <code>$LIMITLENS_LOG_PATH</code> in only one of the five copies).</p>
+
+  <table>
+    <tr><th>Copy</th><th>Location</th><th>Trigger</th><th>Honors <code>LIMITLENS_LOG_PATH</code>?</th></tr>
+    <tr><td>1</td><td><code>cli.py:46–65</code></td><td><code>log_error(e, context)</code> from any CLI error</td><td>Yes</td></tr>
+    <tr><td>2</td><td><code>menubar.py:184–197</code></td><td>config load failure</td><td>No (hardcoded path)</td></tr>
+    <tr><td>3</td><td><code>menubar.py:1390–1400</code></td><td>subprocess non-zero exit (writes <code>proc.stderr</code> unredacted)</td><td>No</td></tr>
+    <tr><td>4</td><td><code>menubar.py:1403–1415</code></td><td>subprocess <code>TimeoutExpired</code></td><td>No</td></tr>
+    <tr><td>5</td><td><code>menubar.py:1418–1430</code></td><td>generic <code>Exception</code> in worker</td><td>No</td></tr>
+  </table>
+
+  <h3>The privacy bug at <code>menubar.py:1398</code></h3>
+  <pre class="bad">1388:                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
+1389:                     self._set_refresh_failure(err_msg)        # &lt;-- THIS path is redacted
+1390:                     try:
+1391:                         import os
+1392:                         log_dir = os.path.expanduser("~/.cache/limitlens")
+1393:                         os.makedirs(log_dir, exist_ok=True)
+1394:                         log_file = os.path.join(log_dir, "limitlens.log")
+1395:                         with open(log_file, "a", encoding="utf-8") as f:
+1396:                             timestamp = datetime.now().isoformat()
+1397:                             f.write(f"[{timestamp}] Menubar command failure: return code {proc.returncode}\n")
+1398:                             f.write(f"Stderr: {proc.stderr}\n\n")   <span class="hot"># &lt;-- proc.stderr, NO redaction</span>
+1399:                     except Exception:
+1400:                         pass</pre>
+
+  <p>The user-visible path (<code>_set_refresh_failure</code>, line 1126) runs <code>redact_text()</code> and a regex scrubber for tokens/cookies/paths. The log-write path on line 1398 does <em>none of that</em>. <code>proc.stderr</code> can include:</p>
+  <ul>
+    <li>Stack traces with file paths (<code>/Users/&lt;name&gt;/...</code>)</li>
+    <li>Provider exception messages that quote cookies or <code>Authorization</code> headers</li>
+    <li>Config error messages that include the user config path</li>
+  </ul>
+  <p class="callout danger"><strong>This is a P0-adjacent privacy bug</strong>: anything a provider prints to stderr ends up in <code>~/.cache/limitlens/limitlens.log</code> in cleartext, while the same string is redacted before it ever reaches the user. A user who shares their log for support is sharing all of that unredacted.</p>
+
+  <h3>Proposed logging shape</h3>
+  <pre class="good"># limitlens/logging.py
+import logging
+import os
+from logging.handlers import RotatingFileHandler
+from .core import redact_text
+
+_LOGGER = None
+
+class RedactFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            record.msg = redact_text(record.msg)
+        if record.args:
+            record.args = tuple(redact_text(a) if isinstance(a, str) else a for a in record.args)
+        if record.exc_info:
+            record.exc_text = redact_text(record.format_exc()) if hasattr(record, "format_exc") else None
+        return True
+
+def get_logger():
+    global _LOGGER
+    if _LOGGER:
+        return _LOGGER
+    _LOGGER = logging.getLogger("limitlens")
+    _LOGGER.setLevel(os.environ.get("LIMITLENS_LOG_LEVEL", "INFO"))
+    log_path = os.environ.get("LIMITLENS_LOG_PATH") or os.path.expanduser("~/.cache/limitlens/limitlens.log")
+    handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    handler.addFilter(RedactFilter())
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s"))
+    _LOGGER.addHandler(handler)
+    return _LOGGER</pre>
+
+  <h3>Migration order</h3>
+  <ol>
+    <li>Add <code>limitlens/logging.py</code> with the redaction filter — no callers yet.</li>
+    <li>Replace the 5 hand-rolled logger copies with <code>log.exception(...)</code> / <code>log.warning(...)</code> — including the unredacted <code>proc.stderr</code> on line 1398.</li>
+    <li>Convert the 83 <code>print()</code> calls to <code>log.info()</code> (or keep <code>print()</code> for user-facing output and use <code>log.debug()</code> for diagnostics — split them deliberately).</li>
+    <li>Add a <code>--debug</code> flag that bumps the level to <code>DEBUG</code> and adds a console handler.</li>
+  </ol>
+
+  <!-- ============================================== -->
+  <h2>Effort &amp; dependency graph</h2>
+  <div class="diagram">
+                                ┌─────────┐
+                                │ #10     │  ~5 min
+                                │ stdout  │
+                                └────┬────┘
+                                     │  (independent)
+                                ┌────▼────┐
+                                │ #8      │  ~2 h
+                                │ gRPC    │
+                                └────┬────┘
+                                     │  (independent)
+                                ┌────▼────┐
+                                │ #6      │  with #5
+                                │ defaults│
+                                └────┬────┘
+                                     │
+                                ┌────▼────┐         ┌──────────┐
+                                │ #5      │  ~1 day │ #7, #11  │  ~½ day each
+                                │ registry│◄────────┤ logging  │
+                                └────┬────┘  consume└────┬─────┘
+                                     │                    │
+                                     └────────┬───────────┘
+                                              │
+                                         ┌────▼────┐
+                                         │ #9      │  ~1–2 days
+                                         │ menubar │
+                                         └─────────┘</pre>
+
+  <p class="callout ok"><strong>Total: ~3–5 days.</strong> Quick wins (#10, #8, #6) can ship in a single PR. The structural trio (#5, #9, #11) should land as a sequenced refactor — #11 first (no behavior change), then #5, then #9 (which finally deletes the duplicated display logic).</p>
+
+</div>
+</body>
+</html>
