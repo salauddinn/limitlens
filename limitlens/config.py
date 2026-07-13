@@ -2,6 +2,9 @@ import json
 import os
 import copy
 
+from .logging import get_logger
+log = get_logger("limitlens.config")
+
 class ConfigValidationError(Exception):
     pass
 
@@ -403,13 +406,13 @@ def auto_detect_providers(path, write=True, interactive=True):
     def safe_exists(p):
         try:
             return os.path.exists(os.path.expanduser(p))
-        except Exception:
+        except OSError:
             return False
 
     def safe_which(cmd):
         try:
             return bool(shutil.which(cmd))
-        except Exception:
+        except OSError:
             return False
 
     check("cursor", safe_exists("~/Library/Application Support/Cursor") or safe_exists("~/.cursor"))

@@ -18,6 +18,9 @@ from limitlens.core import (
     load_limitlens_config,
 )
 
+from ..logging import get_logger
+log = get_logger("limitlens.providers.pioneer")
+
 
 def _float(value, default=0.0):
     try:
@@ -198,6 +201,7 @@ def get_pioneer_data(args, config=None):
             return parse_pioneer_billing(cfg, args)
         return {"error": f"API request failed: {e}"}
     except Exception as e:
+        log.exception("Request failed")
         if _has_config_balance(cfg):
             return parse_pioneer_billing(cfg, args)
         return {"error": f"Request failed: {e}"}

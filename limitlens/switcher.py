@@ -9,6 +9,7 @@ import sys
 import argparse
 import shlex
 from concurrent.futures import ThreadPoolExecutor
+
 from .core import load_limitlens_config, parse_to_utc, fmt_reset, print_c
 from .recommendations import compute_recommendations
 from .providers import (
@@ -22,6 +23,9 @@ from .providers import (
     get_custom_data,
     get_cursor_data,
 )
+
+from .logging import get_logger
+log = get_logger("limitlens.switcher")
 
 class SwitchArgs:
     def __init__(self, tool="all", json=False, redact=True, sync_codex=False, verbose=False, no_color=False):
@@ -80,6 +84,7 @@ def collect_results(config, args):
             try:
                 result[key] = fut.result()
             except Exception as e:
+                log.exception(f"{key} provider failed")
                 message = f"{key} provider failed: {type(e).__name__}: {e}"
                 if key == "opencode":
                     result[key] = {
@@ -209,5 +214,6 @@ def main():
     try:
         os.execvp(shell, [shell, "-c", full_command])  # nosec B606
     except Exception as e:
+        log.exception("Failed to execute command")
         print_c(f"  ⚠ Failed to execute command: {e}", "\033[31m", no_color)
         sys.exit(1)

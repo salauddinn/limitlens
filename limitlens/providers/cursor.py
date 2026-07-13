@@ -6,6 +6,9 @@ import urllib.request
 from pathlib import Path
 
 from limitlens.core import bar, print_c, section
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.cursor")
 
 
 def _number(value, default=0.0):
@@ -57,7 +60,8 @@ def fetch_cursor_usage(token):
         opener = urllib.request.build_opener(NoRedirectHandler())
         with opener.open(req, timeout=10) as resp:
             return json.loads(resp.read().decode())
-    except Exception:
+    except Exception as e:
+        log.exception("Failed to fetch Cursor usage: %s", e)
         return None
 
 

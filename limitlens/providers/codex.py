@@ -25,6 +25,9 @@ from limitlens.core import (
     _fmt_tokens,
     load_display_config,
 )
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.codex")
 
 
 # ── Codex helpers ───────────────────────────────────────────────────────────
@@ -57,7 +60,11 @@ def fetch_reset_credits(codex_home):
         # Fixed HTTPS URL, not user-controlled.
         with urllib.request.urlopen(req, timeout=5) as response:  # nosec B310
             return json.loads(response.read().decode())
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
+        log.debug("Failed to fetch reset credits: %s", e)
+        return None
     except Exception:
+        log.exception("Unexpected error fetching reset credits")
         return None
 
 def discover_accounts():
@@ -127,10 +134,10 @@ def parse_session_tokens(session_file):
                             total = info.get("total_token_usage")
                             if total:
                                 tokens = total
-                except json.JSONDecodeError:
-                    pass
-    except OSError:
-        pass
+                except json.JSONDecodeError as e:
+                    log.debug("Skipping malformed line in session file: %s", e)
+    except OSError as e:
+        log.debug("Could not read session file %s: %s", session_file, e)
     return tokens
 
 def window_key_and_label(window_minutes):
@@ -151,7 +158,8 @@ def window_key_and_label(window_minutes):
 def safe_float(value, default=0.0):
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as e:
+        log.debug("safe_float failed for value %r: %s", value, e)
         return default
 
 def normalize_legacy_limit(key, payload):
@@ -190,7 +198,8 @@ def parse_usage_limit_message(message):
             tzinfo=datetime.now().astimezone().tzinfo
         )
         return f"usage limited, {fmt_reset(dt_local)}"
-    except ValueError:
+    except ValueError as e:
+        log.debug("Failed to parse reset date %r: %s", reset_text, e)
         return f"usage limited until {match.group(1)}"
 
 def parse_request_error_message(message):
@@ -228,6 +237,7 @@ def find_log_issue_in_sqlite(codex_home):
         finally:
             conn.close()
     except sqlite3.Error as e:
+        log.debug("Database error: %s", e)
         return f"Database error: {e}"
 
     if not row or not row[0]:
@@ -252,6 +262,7 @@ def find_log_issue_in_text(codex_home):
         with open(log_path, encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
     except OSError as e:
+        log.debug("Log read error: %s", e)
         return f"Log read error: {e}"
 
     for line in reversed(lines[-500:]):
@@ -278,7 +289,8 @@ def parse_limits(session_file):
         for line in f:
             try:
                 rec = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                log.debug("Skipping malformed JSON line in limits: %s", e)
                 continue
             if not isinstance(rec, dict):
                 continue
@@ -318,7 +330,8 @@ def parse_limits(session_file):
 def get_session_mtime(session_file):
     try:
         return os.path.getmtime(session_file)
-    except OSError:
+    except OSError as e:
+        log.debug("Could not get mtime for %s: %s", session_file, e)
         return None
 
 def get_codex_data(args, config=None):
@@ -384,8 +397,8 @@ def get_codex_data(args, config=None):
                     if stokens:
                         for k in weekly_tokens:
                             weekly_tokens[k] += stokens.get(k, 0)
-            except OSError:
-                pass
+            except OSError as e:
+                log.debug("Failed to parse weekly session tokens: %s", e)
 
         if weekly_tokens and sum(weekly_tokens.values()) > 0:
             acc_data["tokens"] = weekly_tokens
@@ -499,7 +512,8 @@ def display_codex_text(data, args):
                         try:
                             dt = parse_to_utc(credit["expires_at"])
                             expiries.append(format_timestamp(dt))
-                        except ValueError:
+                        except ValueError as e:
+                            log.debug("Failed to parse credit expiry %r: %s", credit["expires_at"], e)
                             expiries.append(credit["expires_at"])
                 if expiries:
                     exp_text = ", ".join(expiries)
@@ -524,8 +538,8 @@ def display_codex_text(data, args):
                     "\033[90m",
                     getattr(args, 'no_color', False),
                 )
-            except ValueError:
-                pass
+            except ValueError as e:
+                log.debug("Failed to parse last_updated %r: %s", last_updated, e)
 
         def sort_key(lim):
             label = lim['label']
@@ -586,6 +600,7 @@ def refresh_account(codex_home, timeout=30):
     except subprocess.TimeoutExpired:
         return False, "timeout"
     except OSError as e:
+        log.debug("refresh_account subprocess error: %s", e)
         return False, str(e)
 
 

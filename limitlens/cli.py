@@ -43,8 +43,8 @@ from .providers import (  # noqa: F401  (re-exported for test mockability, see #
 )
 from .providers.observed import display_at_glance
 
-from .logging import get_logger as _get_logger
-_log = _get_logger("limitlens.cli")
+from .logging import get_logger
+log = get_logger("limitlens.cli")
 
 
 def log_error(e, context=""):
@@ -56,7 +56,7 @@ def log_error(e, context=""):
     """
     import os
     import traceback
-    _log.exception("%sError: %s: %s", context, type(e).__name__, e)
+    log.exception("%sError: %s: %s", context, type(e).__name__, e)
     # Also write directly to the env-specified path so tests that patch
     # LIMITLENS_LOG_PATH *after* module import still see the output.
     log_path = os.environ.get("LIMITLENS_LOG_PATH")
@@ -69,8 +69,8 @@ def log_error(e, context=""):
                 _f.write(f"[{datetime.now().isoformat()}] {context}Error: {type(e).__name__}: {e}\n")
                 traceback.print_exc(file=_f)
                 _f.write("\n")
-        except Exception:
-            pass
+        except Exception as file_e:
+            log.debug("Failed to write to LIMITLENS_LOG_PATH: %s", file_e)
 
 
 def _doctor_rows(config):
@@ -611,6 +611,7 @@ def _main():
             result = fetch_and_refresh()
             _record(result)
         except Exception as e:
+            log.exception("Live fetch failed during waste computation")
             if not args.json:
                 print_c(f"  ⚠ live fetch failed ({type(e).__name__}); showing history only", "\033[33m", args.no_color)
         report = waste_tracker.compute_waste(days=args.days, config=config)

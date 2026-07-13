@@ -14,6 +14,9 @@ from limitlens.core import (
     _fmt_tokens,
     file_lock,
 )
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.observed")
 
 # ── Observed usage helpers ──────────────────────────────────────────────────
 
@@ -31,8 +34,8 @@ def get_spend_reset_time(tool_name):
                 ts = data.get(tool_name)
                 if ts:
                     return datetime.fromisoformat(ts)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        pass
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as e:
+        log.debug("Failed to read spend reset time: %s", e)
     return None
 
 def mark_spend_reset(tool_name=None, extra_data=None):
@@ -45,8 +48,8 @@ def mark_spend_reset(tool_name=None, extra_data=None):
                         data = json.load(f)
                     if not isinstance(data, dict):
                         data = {}
-                except (json.JSONDecodeError, OSError):
-                    pass
+                except (json.JSONDecodeError, OSError) as e:
+                    log.debug("Failed to load existing spend_resets.json: %s", e)
 
             now_iso = datetime.now(timezone.utc).isoformat()
             if tool_name:
@@ -77,9 +80,10 @@ def mark_spend_reset(tool_name=None, extra_data=None):
                 if tmp_path and os.path.exists(tmp_path):
                     try:
                         os.unlink(tmp_path)
-                    except OSError:
-                        pass
-    except OSError:
+                    except OSError as e:
+                        log.debug("Failed to unlink tmp path: %s", e)
+    except OSError as e:
+        log.debug("Failed to mark spend reset: %s", e)
         return False
 
 def usage_window_start(days, reset_time=None):
@@ -110,8 +114,8 @@ def add_usage(totals, cost=0, tokens=None):
     totals["requests"] += 1
     try:
         totals["cost"] += float(cost or 0)
-    except (TypeError, ValueError):
-        pass
+    except (TypeError, ValueError) as e:
+        log.debug("Failed to cast usage field: %s", e)
     tokens = tokens or {}
     cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
     field_map = {
@@ -125,8 +129,8 @@ def add_usage(totals, cost=0, tokens=None):
     for key, value in field_map.items():
         try:
             totals["tokens"][key] += int(value or 0)
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as e:
+            log.debug("Failed to parse usage token: %s", e)
 
 def token_total_value(tokens):
     if not isinstance(tokens, dict):
@@ -144,8 +148,8 @@ def token_total_value(tokens):
     for value in keys:
         try:
             total += int(value or 0)
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as e:
+            log.debug("Failed to parse usage token: %s", e)
     return total
 
 def usage_summary_rows(by_key):
@@ -325,7 +329,8 @@ def get_opencode_usage(config):
     for (data_text,) in rows:
         try:
             data = json.loads(data_text)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            log.debug("Failed to parse OpenCode message data: %s", e)
             continue
         if not isinstance(data, dict):
             continue
@@ -345,7 +350,8 @@ def get_opencode_usage(config):
             continue
         try:
             created_dt = datetime.fromtimestamp(float(created) / 1000.0, timezone.utc)
-        except (TypeError, ValueError, OSError):
+        except (TypeError, ValueError, OSError) as e:
+            log.debug("Failed to parse OpenCode timestamp %s: %s", created, e)
             continue
         for win in windows.values():
             if created_dt < win["since"]:
@@ -386,7 +392,8 @@ def first_number_for_keys(obj, keys):
     for value in find_values_by_key(obj, set(keys)):
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as e:
+            log.debug("Failed to parse number in first_number_for_keys: %s", e)
             continue
     return 0
 
@@ -407,18 +414,20 @@ def parse_otel_timestamp(value):
             if number > 1e12:
                 return datetime.fromtimestamp(number / 1000, timezone.utc)
             return datetime.fromtimestamp(number, timezone.utc)
-        except (OSError, ValueError, OverflowError):
+        except (OSError, ValueError, OverflowError) as e:
+            log.debug("Failed to parse otel timestamp: %s", e)
             return None
     if isinstance(value, str):
         # Try to parse as integer or float first if it looks numeric and is not ISO date format
         if not any(char in value for char in ("-", ":", "T", "Z")):
             try:
                 return parse_otel_timestamp(float(value))
-            except ValueError:
-                pass
+            except ValueError as e:
+                log.debug("Failed to parse otel timestamp %s as float: %s", value, e)
         try:
             return parse_to_utc(value)
-        except (TypeError, ValueError, OSError):
+        except (TypeError, ValueError, OSError) as e:
+            log.debug("Failed to parse otel timestamp %s: %s", value, e)
             return None
     return None
 
@@ -449,7 +458,8 @@ def get_copilot_cli_usage(config):
         for line in f:
             try:
                 rec = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                log.debug("Failed to parse Copilot OTel line: %s", e)
                 continue
             if not isinstance(rec, dict):
                 continue
@@ -551,10 +561,11 @@ def get_pi_usage(config):
                             if entry.stat().st_mtime >= min_since_ts:
                                 if depth < 3:
                                     scan_dir(entry.path, depth + 1)
-                    except OSError:
+                    except OSError as e:
+                        log.debug("Failed to stat session entry: %s", e)
                         continue
-        except OSError:
-            pass
+        except OSError as e:
+            log.debug("Failed to scan sessions dir: %s", e)
 
     try:
         scan_dir(str(root), 1)
@@ -564,13 +575,15 @@ def get_pi_usage(config):
     for path in files:
         try:
             f = path.open(encoding="utf-8")
-        except OSError:
+        except OSError as e:
+            log.debug("Failed to open session file %s: %s", path, e)
             continue
         with f:
             for line in f:
                 try:
                     rec = json.loads(line)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    log.debug("Failed to parse session line: %s", e)
                     continue
                 if not isinstance(rec, dict):
                     continue
@@ -657,7 +670,8 @@ def get_kilo_usage(config):
             continue
         try:
             ts = datetime.fromtimestamp(tc / 1000.0, tz=timezone.utc)
-        except (TypeError, ValueError, OSError):
+        except (TypeError, ValueError, OSError) as e:
+            log.debug("Failed to parse Kilo timestamp %s: %s", tc, e)
             continue
         provider = "unknown"
         model = "unknown"
@@ -667,7 +681,8 @@ def get_kilo_usage(config):
                 if isinstance(mdata, dict):
                     provider = mdata.get("providerID") or mdata.get("provider") or "unknown"
                     model = mdata.get("id") or mdata.get("model") or "unknown"
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
+                log.debug("Failed to parse Kilo model json %s: %s", raw_model, e)
                 model = str(raw_model)
         if providers and provider not in providers:
             continue
@@ -762,10 +777,11 @@ def get_claude_usage(config):
                             if entry.stat().st_mtime >= min_since_ts:
                                 if depth < 3:
                                     scan_dir(entry.path, depth + 1)
-                    except OSError:
+                    except OSError as e:
+                        log.debug("Failed to stat session entry: %s", e)
                         continue
-        except OSError:
-            pass
+        except OSError as e:
+            log.debug("Failed to scan sessions dir: %s", e)
 
     try:
         scan_dir(str(root), 1)
@@ -775,13 +791,15 @@ def get_claude_usage(config):
     for path in files:
         try:
             f = path.open(encoding="utf-8")
-        except OSError:
+        except OSError as e:
+            log.debug("Failed to open session file %s: %s", path, e)
             continue
         with f:
             for line in f:
                 try:
                     rec = json.loads(line)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    log.debug("Failed to parse session line: %s", e)
                     continue
                 if not isinstance(rec, dict):
                     continue

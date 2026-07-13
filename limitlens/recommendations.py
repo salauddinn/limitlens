@@ -24,7 +24,11 @@ Each candidate has:
 
 from datetime import datetime, timezone
 import re
+
 from .providers.observed import compact_reco_name
+
+from .logging import get_logger
+log = get_logger("limitlens.recommendations")
 
 # ── Classification ──────────────────────────────────────────────────────────
 

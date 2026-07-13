@@ -18,36 +18,11 @@ import time
 import warnings
 from datetime import datetime
 
-try:
-    from .logging import get_logger as _get_logger
-    log = _get_logger("limitlens.menubar")
-except Exception:  # pragma: no cover - isolated import failure
-    import logging
-    log = logging.getLogger("limitlens.menubar")
-    log.addHandler(logging.NullHandler())
+from .logging import get_logger
+log = get_logger("limitlens.menubar")
 
 
-def _write_log_direct(message, *, exc=False):
-    """Append *message* directly to the log file, bypassing the singleton logger.
 
-    This ensures that callers which patch HOME or LIMITLENS_LOG_PATH *after*
-    module import still get output in the expected file (the singleton logger
-    captures the path at initialisation time).
-    """
-    import traceback
-    try:
-        log_path = os.environ.get("LIMITLENS_LOG_PATH") or os.path.join(
-            os.path.expanduser("~/.cache/limitlens"), "limitlens.log"
-        )
-        log_path = os.path.expanduser(log_path)
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, "a", encoding="utf-8") as _f:
-            _f.write(f"[{datetime.now().isoformat()}] {message}\n")
-            if exc:
-                traceback.print_exc(file=_f)
-            _f.write("\n")
-    except Exception:
-        pass
 
 MENUBAR_REFRESH_TIMEOUT_SECONDS = 45
 MENUBAR_SYNC_CODEX_TIMEOUT_SECONDS = 90
@@ -110,7 +85,8 @@ try:
         NSViewWidthSizable,
         NSViewHeightSizable,
     )
-except Exception:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
+except ImportError as e:  # pragma: no cover - exercised outside macOS/pyobjc runtimes
+    log.debug("AppKit not available: %s", e)
     _APPKIT_AVAILABLE = False
 
     NSAppearance = None
@@ -258,6 +234,7 @@ class LimitLensApp(rumps.App):
                 auto_detect_providers(path, write=True, interactive=False)
             subprocess.Popen(["open", path])  # nosec B603 B607
         except Exception as e:  # pragma: no cover - depends on macOS desktop state
+            log.exception("Error opening config")
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
     def _on_copy_status(self, _):
@@ -271,6 +248,7 @@ class LimitLensApp(rumps.App):
             )  # nosec B603 B607
             self._pending_title = "✓ Status copied"
         except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
+            log.exception("Error copying status")
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
     def _on_open_dashboard(self, _):
@@ -283,6 +261,7 @@ class LimitLensApp(rumps.App):
             subprocess.Popen(["osascript", "-e", script])  # nosec B603 B607
             self._pending_title = "Doctor opened"
         except Exception as e:  # pragma: no cover - depends on macOS desktop state
+            log.exception("Error running doctor")
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
     def _on_doctor_report(self, _):
@@ -299,6 +278,7 @@ class LimitLensApp(rumps.App):
             subprocess.run(["pbcopy"], input=text, text=True, check=False, timeout=5)  # nosec B603 B607
             self._pending_title = "✓ Report copied"
         except Exception as e:  # pragma: no cover - depends on macOS pasteboard state
+            log.exception("Error copying doctor report")
             self._pending_title = f"⚠️ {str(e)[:15]}"
 
     def _on_quit(self, _):
@@ -384,6 +364,7 @@ class LimitLensApp(rumps.App):
             self._popover_content = controller
             self._popover_installed = True
         except Exception:
+            log.exception("Error installing popover")
             self._popover = None
             self._popover_content = None
             self._popover_installed = False
@@ -406,6 +387,7 @@ class LimitLensApp(rumps.App):
             else:
                 self._popover.showRelativeToRect_ofView_preferredEdge_(button.bounds(), button, NSMinYEdge)
         except Exception:
+            log.exception("Error showing dashboard")
             return
 
     def _refresh_dashboard(self):
@@ -414,6 +396,7 @@ class LimitLensApp(rumps.App):
         try:
             self._popover_content.setView_(self._render_dashboard_view(self._dashboard_model))
         except Exception:
+            log.exception("Error refreshing dashboard")
             self._popover_installed = False
 
     @staticmethod
@@ -513,7 +496,8 @@ class LimitLensApp(rumps.App):
         if alignment == "right":
             try:
                 label.setAlignment_(2)
-            except Exception:
+            except Exception as e:
+                log.debug("Error setting alignment: %s", e)
                 pass
         return label
 
@@ -540,7 +524,8 @@ class LimitLensApp(rumps.App):
         root.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
         try:
             root.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
-        except Exception:
+        except Exception as e:
+            log.debug("Error setting appearance: %s", e)
             pass
 
         # Header
@@ -580,7 +565,8 @@ class LimitLensApp(rumps.App):
         try:
             scroll.setDrawsBackground_(False)
             scroll.contentView().setDrawsBackground_(False)
-        except Exception:
+        except Exception as e:
+            log.debug("Error setting draws background: %s", e)
             pass
         # Force a light scroller knob so it stays visible on the dark vibrancy
         # material; overlay scrollers with the default knob can be hard to see.
@@ -603,7 +589,8 @@ class LimitLensApp(rumps.App):
             clip = scroll.contentView()
             clip.scrollToPoint_(NSMakePoint(0, max(0, content_height - scroll_h)))
             scroll.reflectScrolledClipView_(clip)
-        except Exception:
+        except Exception as e:
+            log.debug("Error reflecting scrolled clip view: %s", e)
             pass
         root.addSubview_(scroll)
 
@@ -1406,22 +1393,17 @@ class LimitLensApp(rumps.App):
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
                     self._set_refresh_failure(err_msg)
                     # Log with RedactFilter active — proc.stderr is NOT written raw
-                    log.warning(
+                    log.error(
                         "Menubar command failure (rc=%s): %s",
                         proc.returncode,
                         proc.stderr or "",
                     )
-                    _write_log_direct(
-                        f"Menubar command failure (rc={proc.returncode}): {proc.stderr or ''}"
-                    )
             except subprocess.TimeoutExpired:
                 self._set_refresh_failure("Refresh timed out", title_message="Timeout")
                 log.exception("Menubar subprocess timeout")
-                _write_log_direct("Menubar subprocess timeout", exc=True)
             except Exception as e:
                 self._set_refresh_failure(str(e))
                 log.exception("Menubar exception in worker")
-                _write_log_direct(f"Menubar exception in worker: {e}", exc=True)
             finally:
                 with self._fetch_lock:
                     self._is_fetching = False

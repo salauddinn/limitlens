@@ -23,6 +23,14 @@ import os
 import subprocess
 import sys
 
+try:
+    from .logging import get_logger
+    log = get_logger("limitlens.iterm_widget")
+except ImportError:
+    import logging
+    log = logging.getLogger("limitlens.iterm_widget")
+    log.addHandler(logging.NullHandler())
+
 WIDGET_FILENAME = "limitlens_widget.py"
 
 
@@ -90,7 +98,7 @@ async def iterm_main(connection):
     """iTerm2 coroutine entry point invoked by ``iterm2.run_forever``."""
     import iterm2
 
-    print("Starting LimitLens registration v4...")
+    log.info("Starting LimitLens registration v4...")
 
     component = iterm2.StatusBarComponent(
         short_description="LimitLens Widget",
@@ -143,7 +151,8 @@ async def iterm_main(connection):
             ver_str = name[len("python3."):]
             try:
                 return [int(x) for x in ver_str.split(".") if x.isdigit()]
-            except Exception:
+            except Exception as e:
+                log.debug("Error parsing version string %s: %s", ver_str, e)
                 return []
 
         matches.sort(key=_parse_version)
@@ -268,8 +277,10 @@ async def iterm_main(connection):
             proc = await loop.run_in_executor(None, fetch_status_sync)
             state["status"] = status_from_proc(proc)
         except subprocess.TimeoutExpired:
+            log.warning("Timeout fetching status")
             state["status"] = "🤖 LimitLens: Timeout"
         except Exception as e:
+            log.exception("Error in refresh_state_once")
             state["status"] = f"🤖 Err: {e}"
 
     async def poll_status():
@@ -291,12 +302,12 @@ async def iterm_main(connection):
     while True:
         try:
             await component.async_register(connection, coro)
-            print("Registration successful for com.limitlens.status")
+            log.info("Registration successful for com.limitlens.status")
             break
         except Exception as e:
             attempt += 1
             delay = min(2 ** min(attempt, 8), 300)
-            print(f"Registration attempt {attempt} failed: {e} — retrying in {delay}s")
+            log.warning("Registration attempt %s failed: %s — retrying in %ss", attempt, e, delay)
             await asyncio.sleep(delay)
 
     # Start the background polling task only after successful registration

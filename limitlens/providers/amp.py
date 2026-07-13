@@ -17,6 +17,9 @@ from limitlens.core import (
     load_display_config,
     load_limitlens_config,
 )
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.amp")
 
 
 # ── Amp helpers ─────────────────────────────────────────────────────────────
@@ -63,7 +66,8 @@ def get_amp_data(args):
             try:
                 remaining = float(tier_match.group(2))
                 total = float(tier_match.group(3))
-            except ValueError:
+            except ValueError as e:
+                log.warning(f"Failed to parse tier values: {e}")
                 continue
             replenish = tier_match.group(4)
             pct_left = (remaining / total * 100) if total > 0 else 0
@@ -92,7 +96,8 @@ def get_amp_data(args):
             label = credit_match.group(1).strip()
             try:
                 remaining = float(credit_match.group(2))
-            except ValueError:
+            except ValueError as e:
+                log.warning(f"Failed to parse remaining credit: {e}")
                 continue
             info["tiers"].append({
                 "label": label,

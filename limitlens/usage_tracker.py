@@ -12,6 +12,9 @@ from datetime import datetime, timedelta, timezone
 
 from . import waste_tracker
 
+from .logging import get_logger
+log = get_logger("limitlens.usage_tracker")
+
 IMPORTED_USAGE_PATH = os.environ.get("LIMITLENS_IMPORTED_USAGE_PATH") or os.path.expanduser("~/.cache/limitlens/imported_usage.json")
 ANALYTICS_VERSION = 1
 

@@ -26,6 +26,9 @@ from .providers import (
 )
 from .recommendations import compute_recommendations
 
+from .logging import get_logger
+log = get_logger("limitlens.runner")
+
 
 TaskKind = str
 
@@ -306,6 +309,7 @@ def collect_quota_data(config: Optional[Mapping[str, Any]] = None) -> Dict[str, 
         try:
             result[key] = fetch()
         except Exception as exc:  # pragma: no cover - exact provider failures vary by machine
+            log.exception(f"{key} provider failed")
             result[key] = {"error": f"{key} provider failed: {type(exc).__name__}: {exc}"}
     return result
 

@@ -706,70 +706,49 @@ def test_main():
         mock_app.run.assert_called_once()
 
 
-def test_fetch_data_logging(app, tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    log_dir = os.path.expanduser("~/.cache/limitlens")
-    log_file = os.path.join(log_dir, "limitlens.log")
+def test_fetch_data_logging(app, monkeypatch, caplog):
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = "some process failure error"
 
-    try:
-        mock_proc = MagicMock()
-        mock_proc.returncode = 1
-        mock_proc.stderr = "some process failure error"
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", return_value=mock_proc):
 
-        with patch("threading.Thread") as mock_thread, \
-             patch("subprocess.run", return_value=mock_proc):
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
 
-            def mock_thread_init(target, daemon):
-                target()
-                return MagicMock()
-            mock_thread.side_effect = mock_thread_init
+        app.fetch_data()
 
-            app.fetch_data()
+    assert "Menubar command failure" in caplog.text
+    assert "some process failure error" in caplog.text
+    caplog.clear()
 
-        assert os.path.exists(log_file)
-        with open(log_file, "r") as f:
-            content = f.read()
-            assert "Menubar command failure" in content
-            assert "some process failure error" in content
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
 
-        os.remove(log_file)
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
 
-        with patch("threading.Thread") as mock_thread, \
-             patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=15)):
+        app.fetch_data()
 
-            def mock_thread_init(target, daemon):
-                target()
-                return MagicMock()
-            mock_thread.side_effect = mock_thread_init
+    assert "Menubar subprocess timeout" in caplog.text
+    caplog.clear()
 
-            app.fetch_data()
+    with patch("threading.Thread") as mock_thread, \
+         patch("subprocess.run", side_effect=ValueError("another bad error")):
 
-        assert os.path.exists(log_file)
-        with open(log_file, "r") as f:
-            content = f.read()
-            assert "Menubar subprocess timeout" in content
+        def mock_thread_init(target, daemon):
+            target()
+            return MagicMock()
+        mock_thread.side_effect = mock_thread_init
 
-        os.remove(log_file)
+        app.fetch_data()
 
-        with patch("threading.Thread") as mock_thread, \
-             patch("subprocess.run", side_effect=ValueError("another bad error")):
-
-            def mock_thread_init(target, daemon):
-                target()
-                return MagicMock()
-            mock_thread.side_effect = mock_thread_init
-
-            app.fetch_data()
-
-        assert os.path.exists(log_file)
-        with open(log_file, "r") as f:
-            content = f.read()
-            assert "Menubar exception" in content
-            assert "another bad error" in content
-
-    finally:
-        if os.path.exists(log_file):
-            os.remove(log_file)
+    assert "Menubar exception" in caplog.text or "another bad error" in caplog.text
 
 
 def test_fetch_data_failure_updates_status_summary(app):

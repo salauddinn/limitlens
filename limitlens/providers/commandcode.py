@@ -8,6 +8,9 @@ import urllib.request
 from datetime import datetime
 
 from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.commandcode")
 
 
 DEFAULT_CREDITS_URL = "https://api.commandcode.ai/internal/billing/credits"
@@ -228,6 +231,7 @@ def _is_merlin_status_url(url):
     try:
         return urllib.parse.urlparse(url).netloc.lower() == MERLIN_STATUS_HOST
     except Exception:
+        log.exception("Error checking if merlin status URL")
         return False
 
 
@@ -289,6 +293,7 @@ def get_commandcode_data(args, config=None):
             return parse_commandcode_credits(manual, args, cfg)
         return {"error": f"API request failed: {e}"}
     except Exception as e:
+        log.exception("Command Code request failed")
         if manual:
             return parse_commandcode_credits(manual, args, cfg)
         return {"error": f"Request failed: {e}"}

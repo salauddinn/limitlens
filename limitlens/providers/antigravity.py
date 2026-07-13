@@ -30,6 +30,9 @@ from limitlens.core import (
     load_display_config,
 )
 
+from ..logging import get_logger
+log = get_logger("limitlens.providers.antigravity")
+
 # ── Antigravity helpers ─────────────────────────────────────────────────────
 
 AG_PROBE_TCP_TIMEOUT = 0.2
@@ -462,8 +465,8 @@ def is_localhost(host):
             ip = info[4][0]
             if ip in ("127.0.0.1", "::1") or ip.startswith("127."):
                 return True
-    except Exception:
-        pass
+    except OSError as e:
+        log.debug("is_localhost resolution failed: %s", e)
     return False
 
 def log_security_warning(message, emit_stderr=False):
@@ -479,8 +482,8 @@ def log_security_warning(message, emit_stderr=False):
         os.makedirs(log_dir, exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(log_message)
-    except Exception:
-        pass
+    except OSError as e:
+        log.debug("Failed to write security warning to log file: %s", e)
 
 def make_ag_request(port, csrf_token, method, body_dict, verify_tls=True, timeout=3, host="127.0.0.1"):
     if verify_tls:
@@ -749,6 +752,7 @@ def save_antigravity_cache(cache):
         os.replace(tmp_path, path)
         tmp_path = None
     except Exception:
+        log.exception("Error saving antigravity cache")
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
@@ -761,6 +765,7 @@ def try_save_antigravity_cache(cache):
         save_antigravity_cache(cache)
         return None
     except Exception as e:
+        log.exception("try_save_antigravity_cache failed")
         return f"failed to save antigravity cache: {e}"
 
 def cache_antigravity_profile(cache, profile_name, models, config_dir=None):
@@ -969,7 +974,8 @@ def _fetch_single_profile(profile, sys_name, cache, is_main=False, known_profile
         def _secs_until(rt):
             try:
                 return (parse_to_utc(rt) - now).total_seconds()
-            except Exception:
+            except (TypeError, ValueError, OSError) as e:
+                log.debug("Failed to parse reset time in _secs_until: %s", e)
                 return 0
         candidates.sort(key=lambda c: _secs_until(c.get("reset_time")))
 
@@ -1231,7 +1237,8 @@ def display_antigravity_text(data, args):
                 try:
                     rt = parse_to_utc(x.get("reset_time"))
                     secs = (rt - datetime.now(timezone.utc)).total_seconds()
-                except Exception:
+                except (TypeError, ValueError, OSError) as e:
+                    log.debug("Failed to parse reset time for sort_key: %s", e)
                     secs = 0
                 return (lt_rank, secs)
             models_by_label = {}
@@ -1258,8 +1265,8 @@ def display_antigravity_text(data, args):
                             now = datetime.now(timezone.utc)
                             if (rt - now).total_seconds() <= 86400:
                                 w_lbl = "5h"
-                        except Exception:
-                            pass  # nosec B110
+                        except (TypeError, ValueError, OSError) as e:
+                            log.debug("Failed to parse reset time for w_lbl: %s", e)
 
                     b = bar(pct_used, width=6, no_color=getattr(args, 'no_color', False))
                     pct_fmt = f"{pct_left:.1f}%" if is_verbose(args) else f"{pct_left:.0f}%"

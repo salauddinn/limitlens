@@ -1,6 +1,9 @@
 """Custom provider — config-only quota tracking for user-defined tools."""
 
 from limitlens.core import bar, identity_line, load_display_config, print_c, section
+from ..logging import get_logger
+
+log = get_logger("limitlens.providers.custom")
 
 
 def _float(value, default=0.0):

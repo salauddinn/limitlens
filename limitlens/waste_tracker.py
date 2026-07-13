@@ -23,6 +23,9 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
+from .logging import get_logger
+log = get_logger("limitlens.waste_tracker")
+
 
 SNAPSHOT_PATH = os.environ.get("LIMITLENS_SNAPSHOT_PATH") or os.path.expanduser("~/.cache/limitlens/snapshots.jsonl")
 RESET_DETECT_PCT = 30   # pct_left jump that signals a reset event

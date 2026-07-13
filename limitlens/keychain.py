@@ -1,6 +1,9 @@
 import subprocess  # nosec B404
 import sys
 
+from .logging import get_logger
+log = get_logger("limitlens.keychain")
+
 SERVICE_NAME = "limitlens"
 
 _keyring_available = False
@@ -11,8 +14,8 @@ try:
     backend = keyring.get_keyring()
     if backend and backend.__class__.__name__ != 'FailKeyring':
         _keyring_available = True
-except Exception:
-    pass
+except Exception as e:
+    log.debug("keyring initialization failed: %s", e)
 
 def set_keychain_token(account: str, token: str) -> bool:
     """Store a token in the OS keychain securely."""
@@ -20,13 +23,13 @@ def set_keychain_token(account: str, token: str) -> bool:
         try:
             keyring.set_password(SERVICE_NAME, account, token)
             return True
-        except Exception:
+        except Exception as e:
             # Fall back to subprocess
-            pass
+            log.debug("keyring.set_password failed, falling back to subprocess: %s", e)
 
     if sys.platform == "darwin":
         # macOS: passing token via CLI argument exposes it in `ps`. Require keyring.
-        print("\n[LimitLens] ERROR: Setting tokens securely requires the 'keyring' package. Please run 'pip install keyring'.\n", file=sys.stderr)
+        log.error("Setting tokens securely requires the 'keyring' package. Please run 'pip install keyring'.")
         return False
     elif sys.platform.startswith("linux"):
         # Linux
@@ -45,9 +48,9 @@ def get_keychain_token(account: str) -> str:
             val = keyring.get_password(SERVICE_NAME, account)
             if val is not None:
                 return val
-        except Exception:
+        except Exception as e:
             # Fall back to subprocess
-            pass
+            log.debug("keyring.get_password failed, falling back to subprocess: %s", e)
 
     if sys.platform == "darwin":
         # macOS

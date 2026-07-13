@@ -13,6 +13,9 @@ import contextlib
 import time
 import threading
 
+from .logging import get_logger
+log = get_logger("limitlens.core")
+
 # ── Redaction helpers ───────────────────────────────────────────────────────
 
 def redact_email(email):
