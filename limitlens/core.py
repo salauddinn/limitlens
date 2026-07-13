@@ -161,6 +161,7 @@ TOOL_ICONS = {
     "claude": "🤖",
     "copilot": "✈️",
     "cursor": "🖱️",
+    "grok": "🤖",
 }
 
 CUSTOM_KEYWORDS = [
@@ -170,6 +171,8 @@ CUSTOM_KEYWORDS = [
     ("openai",      "🌀"),
     ("gemini",      "💎"),
     ("google",      "💎"),
+    ("xai",         "🤖"),
+    ("grok",        "🤖"),
     ("mistral",     "🌪️"),
     ("llama",       "🦙"),
     ("ollama",      "🦙"),

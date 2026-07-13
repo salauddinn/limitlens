@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-13
+
+### Added
+- Add Grok provider: detect a local Grok installation (`~/.grok`), fetch rate-limit/usage status using the locally stored SSO cookie, and surface it via `limitlens --tool grok` and the combined dashboard. Disabled by default; enable via config or auto-detection.
+
 ## [0.7.5] - 2026-07-02
 
 ### Added

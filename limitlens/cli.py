@@ -39,6 +39,7 @@ from .providers import (
     get_custom_data, display_custom_text,
     get_cursor_data, display_cursor_text,
     get_cline_data, display_cline_text,
+    get_grok_data, display_grok_text,
 )
 from .providers.observed import display_at_glance
 
@@ -81,6 +82,7 @@ def _doctor_rows(config):
         ("commandcode", "CommandCode", False),
         ("custom_tools", "Custom", False),
         ("cline", "Cline", False),
+        ("grok", "Grok", False),
     ]
 
     def status_for(key, default):
@@ -249,7 +251,7 @@ def _main():
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
     parser.add_argument("--redact", action="store_true", default=True, help="Redact PII like emails and account paths (default: True)")
     parser.add_argument("--no-redact", action="store_false", dest="redact", help="Show PII without redaction")
-    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "kilo", "claude", "pioneer", "commandcode", "custom", "cursor", "cline", "all"], default="all", help="Check specific tool")
+    parser.add_argument("--tool", choices=["codex", "amp", "antigravity", "opencode", "pi", "kilo", "claude", "pioneer", "commandcode", "custom", "cursor", "cline", "grok", "all"], default="all", help="Check specific tool")
     parser.add_argument("-w", "--watch", action="store_true", help="Refresh continuously for live status updates")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds when using --watch (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed rows and low-level warnings")
@@ -307,6 +309,7 @@ def _main():
         "custom": "custom tools",
         "cursor": "Cursor usage",
         "cline": "Cline CLI",
+        "grok": "Grok status",
         "all": "AI tool",
     }[args.tool]
     config = load_limitlens_config()
@@ -372,6 +375,8 @@ def _main():
             enabled_count += 1
         if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
             enabled_count += 1
+        if args.tool == "grok" or (args.tool == "all" and is_provider_enabled(config, "grok", default=False)):
+            enabled_count += 1
 
         max_workers = max(16, enabled_count)
         fetchers = {}
@@ -400,6 +405,8 @@ def _main():
                 fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
             if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
                 fetchers["cline"] = executor.submit(get_cline_data, args, config)
+            if args.tool == "grok" or (args.tool == "all" and is_provider_enabled(config, "grok", default=False)):
+                fetchers["grok"] = executor.submit(get_grok_data, args, config)
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -650,7 +657,7 @@ def _main():
         if args.tool == "all" and recs is not None:
             display_at_glance(result, recs, args)
 
-        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "kilo", "pioneer", "commandcode", "custom", "cursor", "cline")):
+        if any(k in result for k in ("codex", "amp", "antigravity", "pi", "kilo", "pioneer", "commandcode", "custom", "cursor", "cline", "grok")):
             print()
             print_c("  ═══ Quota Left ═══", "\033[1;36m", args.no_color)
 
@@ -670,6 +677,8 @@ def _main():
             display_cursor_text(result["cursor"], args)
         if "cline" in result:
             display_cline_text(result["cline"], args)
+        if "grok" in result:
+            display_grok_text(result["grok"], args)
 
         if "opencode" in result:
             display_opencode_text(result["opencode"], args)

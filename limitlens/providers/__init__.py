@@ -15,6 +15,7 @@ from .commandcode import get_commandcode_data, display_commandcode_text
 from .custom import get_custom_data, display_custom_text
 from .cursor import get_cursor_data, display_cursor_text
 from .cline import get_cline_data, display_cline_text
+from .grok import get_grok_data, display_grok_text
 
 PROVIDERS = {
     "codex":       (get_codex_data, display_codex_text),
@@ -30,6 +31,7 @@ PROVIDERS = {
     "custom":      (get_custom_data, display_custom_text),
     "cursor":      (get_cursor_data, display_cursor_text),
     "cline":       (get_cline_data, display_cline_text),
+    "grok":        (get_grok_data, display_grok_text),
 }
 
 __all__ = [
@@ -45,4 +47,5 @@ __all__ = [
     "get_custom_data", "display_custom_text",
     "get_cursor_data", "display_cursor_text",
     "get_cline_data", "display_cline_text",
+    "get_grok_data", "display_grok_text",
 ]
