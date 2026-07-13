@@ -64,7 +64,7 @@ limitlens = ["assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=limitlens --cov-report=term-missing"
+addopts = "--cov=limitlens --cov-report=term-missing --cov-fail-under=75"
 
 [tool.ruff]
 line-length = 120
