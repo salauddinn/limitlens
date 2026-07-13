@@ -206,7 +206,7 @@ class LimitLensApp(rumps.App):
             self._notify_critical_pct = float(_dcfg.get("notify_critical_pct", 10.0))
             self._eye_break_enabled = bool(_dcfg.get("eye_break_enabled", True))
             self._eye_break_interval = max(60, int(_dcfg.get("eye_break_minutes", 20)) * 60)
-        except Exception as e:  # pragma: no cover - config failures must not crash the app
+        except Exception:  # pragma: no cover - config failures must not crash the app
             self._refresh_interval = 300
             self._notify_warn_pct = 30.0
             self._notify_critical_pct = 10.0

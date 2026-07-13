@@ -9,15 +9,11 @@ Tests for all 7 P1 fixes:
 """
 
 import argparse
-import io
 import logging
-import os
 import socket
 import struct
-import sys
-import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 # ---------------------------------------------------------------------------

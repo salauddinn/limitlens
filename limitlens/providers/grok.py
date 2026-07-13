@@ -17,14 +17,14 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
-log = logging.getLogger("limitlens.providers.grok")
-
 from limitlens.core import (
     redact_email,
     print_c,
     section,
     bar,
 )
+
+log = logging.getLogger("limitlens.providers.grok")
 
 GROK_AUTH_PATH = os.path.expanduser("~/.grok/auth.json")
 GROK_CONFIG_PATH = os.path.expanduser("~/.grok/config.toml")

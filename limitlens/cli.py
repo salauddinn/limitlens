@@ -26,7 +26,7 @@ from .config import (
     reset_custom_tool_spend,
     limitlens_config_path,
 )
-from .providers import (
+from .providers import (  # noqa: F401  (re-exported for test mockability, see #5)
     get_codex_data, display_codex_text,
     get_amp_data, display_amp_text,
     get_antigravity_data, display_antigravity_text,
