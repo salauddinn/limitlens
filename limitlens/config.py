@@ -187,6 +187,65 @@ def apply_env_overrides(config):
                     except json.JSONDecodeError:
                         raise ConfigValidationError(f"Invalid JSON for {env_key}: {raw_val}")
 
+def validate_config_values(config):
+    disp = config.get("display", {})
+    if "menubar_refresh_seconds" in disp:
+        if disp["menubar_refresh_seconds"] < 10:
+            log.warning("menubar_refresh_seconds < 10, clamping to 10")
+            disp["menubar_refresh_seconds"] = 10
+    
+    if "notify_warn_pct" in disp:
+        if not (0 <= disp["notify_warn_pct"] <= 100):
+            log.warning("notify_warn_pct out of range, clamping")
+            disp["notify_warn_pct"] = max(0.0, min(100.0, disp["notify_warn_pct"]))
+            
+    if "notify_critical_pct" in disp:
+        if not (0 <= disp["notify_critical_pct"] <= 100):
+            log.warning("notify_critical_pct out of range, clamping")
+            disp["notify_critical_pct"] = max(0.0, min(100.0, disp["notify_critical_pct"]))
+
+    if "amp_usable_pct" in disp:
+        if not (0 <= disp["amp_usable_pct"] <= 100):
+            log.warning("amp_usable_pct out of range, clamping")
+            disp["amp_usable_pct"] = max(0.0, min(100.0, disp["amp_usable_pct"]))
+
+    if "auto_hide_days" in disp:
+        if disp["auto_hide_days"] < 1:
+            disp["auto_hide_days"] = 1
+
+    if "eye_break_minutes" in disp:
+        if disp["eye_break_minutes"] < 1:
+            disp["eye_break_minutes"] = 20
+
+    custom_tools = config.get("custom_tools", {}).get("tools", {})
+    if isinstance(custom_tools, dict):
+        valid_tools = {}
+        for name, tool in custom_tools.items():
+            if not isinstance(tool, dict):
+                log.warning(f"Custom tool '{name}' is not a dict, ignoring.")
+                continue
+            if "command" not in tool or not isinstance(tool.get("command"), str):
+                log.warning(f"Custom tool '{name}' missing string 'command', ignoring.")
+                continue
+            if "fetch_usage" not in tool or not isinstance(tool.get("fetch_usage"), str):
+                log.warning(f"Custom tool '{name}' missing string 'fetch_usage', ignoring.")
+                continue
+            valid_tools[name] = tool
+        config.setdefault("custom_tools", {})["tools"] = valid_tools
+
+    runner_tools = config.get("runner", {}).get("tools", {})
+    if isinstance(runner_tools, dict):
+        valid_runner_tools = {}
+        for name, tool in runner_tools.items():
+            if not isinstance(tool, dict):
+                log.warning(f"Runner tool '{name}' is not a dict, ignoring.")
+                continue
+            if "command" not in tool or not isinstance(tool.get("command"), str):
+                log.warning(f"Runner tool '{name}' missing string 'command', ignoring.")
+                continue
+            valid_runner_tools[name] = tool
+        config.setdefault("runner", {})["tools"] = valid_runner_tools
+
 def load_limitlens_config():
     path = limitlens_config_path()
     config = copy.deepcopy(DEFAULT_CONFIG)
@@ -211,6 +270,7 @@ def load_limitlens_config():
             config = deep_merge(config, auto_config)
 
     apply_env_overrides(config)
+    validate_config_values(config)
     return config
 
 def load_display_config():
