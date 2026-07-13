@@ -1,17 +1,23 @@
 """Grok (xAI) provider — reads login status from ~/.grok/auth.json.
 
-Only reads non-sensitive fields (email, team_id, expires_at, tier) from the
-local auth file written by the Grok CLI.  No tokens are read, transmitted, or
-logged.
+Reads non-sensitive fields (email, team_id, expires_at, tier) from the local
+auth file written by the Grok CLI.  When an SSO cookie is available (via
+``GROK_SSO_COOKIE`` env var or the OS keychain), it is transmitted to
+grok.com's internal gRPC-Web billing endpoint to fetch quota usage.  The SSO
+cookie is never written to the log file.
 """
 
 import json
+import logging
 import os
+import socket
 import struct
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger("limitlens.providers.grok")
 
 from limitlens.core import (
     redact_email,
@@ -37,7 +43,7 @@ TIER_LABELS = {
 def _safe_exists(p):
     try:
         return os.path.exists(p)
-    except Exception:
+    except OSError:
         return False
 
 
@@ -104,34 +110,53 @@ def _login_status(expires_at):
 
 
 def _parse_grpc_percent(data):
-    """Extract float from gRPC-Web proto (field 1 of outer field 1)."""
+    """Extract float from gRPC-Web proto (field 1 of outer field 1).
+
+    Frame layout (gRPC-Web):
+        flag(1) | length(4 BE) | body(length bytes)
+    Protobuf body:
+        tag 0x0a (field 1, LEN) | submsg_len(varint) | tag 0x0d (field 1, F32) | float(4 LE)
+    """
+    if not isinstance(data, (bytes, bytearray)) or len(data) < 6:
+        return None
     try:
         idx = 0
         while idx + 5 <= len(data):
             flag = data[idx]
             length = struct.unpack('>I', data[idx+1:idx+5])[0]
+            # [A4] Reject truncated or unreasonably large frames
+            if idx + 5 + length > len(data) or length > 1 << 20:
+                log.debug("grok parser: bogus frame length %d at idx %d", length, idx)
+                return None
             body = data[idx+5:idx+5+length]
             idx += 5 + length
-            if flag == 0 and len(body) > 6 and body[0] == 0x0a:
-                pos = 1
-                val = 0
-                shift = 0
-                while pos < len(body):
+            if flag == 0 and body[:1] == b'\x0a':
+                # Decode varint (submessage length) — cap at 10 bytes [A7]
+                pos, val, shift = 1, 0, 0
+                for _ in range(10):  # protobuf varints are at most 10 bytes
+                    if pos >= len(body):
+                        break
                     b = body[pos]
                     pos += 1
                     val |= (b & 0x7f) << shift
                     if not (b & 0x80):
                         break
                     shift += 7
-                if pos < len(body) and body[pos] == 0x0d:
+                # [A10] bounds check before unpacking the 4-byte float
+                if pos + 5 <= len(body) and body[pos] == 0x0d:
                     return struct.unpack('<f', body[pos+1:pos+5])[0]
-    except Exception:
-        pass
+    except (struct.error, IndexError) as exc:
+        log.debug("grok parser: malformed frame: %s", exc)
     return None
 
 
 def fetch_grok_usage(sso_cookie):
-    """Fetch usage from Grok's internal gRPC-Web billing endpoint."""
+    """Fetch usage from Grok's internal gRPC-Web billing endpoint.
+
+    Returns a float (percentage used 0–100) on success, or a dict with an
+    ``"error"`` key describing the failure reason so callers can distinguish
+    auth failures from transient network errors.
+    """
     url = 'https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig'
     req = urllib.request.Request(url, data=b'\x00\x00\x00\x00\x00', method='POST')
     req.add_header('content-type', 'application/grpc-web+proto')
@@ -143,10 +168,23 @@ def fetch_grok_usage(sso_cookie):
     req.add_header('cookie', f'sso={sso_cookie}; sso-rw={sso_cookie}')
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                log.warning("grok: HTTP %s from billing endpoint", resp.status)
+                return {"error": f"http_{resp.status}"}
             data = resp.read()
             return _parse_grpc_percent(data)
-    except Exception:
-        return None
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            log.warning("grok: HTTP 403 — SSO cookie may have expired")
+            return {"error": "auth_expired", "detail": "SSO cookie may have expired; re-auth with grok CLI"}
+        log.warning("grok: HTTP %s from billing endpoint", exc.code)
+        return {"error": f"http_{exc.code}"}
+    except urllib.error.URLError as exc:
+        log.warning("grok: network error: %s", exc.reason)
+        return {"error": "network", "detail": str(exc.reason)}
+    except (socket.gaierror, TimeoutError) as exc:
+        log.warning("grok: DNS/timeout error: %s", exc)
+        return {"error": "dns_or_timeout", "detail": str(exc)}
 
 
 def get_grok_data(args, config=None):

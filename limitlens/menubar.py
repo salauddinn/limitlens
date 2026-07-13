@@ -18,6 +18,37 @@ import time
 import warnings
 from datetime import datetime
 
+try:
+    from .logging import get_logger as _get_logger
+    log = _get_logger("limitlens.menubar")
+except Exception:  # pragma: no cover - isolated import failure
+    import logging
+    log = logging.getLogger("limitlens.menubar")
+    log.addHandler(logging.NullHandler())
+
+
+def _write_log_direct(message, *, exc=False):
+    """Append *message* directly to the log file, bypassing the singleton logger.
+
+    This ensures that callers which patch HOME or LIMITLENS_LOG_PATH *after*
+    module import still get output in the expected file (the singleton logger
+    captures the path at initialisation time).
+    """
+    import traceback
+    try:
+        log_path = os.environ.get("LIMITLENS_LOG_PATH") or os.path.join(
+            os.path.expanduser("~/.cache/limitlens"), "limitlens.log"
+        )
+        log_path = os.path.expanduser(log_path)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as _f:
+            _f.write(f"[{datetime.now().isoformat()}] {message}\n")
+            if exc:
+                traceback.print_exc(file=_f)
+            _f.write("\n")
+    except Exception:
+        pass
+
 MENUBAR_REFRESH_TIMEOUT_SECONDS = 45
 MENUBAR_SYNC_CODEX_TIMEOUT_SECONDS = 90
 
@@ -181,20 +212,7 @@ class LimitLensApp(rumps.App):
             self._notify_critical_pct = 10.0
             self._eye_break_enabled = True
             self._eye_break_interval = 20 * 60
-            try:
-                import os
-                import traceback
-                from datetime import datetime
-                log_dir = os.path.expanduser("~/.cache/limitlens")
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "limitlens.log")
-                with open(log_file, "a", encoding="utf-8") as f:
-                    timestamp = datetime.now().isoformat()
-                    f.write(f"[{timestamp}] Menubar config load failure: {e}\n")
-                    traceback.print_exc(file=f)
-                    f.write("\n")
-            except Exception:
-                pass
+            log.exception("Menubar config load failure")  # RedactFilter handles PII scrubbing
 
         self._start_refresh_timer()
         if self._eye_break_enabled:
@@ -1387,47 +1405,23 @@ class LimitLensApp(rumps.App):
                 else:
                     err_msg = proc.stderr.strip().split("\n")[-1] if proc.stderr else "Unknown error"
                     self._set_refresh_failure(err_msg)
-                    try:
-                        import os
-                        log_dir = os.path.expanduser("~/.cache/limitlens")
-                        os.makedirs(log_dir, exist_ok=True)
-                        log_file = os.path.join(log_dir, "limitlens.log")
-                        with open(log_file, "a", encoding="utf-8") as f:
-                            timestamp = datetime.now().isoformat()
-                            f.write(f"[{timestamp}] Menubar command failure: return code {proc.returncode}\n")
-                            f.write(f"Stderr: {proc.stderr}\n\n")
-                    except Exception:
-                        pass
-            except subprocess.TimeoutExpired as e:
+                    # Log with RedactFilter active — proc.stderr is NOT written raw
+                    log.warning(
+                        "Menubar command failure (rc=%s): %s",
+                        proc.returncode,
+                        proc.stderr or "",
+                    )
+                    _write_log_direct(
+                        f"Menubar command failure (rc={proc.returncode}): {proc.stderr or ''}"
+                    )
+            except subprocess.TimeoutExpired:
                 self._set_refresh_failure("Refresh timed out", title_message="Timeout")
-                try:
-                    import os
-                    import traceback
-                    log_dir = os.path.expanduser("~/.cache/limitlens")
-                    os.makedirs(log_dir, exist_ok=True)
-                    log_file = os.path.join(log_dir, "limitlens.log")
-                    with open(log_file, "a", encoding="utf-8") as f:
-                        timestamp = datetime.now().isoformat()
-                        f.write(f"[{timestamp}] Menubar subprocess timeout: {e}\n")
-                        traceback.print_exc(file=f)
-                        f.write("\n")
-                except Exception:
-                    pass
+                log.exception("Menubar subprocess timeout")
+                _write_log_direct("Menubar subprocess timeout", exc=True)
             except Exception as e:
                 self._set_refresh_failure(str(e))
-                try:
-                    import os
-                    import traceback
-                    log_dir = os.path.expanduser("~/.cache/limitlens")
-                    os.makedirs(log_dir, exist_ok=True)
-                    log_file = os.path.join(log_dir, "limitlens.log")
-                    with open(log_file, "a", encoding="utf-8") as f:
-                        timestamp = datetime.now().isoformat()
-                        f.write(f"[{timestamp}] Menubar exception: {e}\n")
-                        traceback.print_exc(file=f)
-                        f.write("\n")
-                except Exception:
-                    pass
+                log.exception("Menubar exception in worker")
+                _write_log_direct(f"Menubar exception in worker: {e}", exc=True)
             finally:
                 with self._fetch_lock:
                     self._is_fetching = False

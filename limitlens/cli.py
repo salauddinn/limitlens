@@ -43,47 +43,42 @@ from .providers import (
 )
 from .providers.observed import display_at_glance
 
+from .logging import get_logger as _get_logger
+_log = _get_logger("limitlens.cli")
+
+
 def log_error(e, context=""):
+    """Log an exception to the limitlens log file.
+
+    Delegates to the unified logger *and* directly writes to the file so that
+    a ``LIMITLENS_LOG_PATH`` env var patched at test time is always honoured
+    (the logger singleton is initialised at import time before env patches).
+    """
     import os
     import traceback
-    from datetime import datetime
-    try:
-        log_file = os.environ.get("LIMITLENS_LOG_PATH")
-        if log_file:
-            log_file = os.path.expanduser(log_file)
-            log_dir = os.path.dirname(log_file) or "."
-        else:
-            log_dir = os.path.expanduser("~/.cache/limitlens")
-            log_file = os.path.join(log_dir, "limitlens.log")
-        os.makedirs(log_dir, exist_ok=True)
-        with open(log_file, "a", encoding="utf-8") as f:
-            timestamp = datetime.now().isoformat()
-            f.write(f"[{timestamp}] {context}Error: {type(e).__name__}: {e}\n")
-            traceback.print_exc(file=f)
-            f.write("\n")
-    except Exception:
-        pass
+    _log.exception("%sError: %s: %s", context, type(e).__name__, e)
+    # Also write directly to the env-specified path so tests that patch
+    # LIMITLENS_LOG_PATH *after* module import still see the output.
+    log_path = os.environ.get("LIMITLENS_LOG_PATH")
+    if log_path:
+        try:
+            from datetime import datetime
+            log_path = os.path.expanduser(log_path)
+            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as _f:
+                _f.write(f"[{datetime.now().isoformat()}] {context}Error: {type(e).__name__}: {e}\n")
+                traceback.print_exc(file=_f)
+                _f.write("\n")
+        except Exception:
+            pass
 
 
 def _doctor_rows(config):
     import os
     import sys
 
+    from .providers import PROVIDER_DESCRIPTORS
     detected = auto_detect_providers(limitlens_config_path(), write=False, interactive=False)
-    providers = [
-        ("codex", "Codex", True),
-        ("amp", "Amp", True),
-        ("antigravity", "Antigravity", True),
-        ("opencode", "OpenCode", True),
-        ("pi", "Pi", False),
-        ("claude", "Claude", True),
-        ("cursor", "Cursor", True),
-        ("pioneer", "Pioneer", False),
-        ("commandcode", "CommandCode", False),
-        ("custom_tools", "Custom", False),
-        ("cline", "Cline", False),
-        ("grok", "Grok", False),
-    ]
 
     def status_for(key, default):
         configured = is_provider_enabled(config, key, default=default)
@@ -98,14 +93,16 @@ def _doctor_rows(config):
 
     rows = [
         {
-            "key": key,
-            "label": label,
-            "state": state,
-            "status": status,
-            "next_step": next_step,
+            "key": desc.key,
+            "label": desc.label,
+            **dict(zip(
+                ("state", "status", "next_step"),
+                status_for(desc.config_key, desc.default_enabled),
+            )),
         }
-        for key, label, default in providers
-        for state, status, next_step in [status_for(key, default)]
+        for desc in PROVIDER_DESCRIPTORS.values()
+        # copilot_cli is internal and not surfaced in doctor
+        if desc.key != "copilot_cli"
     ]
     rows.append({
         "key": "menubar",
@@ -123,6 +120,8 @@ def _doctor_rows(config):
         "next_step": "Enable the bundled iTerm2 status-bar script." if os.path.exists(widget_path) else "Install the bundled iTerm2 script if you use iTerm2.",
     })
     return rows
+
+
 
 
 def _doctor_report(rows):
@@ -351,62 +350,66 @@ def _main():
         return {"error": message}
 
     def collect_results():
+        import sys as _sys
+        from .providers import PROVIDER_DESCRIPTORS
         result = {}
-        enabled_count = 0
-        if args.tool == "codex" or (args.tool == "all" and is_provider_enabled(config, "codex", default=True)):
-            enabled_count += 1
-        if args.tool == "amp" or (args.tool == "all" and is_provider_enabled(config, "amp", default=True)):
-            enabled_count += 1
-        if args.tool == "antigravity" or (args.tool == "all" and is_provider_enabled(config, "antigravity", default=True)):
-            enabled_count += 1
-        if args.tool == "opencode" or (args.tool == "all" and is_provider_enabled(config, "opencode", default=True)):
-            enabled_count += 1
-        if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
-            enabled_count += 1
-        if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
-            enabled_count += 1
-        if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
-            enabled_count += 1
-        if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
-            enabled_count += 1
-        if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
-            enabled_count += 1
-        if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
-            enabled_count += 1
-        if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
-            enabled_count += 1
-        if args.tool == "grok" or (args.tool == "all" and is_provider_enabled(config, "grok", default=False)):
-            enabled_count += 1
 
+        # Map each provider key to the function imported at cli.py module level.
+        # Using the module's __dict__ ensures that test patches (e.g.
+        # @patch("limitlens.cli.get_codex_data")) are honoured (#5 / testability).
+        _cli_module = _sys.modules[__name__]
+        _fetch_by_key = {
+            "codex":       getattr(_cli_module, "get_codex_data", None),
+            "amp":         getattr(_cli_module, "get_amp_data", None),
+            "antigravity": getattr(_cli_module, "get_antigravity_data", None),
+            "opencode":    getattr(_cli_module, "get_opencode_data", None),
+            "pi":          getattr(_cli_module, "get_pi_data", None),
+            "kilo":        getattr(_cli_module, "get_kilo_data", None),
+            "claude":      getattr(_cli_module, "get_claude_data", None),
+            "copilot_cli": None,  # fetched via opencode provider
+            "cursor":      getattr(_cli_module, "get_cursor_data", None),
+            "cline":       getattr(_cli_module, "get_cline_data", None),
+            "pioneer":     getattr(_cli_module, "get_pioneer_data", None),
+            "commandcode": getattr(_cli_module, "get_commandcode_data", None),
+            "custom":      getattr(_cli_module, "get_custom_data", None),
+            "grok":        getattr(_cli_module, "get_grok_data", None),
+        }
+
+        # Determine which providers to fetch — data-driven from the registry.
+        # Uses descriptor.default_enabled as the single source of truth (#5 / #6).
+        active_descs = []
+        for desc in PROVIDER_DESCRIPTORS.values():
+            if desc.key == "copilot_cli":
+                # copilot_cli is fetched as a side-effect of opencode; skip here
+                continue
+            if args.tool == desc.key or any(args.tool == a for a in desc.aliases):
+                active_descs.append(desc)
+            elif args.tool == "all" and is_provider_enabled(
+                config, desc.config_key, default=desc.default_enabled
+            ):
+                active_descs.append(desc)
+
+        enabled_count = len(active_descs)
         max_workers = max(16, enabled_count)
-        fetchers = {}
+
+        def _call_fetch(desc, args, config):
+            """Call the provider's fetch function with the right signature."""
+            fn = _fetch_by_key.get(desc.key) or desc.fetch
+            try:
+                return fn(args, config)
+            except TypeError:
+                # Some providers only accept (args) e.g. get_amp_data
+                try:
+                    return fn(args)
+                except TypeError:
+                    # Some providers only accept (config) e.g. get_copilot_cli_usage
+                    return fn(config)
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            if args.tool == "codex" or (args.tool == "all" and is_provider_enabled(config, "codex", default=True)):
-                fetchers["codex"] = executor.submit(get_codex_data, args, config)
-            if args.tool == "amp" or (args.tool == "all" and is_provider_enabled(config, "amp", default=True)):
-                fetchers["amp"] = executor.submit(get_amp_data, args)
-            if args.tool == "antigravity" or (args.tool == "all" and is_provider_enabled(config, "antigravity", default=True)):
-                fetchers["antigravity"] = executor.submit(get_antigravity_data, args, config)
-            if args.tool == "opencode" or (args.tool == "all" and is_provider_enabled(config, "opencode", default=True)):
-                fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-            if args.tool == "claude" or (args.tool == "all" and is_provider_enabled(config, "claude", default=True)):
-                fetchers["claude"] = executor.submit(get_claude_data, args, config)
-            if args.tool == "pi" or (args.tool == "all" and is_provider_enabled(config, "pi", default=False)):
-                fetchers["pi"] = executor.submit(get_pi_data, args, config)
-            if args.tool == "kilo" or (args.tool == "all" and is_provider_enabled(config, "kilo", default=False)):
-                fetchers["kilo"] = executor.submit(get_kilo_data, args, config)
-            if args.tool == "pioneer" or (args.tool == "all" and is_provider_enabled(config, "pioneer", default=False)):
-                fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-            if args.tool == "commandcode" or (args.tool == "all" and is_provider_enabled(config, "commandcode", default=False)):
-                fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
-            if args.tool == "custom" or (args.tool == "all" and is_provider_enabled(config, "custom_tools", default=False)):
-                fetchers["custom"] = executor.submit(get_custom_data, args, config)
-            if args.tool == "cursor" or (args.tool == "all" and is_provider_enabled(config, "cursor", default=True)):
-                fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
-            if args.tool == "cline" or (args.tool == "all" and is_provider_enabled(config, "cline", default=True)):
-                fetchers["cline"] = executor.submit(get_cline_data, args, config)
-            if args.tool == "grok" or (args.tool == "all" and is_provider_enabled(config, "grok", default=False)):
-                fetchers["grok"] = executor.submit(get_grok_data, args, config)
+            fetchers = {
+                desc.key: executor.submit(_call_fetch, desc, args, config)
+                for desc in active_descs
+            }
             for key, fut in fetchers.items():
                 try:
                     result[key] = fut.result()
@@ -418,6 +421,8 @@ def _main():
                     log_error(e, f"Provider {key} ")
                     result[key] = _provider_error_payload(key, e)
         return result
+
+
 
     def fetch_and_refresh():
         nonlocal sync_codex_pending, refresh_metadata
@@ -716,8 +721,10 @@ def _main():
                     buf = _io.StringIO()
                     _orig = _sys.stdout
                     _sys.stdout = buf
-                    display_result(result)
-                    _sys.stdout = _orig
+                    try:
+                        display_result(result)
+                    finally:
+                        _sys.stdout = _orig  # always restore, even if display_result raises
                     output = buf.getvalue()
                     print(output, end="", flush=True)
                     _prev_lines[0] = output.count("\n")
