@@ -159,12 +159,14 @@ fi
 # ── macOS: auto-install iTerm2 widget ──────────────────────────────────────────
 if $IS_MAC && [[ -d "$HOME/Library/Application Support/iTerm2/Scripts" ]]; then
   ITERM_DIR="$HOME/Library/Application Support/iTerm2/Scripts"
-  if [[ -f "iterm_widget.py" ]]; then
-    sed "s|USER_LIMITLENS_DIR = \"\"|USER_LIMITLENS_DIR = \"$PWD\"|" iterm_widget.py > "$ITERM_DIR/limitlens_widget.py"
-    chmod +x "$ITERM_DIR/limitlens_widget.py"
-    success "iTerm2 widget auto-installed to Scripts menu."
+  # Prefer the version-matched widget shipped inside the installed package.
+  if command -v limitlens-iterm-widget &>/dev/null; then
+    if limitlens-iterm-widget --install; then
+      success "iTerm2 widget auto-installed to Scripts menu."
+    fi
   else
-    WIDGET_URL="https://raw.githubusercontent.com/salauddinn/limitlens/main/iterm_widget.py"
+    # Fallback: fetch from the default branch (version may not match).
+    WIDGET_URL="https://raw.githubusercontent.com/salauddinn/limitlens/main/limitlens/iterm_widget.py"
     info "Downloading iTerm2 widget from GitHub to target directory..."
     DOWNLOADED=false
     if command -v curl &>/dev/null; then
@@ -173,8 +175,6 @@ if $IS_MAC && [[ -d "$HOME/Library/Application Support/iTerm2/Scripts" ]]; then
       wget -q "$WIDGET_URL" -O "$ITERM_DIR/limitlens_widget.py" && DOWNLOADED=true
     fi
     if $DOWNLOADED; then
-      sed "s|USER_LIMITLENS_DIR = \"\"|USER_LIMITLENS_DIR = \"$PWD\"|" "$ITERM_DIR/limitlens_widget.py" > "$ITERM_DIR/limitlens_widget.tmp"
-      mv "$ITERM_DIR/limitlens_widget.tmp" "$ITERM_DIR/limitlens_widget.py"
       chmod +x "$ITERM_DIR/limitlens_widget.py"
       success "iTerm2 widget auto-installed to Scripts menu."
     fi

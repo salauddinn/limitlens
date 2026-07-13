@@ -35,6 +35,8 @@ keywords = ["ai", "quota", "codex", "amp", "antigravity", "cli", "developer-tool
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0,<9.0",
+    "pytest-cov>=4.0,<6.0",
+    "ruff>=0.5.0,<1.0",
 ]
 mac = [
     "rumps>=0.4.0",
@@ -50,6 +52,7 @@ Issues = "https://github.com/salauddinn/limitlens/issues"
 limitlens = "limitlens.cli:main"
 limitlens-menubar = "limitlens.menubar:main"
 limitlens-switch = "limitlens.switcher:main"
+limitlens-iterm-widget = "limitlens.iterm_widget:main"
 
 
 [tool.setuptools.packages.find]
@@ -61,3 +64,8 @@ limitlens = ["assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=limitlens --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"

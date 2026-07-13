@@ -2,17 +2,94 @@
 """
 LimitLens iTerm2 Status Bar Widget.
 
-This module provides an iTerm2 background script that creates a custom status bar
+This module ships an iTerm2 background script that creates a custom status bar
 component. It continuously polls LimitLens for quota statuses and displays the
-most relevant available tool (or highest quota) directly in the iTerm2 terminal window.
+most relevant available tool (or highest quota) directly in the iTerm2 terminal
+window.
+
+When LimitLens is installed (e.g. via ``pipx install limitlens``), run
+``limitlens-iterm-widget --install`` to drop a version-matched copy of this
+widget into iTerm2's Scripts directory, or ``limitlens-iterm-widget --print`` to
+emit the source so it can be piped into a shell config.
+
+Note: ``iterm2`` is imported lazily so that this module can be imported by the
+console script in environments (such as a pipx venv) where the iTerm2 Python API
+is not installed.
 """
+import argparse
 import asyncio
-import iterm2
 import json
 import os
 import subprocess
+import sys
 
-async def main(connection):
+WIDGET_FILENAME = "limitlens_widget.py"
+
+
+def _widget_source():
+    """Return the source of this file so it can be installed into iTerm2."""
+    path = os.path.realpath(__file__)
+    with open(path, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _iterm_scripts_dir():
+    """Return the default iTerm2 Scripts directory on macOS."""
+    return os.path.join(
+        os.path.expanduser("~"),
+        "Library",
+        "Application Support",
+        "iTerm2",
+        "Scripts",
+    )
+
+
+def install_widget(target_dir=None):
+    """Install a copy of this widget into iTerm2's Scripts directory."""
+    target_dir = target_dir or _iterm_scripts_dir()
+    os.makedirs(target_dir, exist_ok=True)
+    target = os.path.join(target_dir, WIDGET_FILENAME)
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(_widget_source())
+    os.chmod(target, 0o755)
+    return target
+
+
+def main():
+    """CLI entry point: install or print the LimitLens iTerm2 status bar widget."""
+    parser = argparse.ArgumentParser(
+        prog="limitlens-iterm-widget",
+        description="Install the LimitLens iTerm2 status bar widget.",
+    )
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Install the widget into iTerm2's Scripts directory (default action).",
+    )
+    parser.add_argument(
+        "--print",
+        action="store_true",
+        help="Print the widget source to stdout so it can be piped to a file.",
+    )
+    parser.add_argument(
+        "--dir",
+        default=None,
+        help="Custom target directory for --install (default: iTerm2 Scripts dir).",
+    )
+    args = parser.parse_args()
+
+    if args.print:
+        sys.stdout.write(_widget_source())
+        return
+
+    target = install_widget(args.dir)
+    print(f"LimitLens iTerm2 widget installed to: {target}")
+
+
+async def iterm_main(connection):
+    """iTerm2 coroutine entry point invoked by ``iterm2.run_forever``."""
+    import iterm2
+
     print("Starting LimitLens registration v4...")
 
     component = iterm2.StatusBarComponent(
@@ -29,7 +106,7 @@ async def main(connection):
     # If you copy this script to your iTerm2 Scripts folder, you MUST set this
     # to the absolute path of your limitlens clone!
     # E.g., USER_LIMITLENS_DIR = "/Users/name/Projects/limitlens"
-    # ==============================================================================
+    # ===============================================================================
     USER_LIMITLENS_DIR = ""
 
     # Auto-detect if running directly from the repository (or via symlink)
@@ -225,4 +302,8 @@ async def main(connection):
     # Start the background polling task only after successful registration
     asyncio.create_task(poll_status())
 
-iterm2.run_forever(main, retry=True)
+
+if __name__ == "__main__":
+    import iterm2
+
+    iterm2.run_forever(iterm_main, retry=True)

@@ -62,15 +62,27 @@ bash install.sh
 Modern systems (like macOS with Homebrew or recent Linux distributions) block global `pip` installs to protect system stability (PEP-668). The best way to install LimitLens globally is using `pipx`.
 
 1. Install `pipx` if you haven't already (e.g., `brew install pipx` or `apt install pipx`).
-2. Install LimitLens globally:
+2. Install LimitLens globally from PyPI:
    * **For macOS (includes menubar app):**
      ```sh
-     pipx install "git+https://github.com/salauddinn/limitlens.git[mac]"
+     pipx install "limitlens[mac]"
      ```
    * **For Linux / Windows:**
      ```sh
-     pipx install "git+https://github.com/salauddinn/limitlens.git"
+     pipx install limitlens
      ```
+
+### Dev / Nightly Install (from `main`)
+To track the latest unreleased work on the `main` branch, install directly from GitHub instead of PyPI:
+
+* **For macOS (includes menubar app):**
+  ```sh
+  pipx install "git+https://github.com/salauddinn/limitlens.git[mac]"
+  ```
+* **For Linux / Windows:**
+  ```sh
+  pipx install "git+https://github.com/salauddinn/limitlens.git"
+  ```
 
 ### Uninstall
 To completely remove LimitLens, the menubar LaunchAgent, and optionally your config:
@@ -86,7 +98,7 @@ bash uninstall.sh
 
 ## 📚 Operations & Runbook
 
-For deployment readiness, troubleshooting, and production guidelines, please refer to the [Operations Runbook](OPERATIONS_RUNBOOK.md).
+For deployment readiness, troubleshooting, and production guidelines, please refer to the [Operations Runbook](docs/OPERATIONS_RUNBOOK.md).
 
 ---
 
