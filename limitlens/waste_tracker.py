@@ -323,6 +323,7 @@ def merge_snapshots(new_rows):
 
     from limitlens.core import file_lock
     try:
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
         with file_lock(SNAPSHOT_PATH + ".lock"):
             existing = _load_snapshots()
 
@@ -349,7 +350,11 @@ def merge_snapshots(new_rows):
                 remaining = row.get("remaining")
                 reset_at = row.get("reset_at")
 
-                sig = tuple(str(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))
+                def _fmt(v):
+                    if isinstance(v, (int, float)): return str(float(v))
+                    return str(v)
+
+                sig = tuple(_fmt(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))
                 if sig not in seen:
                     seen.add(sig)
                     deduped.append(row)
@@ -359,7 +364,6 @@ def merge_snapshots(new_rows):
             import tempfile
             tmp_path = None
             try:
-                os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
                 fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(SNAPSHOT_PATH), prefix="snapshots_", suffix=".tmp")
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     for row in deduped:
@@ -383,8 +387,11 @@ def merge_snapshots(new_rows):
 
 def reset_snapshots():
     """Delete the entire snapshot history. Returns True on success."""
+    if not os.path.exists(SNAPSHOT_PATH):
+        return True
     from limitlens.core import file_lock
     try:
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
         with file_lock(SNAPSHOT_PATH + ".lock"):
             if os.path.exists(SNAPSHOT_PATH):
                 os.remove(SNAPSHOT_PATH)

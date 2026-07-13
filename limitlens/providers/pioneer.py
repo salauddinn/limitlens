@@ -16,6 +16,7 @@ from limitlens.core import (
     is_verbose,
     load_display_config,
     load_limitlens_config,
+    NoRedirectHandler,
 )
 
 from ..logging import get_logger
@@ -29,9 +30,7 @@ def _float(value, default=0.0):
         return default
 
 
-class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
 
 
 def _validated_web_url(url):

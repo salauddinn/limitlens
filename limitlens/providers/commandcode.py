@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section
+from limitlens.core import bar, identity_line, load_limitlens_config, print_c, print_error, section, NoRedirectHandler
 from ..logging import get_logger
 
 log = get_logger("limitlens.providers.commandcode")
@@ -213,9 +213,6 @@ def _auth_headers_from_env():
     return headers
 
 
-class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
 
 
 def _validated_web_url(url):

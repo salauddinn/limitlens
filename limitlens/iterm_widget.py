@@ -190,8 +190,8 @@ async def iterm_main(connection):
         """Return a unique icon: known tool → fixed icon, custom → keyword match
         or deterministic pool pick based on name adler32 hash."""
         import sys
-        if LIMITLENS_DIR and LIMITLENS_DIR not in sys.path:
-            sys.path.insert(0, LIMITLENS_DIR)
+        if LIMITLENS_DIR and os.path.isabs(LIMITLENS_DIR) and LIMITLENS_DIR not in sys.path:
+            sys.path.append(LIMITLENS_DIR)
         try:
             from limitlens.core import get_tool_icon
             return get_tool_icon(tool_key=tool_key, name=name)

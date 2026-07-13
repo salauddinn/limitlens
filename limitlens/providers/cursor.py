@@ -5,7 +5,7 @@ import sqlite3
 import urllib.request
 from pathlib import Path
 
-from limitlens.core import bar, print_c, section
+from limitlens.core import bar, print_c, section, NoRedirectHandler
 from ..logging import get_logger
 
 log = get_logger("limitlens.providers.cursor")
@@ -52,10 +52,6 @@ def get_cursor_token(sys_name):
 def fetch_cursor_usage(token):
     req = urllib.request.Request("https://api2.cursor.sh/auth/usage")
     req.add_header("Authorization", f"Bearer {token}")
-    class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-        def http_error_302(self, req, fp, code, msg, headers):
-            raise Exception("Redirects are not allowed.")
-        http_error_301 = http_error_303 = http_error_307 = http_error_302
     try:
         opener = urllib.request.build_opener(NoRedirectHandler())
         with opener.open(req, timeout=10) as resp:

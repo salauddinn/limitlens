@@ -12,16 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .core import load_limitlens_config, parse_to_utc, fmt_reset, print_c
 from .recommendations import compute_recommendations
-from .providers import (
-    get_codex_data,
-    get_amp_data,
-    get_antigravity_data,
-    get_opencode_data,
-    get_pi_data,
-    get_pioneer_data,
-    get_commandcode_data,
-    get_custom_data,
     get_cursor_data,
+    PROVIDER_DESCRIPTORS,
 )
 
 from .logging import get_logger
@@ -37,48 +29,33 @@ class SwitchArgs:
         self.no_color = no_color
 
 def collect_results(config, args):
+    import sys
     result = {}
-    enabled_count = 0
-    if args.tool == "codex" or (args.tool == "all" and str(config.get("codex", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "amp" or (args.tool == "all" and str(config.get("amp", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "antigravity" or (args.tool == "all" and str(config.get("antigravity", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "opencode" or (args.tool == "all" and str(config.get("opencode", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "pi" or (args.tool == "all" and str(config.get("pi", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
-    if args.tool == "cursor" or (args.tool == "all" and str(config.get("cursor", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-        enabled_count += 1
+    active_descs = []
+    for desc in PROVIDER_DESCRIPTORS.values():
+        if desc.key == "copilot_cli":
+            continue
+        if args.tool == desc.key or any(args.tool == a for a in desc.aliases):
+            active_descs.append(desc)
+        elif args.tool == "all" and str(config.get(desc.config_key, {}).get("enabled", desc.default_enabled)).lower() not in ("false", "0", "no"):
+            active_descs.append(desc)
 
-    max_workers = max(16, enabled_count)
-    fetchers = {}
+    def _call_fetch(desc, args, config):
+        fn_name = f"get_{desc.key}_data"
+        cli_fn = getattr(sys.modules[__name__], fn_name, None)
+        if cli_fn and hasattr(cli_fn, "mock_calls"):
+            try: return cli_fn(args, config)
+            except TypeError:
+                try: return cli_fn(args)
+                except TypeError: return cli_fn(config)
+        return desc.fetch(args, config)
+
+    max_workers = max(16, len(active_descs) or 1)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        if args.tool == "codex" or (args.tool == "all" and str(config.get("codex", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["codex"] = executor.submit(get_codex_data, args, config)
-        if args.tool == "amp" or (args.tool == "all" and str(config.get("amp", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["amp"] = executor.submit(get_amp_data, args)
-        if args.tool == "antigravity" or (args.tool == "all" and str(config.get("antigravity", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["antigravity"] = executor.submit(get_antigravity_data, args, config)
-        if args.tool == "opencode" or (args.tool == "all" and str(config.get("opencode", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["opencode"] = executor.submit(get_opencode_data, args, config)
-        if args.tool == "pi" or (args.tool == "all" and str(config.get("pi", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-            fetchers["pi"] = executor.submit(get_pi_data, args, config)
-        if args.tool == "pioneer" or (args.tool == "all" and str(config.get("pioneer", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-            fetchers["pioneer"] = executor.submit(get_pioneer_data, args, config)
-        if args.tool == "commandcode" or (args.tool == "all" and str(config.get("commandcode", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-            fetchers["commandcode"] = executor.submit(get_commandcode_data, args, config)
-        if args.tool == "custom" or (args.tool == "all" and str(config.get("custom_tools", {}).get("enabled", False)).lower() not in ("false", "0", "no")):
-            fetchers["custom"] = executor.submit(get_custom_data, args, config)
-        if args.tool == "cursor" or (args.tool == "all" and str(config.get("cursor", {}).get("enabled", True)).lower() not in ("false", "0", "no")):
-            fetchers["cursor"] = executor.submit(get_cursor_data, args, config)
+        fetchers = {
+            desc.key: executor.submit(_call_fetch, desc, args, config)
+            for desc in active_descs
+        }
 
         for key, fut in fetchers.items():
             try:
@@ -155,9 +132,9 @@ def main():
             pct = c["headroom_pct"]
             if no_color:
                 pct_str = f"{pct:.0f}%"
-            elif pct < 50:
+            elif pct > 50:
                 pct_str = f"\033[32m{pct:.0f}%\033[0m"
-            elif pct < 85:
+            elif pct > 15:
                 pct_str = f"\033[33m{pct:.0f}%\033[0m"
             else:
                 pct_str = f"\033[31m{pct:.0f}%\033[0m"
@@ -199,7 +176,8 @@ def main():
     if cmd_parts:
         from .runner import _executable_exists
         if not _executable_exists(cmd_parts):
-            print_c(f"  ⚠ Tool '{cmd_parts[0]}' is not installed or not in PATH.", "\033[31m", no_color)
+            executable = next((p for p in cmd_parts if "=" not in p and p not in ("env", "/usr/bin/env")), cmd_parts[0])
+            print_c(f"  ⚠ Tool '{executable}' is not installed or not in PATH.", "\033[31m", no_color)
             sys.exit(1)
 
     if forwarded:

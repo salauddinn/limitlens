@@ -382,9 +382,14 @@ def backup_file(path):
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(dir_path, f"config.backup.{stamp}.json")
     counter = 1
-    while os.path.exists(backup_path):
-        backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
-        counter += 1
+    while True:
+        try:
+            fd = os.open(backup_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            os.close(fd)
+            break
+        except FileExistsError:
+            backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
+            counter += 1
     shutil.copy2(path, backup_path)
     return backup_path
 

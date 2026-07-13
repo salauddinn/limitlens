@@ -22,6 +22,7 @@ from limitlens.core import (
     print_c,
     section,
     bar,
+    NoRedirectHandler,
 )
 
 log = logging.getLogger("limitlens.providers.grok")
@@ -64,21 +65,20 @@ def _load_auth():
         return None
 
     # auth.json is keyed by "{issuer}::{client_id}" → one entry per account
-    entry = next(iter(doc.values()), None)
-    if not isinstance(entry, dict):
-        return None
+    accounts = []
+    for entry in doc.values():
+        if not isinstance(entry, dict):
+            continue
+        accounts.append({
+            "email": entry.get("email"),
+            "first_name": entry.get("first_name"),
+            "team_id": entry.get("team_id"),
+            "expires_at": entry.get("expires_at"),
+            "auth_mode": entry.get("auth_mode"),
+            "tier": entry.get("tier"),
+        })
 
-    # Only extract safe, non-sensitive fields
-    return {
-        "email": entry.get("email"),
-        "first_name": entry.get("first_name"),
-        "team_id": entry.get("team_id"),
-        "expires_at": entry.get("expires_at"),
-        "auth_mode": entry.get("auth_mode"),
-        # tier is embedded in auth.json at the top level (not in the JWT)
-        # It is None for Grok Build CLI accounts
-        "tier": entry.get("tier"),
-    }
+    return accounts
 
 
 def _load_default_model():
@@ -152,9 +152,7 @@ def _parse_grpc_percent(data):
     return None
 
 
-class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
 
 
 def fetch_grok_usage(sso_cookie):
@@ -206,10 +204,10 @@ def get_grok_data(args, config=None):
             "note": "Install Grok CLI from https://grok.com",
         }
 
-    auth = _load_auth()
+    auths = _load_auth()
     default_model = _load_default_model()
 
-    if not auth:
+    if not auths:
         return {
             "name": "Grok",
             "command": "grok",
@@ -218,15 +216,6 @@ def get_grok_data(args, config=None):
             "note": "run `grok login` to sign in",
             "default_model": default_model,
         }
-
-    login_state, login_label = _login_status(auth.get("expires_at"))
-
-    email = auth.get("email")
-    if email and getattr(args, "redact", True):
-        email = redact_email(email)
-
-    tier = auth.get("tier")
-    tier_label = TIER_LABELS.get(tier) if tier is not None else None
 
     # Try to fetch usage if we have an SSO cookie
     sso_cookie = os.environ.get("GROK_SSO_COOKIE")
@@ -240,7 +229,7 @@ def get_grok_data(args, config=None):
     windows = []
     if sso_cookie:
         pct_used = fetch_grok_usage(sso_cookie)
-        if pct_used is not None:
+        if pct_used is not None and not isinstance(pct_used, dict):
             windows.append({
                 "type": "weekly",
                 "label": "weekly",
@@ -248,19 +237,35 @@ def get_grok_data(args, config=None):
                 "pct_left": max(0.0, 100.0 - pct_used)
             })
 
+    accounts = []
+    for auth in auths:
+        login_state, login_label = _login_status(auth.get("expires_at"))
+
+        email = auth.get("email")
+        if email and getattr(args, "redact", True):
+            email = redact_email(email)
+
+        tier = auth.get("tier")
+        tier_label = TIER_LABELS.get(tier) if tier is not None else None
+        
+        accounts.append({
+            "email": email,
+            "first_name": auth.get("first_name"),
+            "team_id": auth.get("team_id"),
+            "tier": tier,
+            "tier_label": tier_label,
+            "auth_mode": auth.get("auth_mode"),
+            "status": login_state,
+            "login_label": login_label,
+        })
+
     return {
         "name": "Grok",
         "command": "grok",
         "installed": True,
-        "status": login_state,
-        "login_label": login_label,
-        "email": email,
-        "first_name": auth.get("first_name"),
-        "team_id": auth.get("team_id"),
-        "tier": tier,
-        "tier_label": tier_label,
+        "status": "logged_in",
         "default_model": default_model,
-        "auth_mode": auth.get("auth_mode"),
+        "accounts": accounts,
         "windows": windows,
     }
 
@@ -307,19 +312,34 @@ def display_grok_text(data, args):
 
     # Logged in
     color = "\033[32m"
-    print_c(f"    status         {login_label}", color, no_color)
-
-    if email:
-        print_c(f"    account        {email}", "\033[90m", no_color)
-
-    if tier_label:
-        print_c(f"    plan           {tier_label}", "\033[90m", no_color)
-
-    if default_model:
-        print_c(f"    model          {default_model}", "\033[90m", no_color)
-
-    if verbose and data.get("auth_mode"):
-        print_c(f"    auth           {data['auth_mode']}", "\033[90m", no_color)
+    accounts = data.get("accounts", [])
+    
+    if not accounts:
+        # Fallback if somehow accounts is empty
+        print_c(f"    status         {status}", color, no_color)
+    elif len(accounts) == 1:
+        acc = accounts[0]
+        print_c(f"    status         {acc.get('login_label', status)}", "\033[32m" if acc.get("status") == "logged_in" else "\033[33m", no_color)
+        if acc.get("email"):
+            print_c(f"    account        {acc.get('email')}", "\033[90m", no_color)
+        if acc.get("tier_label"):
+            print_c(f"    plan           {acc.get('tier_label')}", "\033[90m", no_color)
+        if default_model:
+            print_c(f"    model          {default_model}", "\033[90m", no_color)
+        if verbose and acc.get("auth_mode"):
+            print_c(f"    auth           {acc.get('auth_mode')}", "\033[90m", no_color)
+    else:
+        print_c(f"    accounts       {len(accounts)} configured", "\033[90m", no_color)
+        if default_model:
+            print_c(f"    model          {default_model}", "\033[90m", no_color)
+        for i, acc in enumerate(accounts):
+            marker = "├─" if i < len(accounts) - 1 else "└─"
+            em = acc.get("email", "unknown")
+            st = acc.get("login_label", status)
+            pl = acc.get("tier_label", "")
+            if pl:
+                st = f"{st}, {pl}"
+            print_c(f"    {marker} {em} ({st})", "\033[90m", no_color)
 
     # Show usage bar if we fetched it
     windows = data.get("windows", [])

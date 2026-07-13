@@ -689,6 +689,9 @@ def _main():
 
     if args.watch:
         _prev_lines = [0]
+        import shutil
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
         def _clear_watch():
             n = _prev_lines[0]
@@ -712,7 +715,13 @@ def _main():
                         _sys.stdout = _orig  # always restore, even if display_result raises
                     output = buf.getvalue()
                     print(output, end="", flush=True)
-                    _prev_lines[0] = output.count("\n")
+                    term_width = shutil.get_terminal_size((80, 24)).columns
+                    line_count = 0
+                    for line in output.split("\n")[:-1]:
+                        clean_line = ansi_escape.sub('', line)
+                        w = len(clean_line)
+                        line_count += max(1, (w + term_width - 1) // term_width if w > 0 else 1)
+                    _prev_lines[0] = line_count
                 else:
                     display_result(result)
                 time.sleep(args.interval)

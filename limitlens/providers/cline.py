@@ -136,13 +136,50 @@ def _refresh_token(creds):
     new_access = data["accessToken"]
     if not new_access.startswith("workos:"):
         new_access = f"workos:{new_access}"
+        
+    new_refresh = data.get("refreshToken") or refresh
+    new_expires_at = data.get("expiresAt")
+    
+    _save_new_token(creds.get("provider"), new_access, new_refresh, new_expires_at)
+    
     return {
         "access": new_access,
-        "refresh": data.get("refreshToken") or refresh,
-        "expires_at": data.get("expiresAt"),
+        "refresh": new_refresh,
+        "expires_at": new_expires_at,
         "account_id": (data.get("userInfo") or {}).get("clineUserId") or creds.get("account_id"),
         "provider": creds.get("provider"),
     }
+
+
+def _save_new_token(provider_name, access, refresh, expires_at):
+    if not provider_name:
+        return
+    try:
+        path = Path(CLINE_SETTINGS_PATH)
+        if not path.exists():
+            return
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or not isinstance(doc.get("providers"), dict):
+            return
+        prov = doc["providers"].get(provider_name)
+        if not isinstance(prov, dict):
+            return
+        if "settings" not in prov:
+            prov["settings"] = {}
+        if "auth" not in prov["settings"]:
+            prov["settings"]["auth"] = {}
+        auth = prov["settings"]["auth"]
+        
+        # Cline stores access token without the workos: prefix
+        clean_access = access[7:] if access.startswith("workos:") else access
+        auth["accessToken"] = clean_access
+        auth["refreshToken"] = refresh
+        if expires_at:
+            auth["expiresAt"] = expires_at
+            
+        path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _resolve_access_token(creds):

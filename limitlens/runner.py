@@ -208,7 +208,7 @@ def _format_arg(template: Any, prompt: str) -> str:
     return str(template).replace("{prompt}", prompt)
 
 
-def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]] = None) -> Tuple[Tuple[str, ...], Optional[str]]:
+def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]] = None, candidate_command: Optional[str] = None) -> Tuple[Tuple[str, ...], Optional[str]]:
     """Build argv/stdin for a tool.
 
     Configuration is intentionally simple and portable::
@@ -229,7 +229,12 @@ def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]]
     canonical = normalize_tool_id(tool_id) or tool_id
     spec = TOOL_SPECS[canonical]
     tool_cfg = _runner_tool_config(config, canonical)
-    argv = list(_coerce_command(tool_cfg.get("command"), spec.default_command))
+    
+    base_cmd = tool_cfg.get("command")
+    if not base_cmd and candidate_command:
+        base_cmd = candidate_command
+        
+    argv = list(_coerce_command(base_cmd, spec.default_command))
     stdin_text: Optional[str] = None
 
     if "args" in tool_cfg:
@@ -305,12 +310,16 @@ def collect_quota_data(config: Optional[Mapping[str, Any]] = None) -> Dict[str, 
         fetchers.append(("custom", lambda: get_custom_data(args, config)))
 
     result: Dict[str, Any] = {}
-    for key, fetch in fetchers:
-        try:
-            result[key] = fetch()
-        except Exception as exc:  # pragma: no cover - exact provider failures vary by machine
-            log.exception(f"{key} provider failed")
-            result[key] = {"error": f"{key} provider failed: {type(exc).__name__}: {exc}"}
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(fetchers))) as executor:
+        future_to_key = {executor.submit(fetch): key for key, fetch in fetchers}
+        for future in concurrent.futures.as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                result[key] = future.result()
+            except Exception as exc:  # pragma: no cover - exact provider failures vary by machine
+                log.exception(f"{key} provider failed")
+                result[key] = {"error": f"{key} provider failed: {type(exc).__name__}: {exc}"}
     return result
 
 
@@ -366,8 +375,11 @@ def _tool_is_usable(
     task_kind: TaskKind,
     require_executable: bool,
 ) -> Tuple[bool, str, Tuple[str, ...], str, Optional[str]]:
+    candidate = candidates.get(tool_id)
+    candidate_command = candidate.get("command") if candidate else None
+    
     routed_prompt = prepare_prompt_for_tool(tool_id, prompt, task_kind, config)
-    command, stdin_text = build_command(tool_id, routed_prompt, config)
+    command, stdin_text = build_command(tool_id, routed_prompt, config, candidate_command)
     if _tool_ignored_by_runner_config(tool_id, config):
         return False, "ignored by runner config", command, routed_prompt, stdin_text
     if not _tool_provider_enabled(tool_id, config):
@@ -376,7 +388,6 @@ def _tool_is_usable(
         return False, "command not found", command, routed_prompt, stdin_text
 
     spec = TOOL_SPECS[tool_id]
-    candidate = candidates.get(tool_id)
     if candidate:
         headroom = candidate.get("headroom_pct")
         if isinstance(headroom, (int, float)):
