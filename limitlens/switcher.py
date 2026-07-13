@@ -12,9 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .core import load_limitlens_config, parse_to_utc, fmt_reset, print_c
 from .recommendations import compute_recommendations
-    get_cursor_data,
-    PROVIDER_DESCRIPTORS,
-)
+from .providers import PROVIDER_DESCRIPTORS
 
 from .logging import get_logger
 log = get_logger("limitlens.switcher")

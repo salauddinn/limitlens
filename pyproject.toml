@@ -50,7 +50,6 @@ Issues = "https://github.com/salauddinn/limitlens/issues"
 
 [project.scripts]
 limitlens = "limitlens.cli:main"
-limitlens-menubar = "limitlens.menubar:main"
 limitlens-switch = "limitlens.switcher:main"
 limitlens-iterm-widget = "limitlens.iterm_widget:main"
 

@@ -69,6 +69,10 @@ class RedactFilter(logging.Filter):
                 }
         if record.exc_text and isinstance(record.exc_text, str):
             record.exc_text = _redact(record.exc_text)
+        elif record.exc_info:
+            # Eagerly format the exception before the Formatter does, so we can redact it.
+            record.exc_text = _redact(logging.Formatter().formatException(record.exc_info))
+            record.exc_info = None  # Prevent the formatter from overriding it
         return True
 
 

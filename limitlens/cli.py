@@ -104,13 +104,7 @@ def _doctor_rows(config):
         # copilot_cli is internal and not surfaced in doctor
         if desc.key != "copilot_cli"
     ]
-    rows.append({
-        "key": "menubar",
-        "label": "Menubar",
-        "state": "available" if sys.platform == "darwin" else "macos_only",
-        "status": "available" if sys.platform == "darwin" else "macOS only",
-        "next_step": "Run `limitlens-menubar` on macOS." if sys.platform == "darwin" else "Use the CLI on non-macOS systems.",
-    })
+
     widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "iterm_widget.py")
     rows.append({
         "key": "iterm_widget",
