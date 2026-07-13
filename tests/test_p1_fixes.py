@@ -205,7 +205,7 @@ class TestGrokFetchNarrowExceptions(unittest.TestCase):
             url="https://grok.com/...", code=403,
             msg="Forbidden", hdrs=None, fp=None
         )
-        with patch("urllib.request.urlopen", side_effect=http_err):
+        with patch("urllib.request.OpenerDirector.open", side_effect=http_err):
             result = self.fetch("fake-cookie")
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("error"), "auth_expired")
@@ -216,7 +216,7 @@ class TestGrokFetchNarrowExceptions(unittest.TestCase):
             url="https://grok.com/...", code=500,
             msg="Server Error", hdrs=None, fp=None
         )
-        with patch("urllib.request.urlopen", side_effect=http_err):
+        with patch("urllib.request.OpenerDirector.open", side_effect=http_err):
             result = self.fetch("fake-cookie")
         self.assertIsInstance(result, dict)
         self.assertIn("http_500", result.get("error", ""))
@@ -224,19 +224,19 @@ class TestGrokFetchNarrowExceptions(unittest.TestCase):
     def test_url_error_returns_network_dict(self):
         import urllib.error
         url_err = urllib.error.URLError("Name or service not known")
-        with patch("urllib.request.urlopen", side_effect=url_err):
+        with patch("urllib.request.OpenerDirector.open", side_effect=url_err):
             result = self.fetch("fake-cookie")
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("error"), "network")
 
     def test_timeout_returns_dns_or_timeout_dict(self):
-        with patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+        with patch("urllib.request.OpenerDirector.open", side_effect=TimeoutError("timed out")):
             result = self.fetch("fake-cookie")
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("error"), "dns_or_timeout")
 
     def test_socket_error_returns_dns_or_timeout_dict(self):
-        with patch("urllib.request.urlopen", side_effect=socket.gaierror("Name not resolved")):
+        with patch("urllib.request.OpenerDirector.open", side_effect=socket.gaierror("Name not resolved")):
             result = self.fetch("fake-cookie")
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("error"), "dns_or_timeout")

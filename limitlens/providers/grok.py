@@ -132,22 +132,29 @@ def _parse_grpc_percent(data):
             idx += 5 + length
             if flag == 0 and body[:1] == b'\x0a':
                 # Decode varint (submessage length) — cap at 10 bytes [A7]
-                pos, val, shift = 1, 0, 0
+                pos = 1
+                terminated = False
                 for _ in range(10):  # protobuf varints are at most 10 bytes
                     if pos >= len(body):
                         break
                     b = body[pos]
                     pos += 1
-                    val |= (b & 0x7f) << shift
                     if not (b & 0x80):
+                        terminated = True
                         break
-                    shift += 7
+                if not terminated:
+                    return None
                 # [A10] bounds check before unpacking the 4-byte float
                 if pos + 5 <= len(body) and body[pos] == 0x0d:
                     return struct.unpack('<f', body[pos+1:pos+5])[0]
     except (struct.error, IndexError) as exc:
         log.debug("grok parser: malformed frame: %s", exc)
     return None
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
 
 
 def fetch_grok_usage(sso_cookie):
@@ -167,7 +174,8 @@ def fetch_grok_usage(sso_cookie):
     req.add_header('user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     req.add_header('cookie', f'sso={sso_cookie}; sso-rw={sso_cookie}')
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        opener = urllib.request.build_opener(NoRedirectHandler())
+        with opener.open(req, timeout=10) as resp:
             if resp.status != 200:
                 log.warning("grok: HTTP %s from billing endpoint", resp.status)
                 return {"error": f"http_{resp.status}"}

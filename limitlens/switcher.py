@@ -195,11 +195,11 @@ def main():
         target_cand = runnable_candidates[choice_idx - 1]
 
     cmd_str = target_cand["command"]
-    cmd_binary = shlex.split(cmd_str)[0] if cmd_str else None
-    if cmd_binary:
-        import shutil
-        if not shutil.which(cmd_binary):
-            print_c(f"  ⚠ Tool '{cmd_binary}' is not installed or not in PATH.", "\033[31m", no_color)
+    cmd_parts = shlex.split(cmd_str) if cmd_str else []
+    if cmd_parts:
+        from .runner import _executable_exists
+        if not _executable_exists(cmd_parts):
+            print_c(f"  ⚠ Tool '{cmd_parts[0]}' is not installed or not in PATH.", "\033[31m", no_color)
             sys.exit(1)
 
     if forwarded:
