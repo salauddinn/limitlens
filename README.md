@@ -37,7 +37,7 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 - **🪄 Zero-Config Auto-Detection:** Automatically scans system paths for active tools and configs on first run—no manual setup required.
 - **📟 iTerm2 Widget:** Native background script that powers a live, real-time widget directly in your terminal's status bar.
 - **⏱️ Time-To-Exhaustion (TTX):** Analyzes your consumption rate to project exactly when you will run out of quota.
-- **🔒 Privacy First:** Never transmits or stores API keys or session cookies. Local outputs automatically redact sensitive paths and emails.
+- **🔒 Privacy First:** Credentials (API keys, OAuth tokens, session cookies) are read from local stores and sent only to the respective provider's own API to fetch quota data — never to third parties. LimitLens does not copy provider credentials into its config files, and logs redact common credential formats. Local outputs automatically redact sensitive paths and emails.
 - **🔑 Secure Keychain:** Use native OS keychains to store API tokens securely instead of plaintext files.
 
 ---
@@ -223,9 +223,9 @@ For a complete copy-pasteable schema, see [`config.example.json`](config.example
 | Runner | Optional overrides for `limitlens run` command routing | `runner.ignored_tools`, `runner.tools.<id>.command`, `runner.tools.<id>.prompt_mode` (`arg` or `stdin`) |
 
 ### 🔒 Privacy Guarantee
-* `limitlens` does **not** store or transmit any sensitive information (such as API keys, secrets, or session cookies).
-* All operations are local or direct to the provider's API.
-* Any sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
+* `limitlens` does **not** copy provider credentials into its config files. If you explicitly use `--store-token`, the credential is stored in the operating system's keychain. Sensitive identifiers in output/logs are automatically redacted on-the-fly (e.g., email addresses are masked as `us***@domain.com`, and absolute home directory paths are replaced with `~`).
+* To fetch live quota data, `limitlens` reads credentials (API keys, OAuth tokens, SSO cookies) from local stores or environment variables and transmits them **only to the respective provider's own API** (e.g., Cursor bearer token to cursor.com, Grok SSO cookie to grok.com, Pioneer API token to the Pioneer API). Credentials are never sent to third parties.
+* The logging subsystem redacts cookies, bearer tokens, API keys, and similar common secret formats before records reach disk.
 
 ---
 

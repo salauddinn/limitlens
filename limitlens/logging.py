@@ -17,10 +17,13 @@ LIMITLENS_LOG_LEVEL
 
 import logging
 import os
+import threading
 from logging.handlers import RotatingFileHandler
 
 _LOGGER = None
 _HANDLER = None
+_CONFIGURED = False
+_CONFIG_LOCK = threading.Lock()
 
 # Home dir cached at import time for speed
 _HOME = os.path.expanduser("~")
@@ -136,56 +139,69 @@ def _redact(text):
 
 
 def get_logger(name="limitlens"):
-    """Return the shared limitlens logger, initialising it on first call.
+    """Return a limitlens logger, initialising the shared handler on first call.
 
-    The logger writes to a rotating file capped at 1 MB with 3 backups.
+    A single ``RedactingHandler`` is attached to the root ``"limitlens"``
+    logger.  Child loggers (e.g. ``"limitlens.providers.grok"``) propagate
+    to the parent and must **not** receive their own handler, so that only
+    one rotating file writer ever targets the log file.  This prevents
+    rollover races that occur when multiple independent handlers attempt
+    to roll the same file concurrently.
+
     Set ``LIMITLENS_LOG_LEVEL=DEBUG`` for verbose output.
     """
-    global _LOGGER, _HANDLER
+    global _LOGGER, _HANDLER, _CONFIGURED
+
+    if name != "limitlens" and not name.startswith("limitlens."):
+        raise ValueError("logger name must be 'limitlens' or start with 'limitlens.'")
 
     logger = logging.getLogger(name)
 
-    # Avoid adding duplicate handlers if already configured.
-    if logger.handlers:
-        return logger
+    # Always configure the root "limitlens" logger, never child loggers.
+    root_logger = logging.getLogger("limitlens")
 
-    level_name = os.environ.get("LIMITLENS_LOG_LEVEL", "WARNING").upper()
-    level = getattr(logging, level_name, logging.WARNING)
-    logger.setLevel(level)
+    if not _CONFIGURED:
+        with _CONFIG_LOCK:
+            if not _CONFIGURED:
+                level_name = os.environ.get("LIMITLENS_LOG_LEVEL", "WARNING").upper()
+                level = getattr(logging, level_name, logging.WARNING)
+                root_logger.setLevel(level)
+                root_logger.propagate = False
 
-    log_path = os.environ.get("LIMITLENS_LOG_PATH") or os.path.join(
-        os.path.expanduser("~/.cache/limitlens"), "limitlens.log"
-    )
+                log_path = os.environ.get("LIMITLENS_LOG_PATH") or os.path.join(
+                    os.path.expanduser("~/.cache/limitlens"), "limitlens.log"
+                )
 
-    try:
-        log_dir = os.path.dirname(log_path)
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir, mode=0o700, exist_ok=True)
-        else:
-            os.chmod(log_dir, 0o700)
-        # Use RedactingHandler so tracebacks are redacted after formatting.
-        handler = RedactingHandler(
-            log_path,
-            maxBytes=1_000_000,
-            backupCount=3,
-            encoding="utf-8",
-        )
-        handler.addFilter(RedactFilter())
-        try:
-            os.chmod(log_path, 0o600)
-        except OSError:
-            pass
-        handler.setFormatter(
-            logging.Formatter(
-                "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-                datefmt="%Y-%m-%dT%H:%M:%S",
-            )
-        )
-        logger.addHandler(handler)
-        _HANDLER = handler
-    except OSError:
-        # Fallback: no file logging (e.g. in sandboxed test environments).
-        logger.addHandler(logging.NullHandler())
+                try:
+                    log_dir = os.path.dirname(log_path)
+                    if not os.path.isdir(log_dir):
+                        os.makedirs(log_dir, mode=0o700, exist_ok=True)
+                    else:
+                        os.chmod(log_dir, 0o700)
+                    # Use RedactingHandler so tracebacks are redacted after formatting.
+                    handler = RedactingHandler(
+                        log_path,
+                        maxBytes=1_000_000,
+                        backupCount=3,
+                        encoding="utf-8",
+                    )
+                    handler.addFilter(RedactFilter())
+                    try:
+                        os.chmod(log_path, 0o600)
+                    except OSError:
+                        pass
+                    handler.setFormatter(
+                        logging.Formatter(
+                            "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+                            datefmt="%Y-%m-%dT%H:%M:%S",
+                        )
+                    )
+                    root_logger.addHandler(handler)
+                    _HANDLER = handler
+                except OSError:
+                    # Fallback: no file logging (e.g. in sandboxed test environments).
+                    root_logger.addHandler(logging.NullHandler())
+                _CONFIGURED = True
 
-    _LOGGER = logger
+    _LOGGER = root_logger
     return logger

@@ -15,6 +15,7 @@ import socket
 import struct
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -263,6 +264,11 @@ class TestLoggingModule(unittest.TestCase):
         l2 = get_logger()
         self.assertIs(l1, l2)
 
+    def test_get_logger_rejects_names_outside_namespace(self):
+        from limitlens.logging import get_logger
+        with self.assertRaises(ValueError):
+            get_logger("plugin")
+
     def test_redact_filter_strips_email(self):
         from limitlens.logging import RedactFilter
         filt = RedactFilter()
@@ -355,6 +361,170 @@ class TestLoggingModule(unittest.TestCase):
 
             with open(path, encoding="utf-8") as log_file:
                 self.assertNotIn("abcdef1234567890", log_file.read())
+
+    def test_get_logger_uses_single_shared_handler(self):
+        """All child loggers must share one handler on the root logger.
+
+        Regression test: previously ``get_logger("limitlens.foo")`` would
+        attach a new ``RedactingHandler`` to each child logger, leaving
+        N independent handlers all writing to the same log file.  During
+        rollover, those handlers raced and could lose diagnostics.
+        """
+        import importlib
+        import limitlens.logging as ll_logging
+        root = logging.getLogger("limitlens")
+        old_state = (
+            ll_logging._LOGGER,
+            ll_logging._HANDLER,
+            ll_logging._CONFIGURED,
+            list(root.handlers),
+            root.level,
+            root.propagate,
+        )
+
+        def restore_logging_state():
+            for handler in list(root.handlers):
+                root.removeHandler(handler)
+                if handler not in old_state[3]:
+                    handler.close()
+            root.handlers = old_state[3]
+            root.setLevel(old_state[4])
+            root.propagate = old_state[5]
+            ll_logging._LOGGER = old_state[0]
+            ll_logging._HANDLER = old_state[1]
+            ll_logging._CONFIGURED = old_state[2]
+
+        self.addCleanup(restore_logging_state)
+        # Reset module-level state to simulate a fresh process.
+        importlib.reload(ll_logging)
+        ll_logging._HANDLER = None
+        ll_logging._LOGGER = None
+        ll_logging._CONFIGURED = False
+
+        # Wipe any handlers left over on the root logger from prior tests.
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {
+                "LIMITLENS_LOG_PATH": os.path.join(temp_dir, "shared.log")
+            }):
+                # Mimic how every limitlens module obtains its logger.
+                a = ll_logging.get_logger("limitlens.test.shared_a")
+                b = ll_logging.get_logger("limitlens.test.shared_b")
+                c = ll_logging.get_logger("limitlens.test.shared_c")
+
+                # Exactly one handler must live on the root logger.
+                self.assertEqual(
+                    len(root.handlers), 1,
+                    f"root logger should have exactly 1 handler, "
+                    f"got {len(root.handlers)}",
+                )
+
+                # Child loggers must NOT carry their own handlers.
+                for child in (a, b, c):
+                    self.assertEqual(
+                        child.handlers, [],
+                        f"child logger {child.name!r} must not have "
+                        f"its own handlers",
+                    )
+
+                # All three resolve to the same shared handler instance.
+                shared = root.handlers[0]
+                self.assertIsInstance(shared, ll_logging.RedactingHandler)
+                self.assertFalse(root.propagate)
+
+    def test_cross_module_rollover_uses_single_handler(self):
+        """Concurrent rollover writes from many child loggers stay serialized.
+
+        The total handler count across the root + all child loggers must
+        remain at 1, so only one writer can ever trigger ``doRollover``.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        import importlib
+        import limitlens.logging as ll_logging
+        root = logging.getLogger("limitlens")
+        old_state = (
+            ll_logging._LOGGER,
+            ll_logging._HANDLER,
+            ll_logging._CONFIGURED,
+            list(root.handlers),
+            root.level,
+            root.propagate,
+        )
+
+        def restore_logging_state():
+            for handler in list(root.handlers):
+                root.removeHandler(handler)
+                if handler not in old_state[3]:
+                    handler.close()
+            root.handlers = old_state[3]
+            root.setLevel(old_state[4])
+            root.propagate = old_state[5]
+            ll_logging._LOGGER = old_state[0]
+            ll_logging._HANDLER = old_state[1]
+            ll_logging._CONFIGURED = old_state[2]
+
+        self.addCleanup(restore_logging_state)
+        importlib.reload(ll_logging)
+        ll_logging._HANDLER = None
+        ll_logging._LOGGER = None
+        ll_logging._CONFIGURED = False
+
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {
+                "LIMITLENS_LOG_PATH": os.path.join(temp_dir, "rollover.log")
+            }):
+                names = [
+                    "limitlens.test.rollover_a",
+                    "limitlens.test.rollover_b",
+                    "limitlens.test.rollover_c",
+                    "limitlens.test.rollover_d",
+                    "limitlens.test.rollover_e",
+                    "limitlens.test.rollover_f",
+                ]
+                loggers = [ll_logging.get_logger(n) for n in names]
+                handler = root.handlers[0]
+                handler.maxBytes = 256
+
+                def write_records(logger):
+                    for i in range(50):
+                        logger.warning("cross-module rollover probe %d", i)
+
+                # Drive concurrent records through every child logger and
+                # force multiple rotations through the shared handler.
+                with ThreadPoolExecutor(max_workers=len(loggers)) as pool:
+                    list(pool.map(write_records, loggers))
+
+                # Count all handlers reachable from any of our loggers
+                # (root + each child).  Must be exactly 1.
+                all_handlers = list(root.handlers)
+                for lg in loggers:
+                    all_handlers.extend(lg.handlers)
+                # De-duplicate by id (the same handler must appear in all).
+                unique_ids = {id(h) for h in all_handlers}
+                self.assertEqual(
+                    len(unique_ids), 1,
+                    f"expected 1 unique handler, got {len(unique_ids)}",
+                )
+                # And the file must actually have received every record.
+                handler.flush()
+                log_files = [
+                    Path(handler.baseFilename),
+                    *Path(handler.baseFilename).parent.glob(
+                        f"{Path(handler.baseFilename).name}.*"
+                    ),
+                ]
+                self.assertGreaterEqual(len(log_files), 2)
+                contents = "".join(
+                    path.read_text(encoding="utf-8")
+                    for path in log_files
+                    if path.exists()
+                )
+                self.assertIn("cross-module rollover probe", contents)
 
 
 # ---------------------------------------------------------------------------

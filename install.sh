@@ -88,10 +88,12 @@ success "pipx found."
 # ── Install LimitLens ──────────────────────────────────────────────────────────
 info "Installing LimitLens..."
 
-# Install from PyPI (versioned release artifact) rather than mutable git main
+# Install from PyPI (versioned release artifact) rather than mutable git main.
+# Force the named PyPI package into the existing environment so legacy
+# git-based installs migrate without first removing a working installation.
 if pipx list 2>/dev/null | grep -q "limitlens"; then
-  warn "LimitLens is already installed. Upgrading..."
-  pipx upgrade limitlens || pipx reinstall limitlens
+  warn "LimitLens is already installed. Reinstalling from PyPI..."
+  pipx install --force limitlens
 else
   pipx install limitlens
 fi

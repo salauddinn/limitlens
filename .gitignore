@@ -41,3 +41,6 @@ dist/
 
 # Kiro
 .kiro/
+
+# Local review notes
+docs/PROVIDER_AUDIT.md
