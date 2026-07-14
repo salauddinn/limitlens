@@ -57,9 +57,11 @@ def install_widget(target_dir=None):
     target_dir = target_dir or _iterm_scripts_dir()
     os.makedirs(target_dir, exist_ok=True)
     target = os.path.join(target_dir, WIDGET_FILENAME)
-    with open(target, "w", encoding="utf-8") as fh:
+    # Bug 5: use os.open() with the correct mode to avoid the open()+chmod() race.
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o755)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(_widget_source())
-    os.chmod(target, 0o755)
+    # No separate chmod() needed — mode is set atomically at creation.
     return target
 
 
@@ -189,9 +191,15 @@ async def iterm_main(connection):
     def _tool_icon(tool_key, name):
         """Return a unique icon: known tool → fixed icon, custom → keyword match
         or deterministic pool pick based on name adler32 hash."""
-        import sys
-        if LIMITLENS_DIR and os.path.isabs(LIMITLENS_DIR) and LIMITLENS_DIR not in sys.path:
-            sys.path.append(LIMITLENS_DIR)
+        # Bug 4: avoid polluting sys.path. Only mutate it if the package is
+        # genuinely not importable (e.g. running as a standalone script outside
+        # a venv). Use append (not insert(0)) and clean up afterwards.
+        import importlib.util
+        _path_added = False
+        if LIMITLENS_DIR and os.path.isabs(LIMITLENS_DIR):
+            if importlib.util.find_spec("limitlens") is None and LIMITLENS_DIR not in sys.path:
+                sys.path.append(LIMITLENS_DIR)
+                _path_added = True
         try:
             from limitlens.core import get_tool_icon
             return get_tool_icon(tool_key=tool_key, name=name)

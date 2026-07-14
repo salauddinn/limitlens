@@ -170,7 +170,9 @@ def fetch_grok_usage(sso_cookie):
     req.add_header('origin', 'https://grok.com')
     req.add_header('referer', 'https://grok.com/')
     req.add_header('user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    req.add_header('cookie', f'sso={sso_cookie}; sso-rw={sso_cookie}')
+    # Bug 39: strip CR/LF to prevent CRLF header injection via the sso_cookie value.
+    sso_cookie_safe = sso_cookie.replace("\r", "").replace("\n", "")
+    req.add_header('cookie', f'sso={sso_cookie_safe}; sso-rw={sso_cookie_safe}')
     try:
         opener = urllib.request.build_opener(NoRedirectHandler())
         with opener.open(req, timeout=10) as resp:

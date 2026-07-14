@@ -128,8 +128,13 @@ def test_flatten_snapshot_includes_amp_for_usage_tracking():
 
 
 @patch("limitlens.waste_tracker.os.makedirs")
-@patch("builtins.open", new_callable=mock_open)
-def test_record_snapshot(mock_open_fn, mock_makedirs):
+@patch("limitlens.waste_tracker.os.fdopen")
+@patch("limitlens.waste_tracker.os.open", return_value=5)
+def test_record_snapshot(mock_os_open, mock_fdopen, mock_makedirs):
+    # os.fdopen needs to return a context manager
+    mock_file = mock_open(read_data="")()
+    mock_fdopen.return_value = mock_file
+
     result = {
         "codex": {
             "accounts": [
@@ -139,19 +144,17 @@ def test_record_snapshot(mock_open_fn, mock_makedirs):
     }
     waste_tracker.record_snapshot(result)
     mock_makedirs.assert_called_once()
-    # record_snapshot opens the snapshot file to write AND may open the .pruned
-    # temp file during pruning — assert at least one call happened and the
-    # main snapshots.jsonl write was among them.
-    assert mock_open_fn.call_count >= 1
-    opened_paths = [str(c.args[0]) for c in mock_open_fn.call_args_list]
+    # record_snapshot uses os.open() for atomic write
+    assert mock_os_open.call_count >= 1
+    opened_paths = [str(c.args[0]) for c in mock_os_open.call_args_list]
     assert any("snapshots.jsonl" in p and not p.endswith(".pruned") for p in opened_paths)
 
     # Test empty snapshot — nothing should be written
     mock_makedirs.reset_mock()
-    mock_open_fn.reset_mock()
+    mock_os_open.reset_mock()
     waste_tracker.record_snapshot({})
     mock_makedirs.assert_not_called()
-    mock_open_fn.assert_not_called()
+    mock_os_open.assert_not_called()
 
 
 

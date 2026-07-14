@@ -208,7 +208,8 @@ def test_parse_pioneer_billing_no_tiers_but_credits_remaining(mock_disp):
 def test_get_pioneer_data_no_token(mock_keychain, mock_cfg):
     mock_cfg.return_value = {}
     res = get_pioneer_data(DummyArgs())
-    assert res["error"] == "PIONEER_API_TOKEN environment variable not set and no keychain token found"
+    assert "PIONEER_API_TOKEN not set" in res["error"]
+    assert "limitlens auth pioneer" in res["error"]
 
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "test", "remaining": 10, "total": 100, "used": 90}]}}
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):

@@ -212,19 +212,50 @@ def _prune_marker_path():
     return f"{SNAPSHOT_PATH}.pruned"
 
 
+def _prune_old_snapshots_locked():
+    """Bug 7: run prune assuming the file lock is already held by the caller."""
+    if not os.path.exists(SNAPSHOT_PATH):
+        return
+    cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_PRUNE_DAYS)
+    rows = _load_snapshots(since=cutoff)
+    import tempfile
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(SNAPSHOT_PATH),
+            prefix="snapshots_",
+            suffix=".tmp",
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for row in rows:
+                row.pop("_ts", None)
+                f.write(json.dumps(row) + "\n")
+        os.replace(tmp_path, SNAPSHOT_PATH)
+        tmp_path = None
+    except OSError:
+        pass
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 def _maybe_prune_old_snapshots():
-    """Run retention cleanup at most once per interval."""
+    """Run retention cleanup at most once per interval (call inside held lock)."""
     marker = _prune_marker_path()
     try:
         now = datetime.now(timezone.utc).timestamp()
         last = os.path.getmtime(marker) if os.path.exists(marker) else 0
         if now - last < SNAPSHOT_PRUNE_INTERVAL_HOURS * 3600:
             return
-        prune_old_snapshots()
-        with open(marker, "a", encoding="utf-8"):
-            pass
+        # Bug 7: delegate to locked variant — our caller already holds the lock.
+        _prune_old_snapshots_locked()
+        # Bug 5: create marker atomically with correct permissions (no race).
+        marker_fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        os.close(marker_fd)
         os.utime(marker, None)
-        os.chmod(marker, 0o600)
     except OSError:
         pass
 
@@ -237,11 +268,18 @@ def record_snapshot(result):
     from limitlens.core import file_lock
     try:
         os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
-        with file_lock(SNAPSHOT_PATH + ".lock"):
+        # Bug 6: heartbeat=False — append is fast, no need to spin a touch-thread.
+        with file_lock(SNAPSHOT_PATH + ".lock", heartbeat=False):
             _maybe_prune_old_snapshots()
-            with open(SNAPSHOT_PATH, "a", encoding="utf-8") as f:
+            # Bug 9: append only — do not read the full file on every record.
+            # Bug 5: open atomically with correct permissions (no open+chmod race).
+            snap_fd = os.open(
+                SNAPSHOT_PATH,
+                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                0o600,
+            )
+            with os.fdopen(snap_fd, "a", encoding="utf-8") as f:
                 f.write("".join(json.dumps(row) + "\n" for row in rows))
-            os.chmod(SNAPSHOT_PATH, 0o600)
     except OSError:
         pass
 
@@ -406,27 +444,9 @@ def prune_old_snapshots():
         return
     from limitlens.core import file_lock
     try:
+        # Bug 7: acquire lock once, then delegate to the locked variant.
         with file_lock(SNAPSHOT_PATH + ".lock"):
-            cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_PRUNE_DAYS)
-            rows = _load_snapshots(since=cutoff)
-            import tempfile
-            tmp_path = None
-            try:
-                fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(SNAPSHOT_PATH), prefix="snapshots_", suffix=".tmp")
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    for row in rows:
-                        row.pop("_ts", None)
-                        f.write(json.dumps(row) + "\n")
-                os.replace(tmp_path, SNAPSHOT_PATH)
-                tmp_path = None
-            except OSError:
-                pass
-            finally:
-                if tmp_path and os.path.exists(tmp_path):
-                    try:
-                        os.unlink(tmp_path)
-                    except OSError:
-                        pass
+            _prune_old_snapshots_locked()
     except OSError:
         pass
 

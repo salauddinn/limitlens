@@ -108,8 +108,40 @@ def deep_merge(base, override):
             out[key] = value
     return out
 
+
+def _config_dir():
+    """Return a platform-appropriate base config directory.
+
+    Bug 13: on Windows use %APPDATA%\\limitlens instead of ~/.config/limitlens
+    to avoid creating POSIX dotfolders in the Windows user profile root.
+    """
+    import sys as _sys
+    if _sys.platform == "win32":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "limitlens")
+    # macOS / Linux: honour XDG_CONFIG_HOME
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = xdg if xdg and os.path.isabs(xdg) else os.path.expanduser("~/.config")
+    return os.path.join(base, "limitlens")
+
+
+def _cache_dir():
+    """Return a platform-appropriate base cache directory.
+
+    Bug 13: on Windows use %LOCALAPPDATA%\\limitlens\\cache.
+    """
+    import sys as _sys
+    if _sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "limitlens", "cache")
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = xdg if xdg and os.path.isabs(xdg) else os.path.expanduser("~/.cache")
+    return os.path.join(base, "limitlens")
+
+
 def limitlens_config_path():
-    return os.environ.get("LIMITLENS_CONFIG") or os.path.expanduser("~/.config/limitlens/config.json")
+    return os.environ.get("LIMITLENS_CONFIG") or os.path.join(_config_dir(), "config.json")
+
 
 def validate_config_types(config, schema_ref=DEFAULT_CONFIG, path=""):
     legacy_sections = {"agentrouter"}
@@ -371,10 +403,22 @@ def atomic_write_json(path, data):
                 pass
 
 
-def backup_file(path):
-    """Create a timestamped backup next to path and return its path."""
+def _cyan(text, no_color=False):
+    """Wrap text in cyan ANSI escape if no_color is False."""
+    if no_color:
+        return text
+    return f"\033[36m{text}\033[0m"
+
+
+def backup_file(path, _async=False):
+    """Create a timestamped backup next to path and return its path.
+
+    Bug 10: Pass ``_async=True`` to run the copy in a daemon thread so the
+    main thread is not blocked during config writes.
+    """
     import shutil
     from datetime import datetime
+    import threading
 
     if not os.path.exists(path):
         return None
@@ -390,6 +434,9 @@ def backup_file(path):
         except FileExistsError:
             backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
             counter += 1
+    if _async:
+        threading.Thread(target=shutil.copy2, args=(path, backup_path), daemon=True).start()
+        return backup_path
     shutil.copy2(path, backup_path)
     return backup_path
 
@@ -438,7 +485,7 @@ def reset_custom_tool_spend(config_path):
         return False
 
     try:
-        backup_file(config_path)
+        backup_file(config_path, _async=True)
         atomic_write_json(config_path, user_config)
     except OSError as e:
         raise ConfigValidationError(f"Cannot write {config_path}: {e}")
@@ -495,8 +542,10 @@ def auto_detect_providers(path, write=True, interactive=True):
 
     is_interactive = interactive and write and "--json" not in sys.argv and sys.stdout.isatty() and sys.stdin.isatty()
 
+    # Bug 19: use _cyan() helper so --no-color (or non-TTY) suppresses ANSI.
+    no_color = "--no-color" in sys.argv or "--plain" in sys.argv or not sys.stderr.isatty()
     if is_interactive:
-        sys.stderr.write("\033[36m[LimitLens]\033[0m First run setup.\n")
+        sys.stderr.write(f"{_cyan('[LimitLens]', no_color)} First run setup.\n")
         if found_names:
             sys.stderr.write("We detected the following tools on your system:\n")
             for name in found_names:
@@ -542,7 +591,7 @@ def auto_detect_providers(path, write=True, interactive=True):
             atomic_write_json(path, detected)
 
             if "--json" not in sys.argv:
-                sys.stderr.write(f"\033[36m[LimitLens]\033[0m Config written to: {path}\n\n")
+                sys.stderr.write(f"{_cyan('[LimitLens]', no_color)} Config written to: {path}\n\n")
         except OSError:
             pass
 

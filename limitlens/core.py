@@ -285,8 +285,15 @@ def _get_active_locks():
     return _thread_local_locks.active
 
 @contextlib.contextmanager
-def file_lock(lock_path, timeout=5.0, delay=0.05):
-    """A reentrant file-based directory lock using os.mkdir with timeout and cleanup."""
+def file_lock(lock_path, timeout=5.0, delay=0.05, heartbeat=True):
+    """A reentrant file-based directory lock using os.mkdir with timeout and cleanup.
+
+    Args:
+        heartbeat: If True (default), spawn a daemon thread that touches the
+            lock dir every 3 s so stale-lock detection doesn't fire on long
+            operations.  Pass ``heartbeat=False`` for short-lived locks (e.g.
+            appending a single JSON line) to avoid the thread-spawn overhead.
+    """
     active = _get_active_locks()
     if lock_path in active:
         yield
@@ -334,7 +341,7 @@ def file_lock(lock_path, timeout=5.0, delay=0.05):
                 break
 
     touch_thread = None
-    if acquired:
+    if acquired and heartbeat:
         touch_thread = threading.Thread(target=touch_lock, daemon=True)
         touch_thread.start()
 

@@ -39,6 +39,15 @@ def set_keychain_token(account: str, token: str) -> bool:
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
+    elif sys.platform == "win32":
+        # Bug 12: Windows fallback via cmdkey (built-in credential manager CLI).
+        target = f"{SERVICE_NAME}:{account}"
+        cmd = ["cmdkey", f"/add:{target}", f"/user:{account}", f"/pass:{token}"]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)  # nosec B603
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
     return False
 
 def get_keychain_token(account: str) -> str:
@@ -68,4 +77,13 @@ def get_keychain_token(account: str) -> str:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
+    elif sys.platform == "win32":
+        # Bug 12: Windows fallback — read via cmdkey /list and parse, or use a
+        # temp credential file as cmdkey cannot print the stored password directly.
+        # For retrieval, we rely on the keyring package; log a helpful message.
+        log.warning(
+            "Token retrieval on Windows without keyring is not supported. "
+            "Install 'keyring': pip install keyring"
+        )
+        return None
     return None

@@ -17,6 +17,7 @@ LIMITLENS_LOG_LEVEL
 
 import logging
 import os
+import stat
 from logging.handlers import RotatingFileHandler
 
 _LOGGER = None
@@ -43,17 +44,13 @@ def _compile_token_re():
 
 
 class RedactFilter(logging.Filter):
-    """Strip PII from every log record before it is written to disk.
+    """Strip PII from every log record's msg and args before formatting.
 
-    Modifies ``record.msg``, ``record.args``, and ``record.exc_text``
-    in-place so the formatted output is always redacted.
+    exc_text is NOT available at filter time (it's populated by the Formatter).
+    Traceback redaction is handled in ``RedactingHandler.emit()`` instead.
     """
 
     def filter(self, record):  # noqa: A003
-        global _TOKEN_RE
-        if _TOKEN_RE is None:
-            _TOKEN_RE = _compile_token_re()
-
         if isinstance(record.msg, str):
             record.msg = _redact(record.msg)
         if record.args:
@@ -67,13 +64,42 @@ class RedactFilter(logging.Filter):
                     k: (_redact(v) if isinstance(v, str) else v)
                     for k, v in record.args.items()
                 }
-        if record.exc_text and isinstance(record.exc_text, str):
-            record.exc_text = _redact(record.exc_text)
-        elif record.exc_info:
-            # Eagerly format the exception before the Formatter does, so we can redact it.
-            record.exc_text = _redact(logging.Formatter().formatException(record.exc_info))
-            record.exc_info = None  # Prevent the formatter from overriding it
         return True
+
+
+class RedactingHandler(RotatingFileHandler):
+    """RotatingFileHandler that redacts the *fully-formatted* log line.
+
+    Python's logging pipeline is: Filter → Formatter → Handler.emit().
+    ``record.exc_text`` is only populated *inside* ``Formatter.format()``.
+    By overriding ``emit()``, we can redact after formatting (including the
+    formatted traceback) and before the bytes hit the disk.
+    """
+
+    def emit(self, record):
+        try:
+            # Let the formatter populate record.exc_text / record.message.
+            msg = self.format(record)
+            # Redact the fully formatted string (includes traceback).
+            msg = _redact(msg)
+            # Use the standard StreamHandler write path for thread safety.
+            self.acquire()
+            try:
+                self._ensure_stream()  # type: ignore[attr-defined]
+                stream = self.stream
+                stream.write(msg + self.terminator)
+                self.flush()
+                if self.shouldRollover(record):
+                    self.doRollover()
+            finally:
+                self.release()
+        except Exception:  # pragma: no cover
+            self.handleError(record)
+
+    def _ensure_stream(self):
+        """Open the stream if it has been closed (e.g. after rollover)."""
+        if self.stream is None:
+            self.stream = self._open()  # type: ignore[attr-defined]
 
 
 def _redact_email(email):
@@ -133,8 +159,12 @@ def get_logger(name="limitlens"):
     )
 
     try:
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        handler = RotatingFileHandler(
+        log_dir = os.path.dirname(log_path)
+        # Bug 37: create log dir with strict 0o700 permissions (owner-only).
+        if not os.path.isdir(log_dir):
+            os.makedirs(log_dir, mode=0o700, exist_ok=True)
+        # Use RedactingHandler so tracebacks are redacted after formatting.
+        handler = RedactingHandler(
             log_path,
             maxBytes=1_000_000,
             backupCount=3,

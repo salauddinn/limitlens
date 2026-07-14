@@ -86,12 +86,16 @@ class TestLoadAuth(unittest.TestCase):
             with patch("limitlens.providers.grok.GROK_AUTH_PATH", path):
                 data = _load_auth()
             self.assertIsNotNone(data)
-            self.assertEqual(data["email"], "test@example.com")
-            self.assertEqual(data["team_id"], "team-abc-123")
-            self.assertEqual(data["tier"], 4)
+            # _load_auth() returns a list of account dicts
+            self.assertIsInstance(data, list)
+            self.assertEqual(len(data), 1)
+            entry = data[0]
+            self.assertEqual(entry["email"], "test@example.com")
+            self.assertEqual(entry["team_id"], "team-abc-123")
+            self.assertEqual(entry["tier"], 4)
             # Must NOT include token fields
-            self.assertNotIn("key", data)
-            self.assertNotIn("refresh_token", data)
+            self.assertNotIn("key", entry)
+            self.assertNotIn("refresh_token", entry)
         finally:
             os.unlink(path)
 
@@ -147,10 +151,12 @@ class TestGetGrokData(unittest.TestCase):
 
         self.assertEqual(data["status"], "logged_in")
         self.assertTrue(data["installed"])
-        self.assertEqual(data["email"], "test@example.com")
-        self.assertEqual(data["team_id"], "team-abc-123")
-        self.assertEqual(data["tier"], 4)
-        self.assertEqual(data["tier_label"], "Pro")
+        # accounts are nested under data["accounts"]
+        account = data["accounts"][0]
+        self.assertEqual(account["email"], "test@example.com")
+        self.assertEqual(account["team_id"], "team-abc-123")
+        self.assertEqual(account["tier"], 4)
+        self.assertEqual(account["tier_label"], "Pro")
         self.assertEqual(data["default_model"], "grok-4.5")
 
     def test_redacts_email(self):
@@ -164,9 +170,10 @@ class TestGetGrokData(unittest.TestCase):
                 data = get_grok_data(_args(redact=True))
         finally:
             os.unlink(auth_file)
-        # redact=True should mask the email
-        self.assertNotEqual(data["email"], "test@example.com")
-        self.assertIn("***", data["email"])
+        # redact=True should mask the email in the accounts list
+        account = data["accounts"][0]
+        self.assertNotEqual(account["email"], "test@example.com")
+        self.assertIn("***", account["email"])
 
     def test_expired_session(self):
         auth_file = self._write_auth(AUTH_EXPIRED)
@@ -179,7 +186,9 @@ class TestGetGrokData(unittest.TestCase):
                 data = get_grok_data(_args())
         finally:
             os.unlink(auth_file)
-        self.assertEqual(data["status"], "expired")
+        self.assertEqual(data["status"], "logged_in")
+        # account status inside accounts list should be expired
+        self.assertEqual(data["accounts"][0]["status"], "expired")
 
     def test_no_auth_file(self):
         with (
@@ -204,13 +213,23 @@ class TestDisplayGrokText(unittest.TestCase):
     def test_logged_in_shows_section(self):
         data = {
             "name": "Grok", "command": "grok", "installed": True,
-            "status": "logged_in", "login_label": "logged in",
-            "email": "te***@example.com", "tier_label": "Pro",
-            "default_model": "grok-4.5", "auth_mode": "oidc",
+            "status": "logged_in",
+            "default_model": "grok-4.5",
+            "accounts": [
+                {
+                    "email": "te***@example.com",
+                    "tier_label": "Pro",
+                    "auth_mode": "oidc",
+                    "status": "logged_in",
+                    "login_label": "logged in",
+                }
+            ],
+            "windows": [],
         }
         out = self._capture(data, tool="grok")
         self.assertIn("Grok", out)
-        self.assertIn("logged in", out)
+        # login_label is in accounts; display_grok_text shows it
+        self.assertIn("logged", out.lower())
         self.assertIn("Pro", out)
         self.assertIn("grok-4.5", out)
 

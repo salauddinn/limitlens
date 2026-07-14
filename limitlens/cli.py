@@ -43,34 +43,42 @@ from .providers import (  # noqa: F401  (re-exported for test mockability, see #
 )
 from .providers.observed import display_at_glance
 
-from .logging import get_logger
+from .logging import get_logger, _redact
 log = get_logger("limitlens.cli")
 
 
 def log_error(e, context=""):
-    """Log an exception to the limitlens log file.
+    """Log an exception through the unified logger (which applies RedactFilter).
 
-    Delegates to the unified logger *and* directly writes to the file so that
-    a ``LIMITLENS_LOG_PATH`` env var patched at test time is always honoured
-    (the logger singleton is initialised at import time before env patches).
+    If ``LIMITLENS_LOG_PATH`` is set at call time (e.g. patched in tests) and
+    the current logger doesn't already write there, a temporary file handler is
+    attached so the file gets created — all writes still go through the logging
+    system and RedactFilter (no raw open() bypass).
     """
-    import os
-    import traceback
+    import os as _os
+    runtime_path = _os.environ.get("LIMITLENS_LOG_PATH")
+    if runtime_path:
+        runtime_path = _os.path.expanduser(runtime_path)
+        already_covered = any(
+            getattr(h, "baseFilename", None) == runtime_path
+            for h in log.handlers
+        )
+        if not already_covered:
+            try:
+                from logging.handlers import RotatingFileHandler as _RFH
+                from .logging import RedactFilter as _RF
+                _os.makedirs(_os.path.dirname(runtime_path) or ".", exist_ok=True)
+                _h = _RFH(runtime_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+                _h.addFilter(_RF())
+                import logging as _logging
+                _h.setFormatter(_logging.Formatter(
+                    "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+                    datefmt="%Y-%m-%dT%H:%M:%S",
+                ))
+                log.addHandler(_h)
+            except OSError:
+                pass
     log.exception("%sError: %s: %s", context, type(e).__name__, e)
-    # Also write directly to the env-specified path so tests that patch
-    # LIMITLENS_LOG_PATH *after* module import still see the output.
-    log_path = os.environ.get("LIMITLENS_LOG_PATH")
-    if log_path:
-        try:
-            from datetime import datetime
-            log_path = os.path.expanduser(log_path)
-            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
-            with open(log_path, "a", encoding="utf-8") as _f:
-                _f.write(f"[{datetime.now().isoformat()}] {context}Error: {type(e).__name__}: {e}\n")
-                traceback.print_exc(file=_f)
-                _f.write("\n")
-        except Exception as file_e:
-            log.debug("Failed to write to LIMITLENS_LOG_PATH: %s", file_e)
 
 
 def _doctor_rows(config):
@@ -683,19 +691,39 @@ def _main():
 
     if args.watch:
         _prev_lines = [0]
+        import math
         import shutil
         import re
+        import threading as _threading
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
         def _clear_watch():
+            """Erase the previous render before writing the next frame.
+
+            Bug 15: skip ANSI cursor sequences when --no-color is active;
+            use plain newline scrolling instead to avoid broken output in
+            non-color terminals / CI environments.
+            """
             n = _prev_lines[0]
             if n > 0:
-                print(f"\033[{n}A\033[J", end="", flush=True)
+                if getattr(args, 'no_color', False):
+                    # Non-ANSI clear: just print a separator
+                    print("-" * 40, flush=True)
+                else:
+                    print(f"\033[{n}A\033[J", end="", flush=True)
+
+        def _async_record(res):
+            """Bug 8: record snapshots off the main thread."""
+            try:
+                _record(res)
+            except Exception:
+                pass
 
         try:
             while True:
                 result = fetch_and_refresh()
-                _record(result)
+                # Bug 8: fire snapshot write off-thread so display is immediate.
+                _threading.Thread(target=_async_record, args=(result,), daemon=True).start()
                 if not args.json:
                     import io as _io
                     import sys as _sys
@@ -714,7 +742,15 @@ def _main():
                     for line in output.split("\n")[:-1]:
                         clean_line = ansi_escape.sub('', line)
                         w = len(clean_line)
-                        line_count += max(1, (w + term_width - 1) // term_width if w > 0 else 1)
+                        # Bug 16: a line of exactly term_width chars wraps to
+                        # a second (blank) row in most terminals — use ceiling
+                        # division but treat exact multiples as needing +1.
+                        if w == 0:
+                            line_count += 1
+                        elif w % term_width == 0:
+                            line_count += w // term_width + 1
+                        else:
+                            line_count += math.ceil(w / term_width)
                     _prev_lines[0] = line_count
                 else:
                     display_result(result)
@@ -741,13 +777,15 @@ def main():
         no_color_enabled = "--no-color" in sys.argv or "--plain" in sys.argv
         if debug_enabled:
             traceback.print_exc(file=sys.stderr)
-        elif no_color_enabled:
+        # Bug 3: redact the exception string before printing to console.
+        e_safe = _redact(str(e))
+        if no_color_enabled:
             print("\n  [LimitLens] An unexpected error occurred.")
-            print(f"  Details: {e}")
+            print(f"  Details: {e_safe}")
             print("  If this persists, please open an issue on GitHub.\n")
         else:
             print("\n  \033[31m[LimitLens] An unexpected error occurred.\033[0m")
-            print(f"  \033[90mDetails:\033[0m {e}")
+            print(f"  \033[90mDetails:\033[0m {e_safe}")
             print("  \033[90mIf this persists, please open an issue on GitHub.\033[0m\n")
         log_error(e, "Top-level ")
         sys.exit(1)

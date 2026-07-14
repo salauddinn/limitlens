@@ -186,10 +186,19 @@ def main():
 
     print_c(f"\n  ⚡ Switching context: executing `{full_command}` in place...\n", "\033[1;32m", no_color)
 
-    shell = os.environ.get("SHELL", "sh")
+    shell = os.environ.get("SHELL", "cmd.exe" if sys.platform == "win32" else "sh")
     try:
-        os.execvp(shell, [shell, "-c", full_command])  # nosec B606
+        if sys.platform == "win32":
+            # Bug 11: os.execvp is not available on Windows; use subprocess instead.
+            import subprocess  # nosec B404
+            proc = subprocess.run(  # nosec B602
+                full_command,
+                shell=True,
+            )
+            sys.exit(proc.returncode)
+        else:
+            os.execvp(shell, [shell, "-c", full_command])  # nosec B606
     except Exception as e:
         log.exception("Failed to execute command")
-        print_c(f"  ⚠ Failed to execute command: {e}", "\033[31m", no_color)
+        print_c(f"  \u26a0 Failed to execute command: {e}", "\033[31m", no_color)
         sys.exit(1)
