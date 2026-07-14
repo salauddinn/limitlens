@@ -1022,10 +1022,10 @@ class TestCLIDebugAndLogging(unittest.TestCase):
                 self.assertIn("Test Debug Exception", content)
                 self.assertIn("Traceback", content)
 
-            root_logger = logging.getLogger("limitlens")
-            for handler in list(root_logger.handlers):
+            cli_logger = logging.getLogger("limitlens.cli")
+            for handler in list(cli_logger.handlers):
                 if getattr(handler, "baseFilename", None) == log_file:
-                    root_logger.removeHandler(handler)
+                    cli_logger.removeHandler(handler)
                     handler.close()
 
 
