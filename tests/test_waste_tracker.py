@@ -129,8 +129,9 @@ def test_flatten_snapshot_includes_amp_for_usage_tracking():
 
 @patch("limitlens.waste_tracker.os.makedirs")
 @patch("limitlens.waste_tracker.os.fdopen")
+@patch("limitlens.waste_tracker.os.close")
 @patch("limitlens.waste_tracker.os.open", return_value=5)
-def test_record_snapshot(mock_os_open, mock_fdopen, mock_makedirs):
+def test_record_snapshot(mock_os_open, mock_close, mock_fdopen, mock_makedirs):
     # os.fdopen needs to return a context manager
     mock_file = mock_open(read_data="")()
     mock_fdopen.return_value = mock_file
