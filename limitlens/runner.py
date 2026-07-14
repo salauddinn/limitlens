@@ -198,7 +198,7 @@ def _coerce_command(value: Any, default: Sequence[str]) -> Tuple[str, ...]:
         parts = [str(part) for part in value]
     else:
         return tuple(default)
-        
+
     if parts and "=" in parts[0] and not parts[0].startswith("/"):
         parts.insert(0, "env")
     return tuple(parts)
@@ -229,11 +229,11 @@ def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]]
     canonical = normalize_tool_id(tool_id) or tool_id
     spec = TOOL_SPECS[canonical]
     tool_cfg = _runner_tool_config(config, canonical)
-    
+
     base_cmd = tool_cfg.get("command")
     if not base_cmd and candidate_command:
         base_cmd = candidate_command
-        
+
     argv = list(_coerce_command(base_cmd, spec.default_command))
     stdin_text: Optional[str] = None
 
@@ -260,7 +260,7 @@ def build_command(tool_id: str, prompt: str, config: Optional[Mapping[str, Any]]
 def _executable_exists(command: Sequence[str]) -> bool:
     if not command:
         return False
-    
+
     executable = None
     for part in command:
         if part in ("env", "/usr/bin/env"):
@@ -269,7 +269,7 @@ def _executable_exists(command: Sequence[str]) -> bool:
             continue
         executable = part
         break
-        
+
     if not executable:
         return False
     return shutil.which(executable) is not None
@@ -377,7 +377,7 @@ def _tool_is_usable(
 ) -> Tuple[bool, str, Tuple[str, ...], str, Optional[str]]:
     candidate = candidates.get(tool_id)
     candidate_command = candidate.get("command") if candidate else None
-    
+
     routed_prompt = prepare_prompt_for_tool(tool_id, prompt, task_kind, config)
     command, stdin_text = build_command(tool_id, routed_prompt, config, candidate_command)
     if _tool_ignored_by_runner_config(tool_id, config):

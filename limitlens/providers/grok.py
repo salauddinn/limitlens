@@ -252,7 +252,7 @@ def get_grok_data(args, config=None):
             tier_label = TIER_LABELS.get(tier) if tier is not None else None
         except TypeError:
             tier_label = None
-        
+
         accounts.append({
             "email": email,
             "first_name": auth.get("first_name"),
@@ -317,7 +317,7 @@ def display_grok_text(data, args):
     # Logged in
     color = "\033[32m"
     accounts = data.get("accounts", [])
-    
+
     if not accounts:
         # Fallback if somehow accounts is empty
         print_c(f"    status         {status}", color, no_color)

@@ -225,12 +225,12 @@ def validate_config_values(config):
         if disp["menubar_refresh_seconds"] < 10:
             log.warning("menubar_refresh_seconds < 10, clamping to 10")
             disp["menubar_refresh_seconds"] = 10
-    
+
     if "notify_warn_pct" in disp:
         if not (0 <= disp["notify_warn_pct"] <= 100):
             log.warning("notify_warn_pct out of range, clamping")
             disp["notify_warn_pct"] = max(0.0, min(100.0, disp["notify_warn_pct"]))
-            
+
     if "notify_critical_pct" in disp:
         if not (0 <= disp["notify_critical_pct"] <= 100):
             log.warning("notify_critical_pct out of range, clamping")
@@ -256,12 +256,6 @@ def validate_config_values(config):
             if not isinstance(tool, dict):
                 log.warning(f"Custom tool '{name}' is not a dict, ignoring.")
                 continue
-            if "command" not in tool or not isinstance(tool.get("command"), str):
-                log.warning(f"Custom tool '{name}' missing string 'command', ignoring.")
-                continue
-            if "fetch_usage" not in tool or not isinstance(tool.get("fetch_usage"), str):
-                log.warning(f"Custom tool '{name}' missing string 'fetch_usage', ignoring.")
-                continue
             valid_tools[name] = tool
         config.setdefault("custom_tools", {})["tools"] = valid_tools
 
@@ -271,9 +265,6 @@ def validate_config_values(config):
         for name, tool in runner_tools.items():
             if not isinstance(tool, dict):
                 log.warning(f"Runner tool '{name}' is not a dict, ignoring.")
-                continue
-            if "command" not in tool or not isinstance(tool.get("command"), str):
-                log.warning(f"Runner tool '{name}' missing string 'command', ignoring.")
                 continue
             valid_runner_tools[name] = tool
         config.setdefault("runner", {})["tools"] = valid_runner_tools
@@ -410,15 +401,10 @@ def _cyan(text, no_color=False):
     return f"\033[36m{text}\033[0m"
 
 
-def backup_file(path, _async=False):
-    """Create a timestamped backup next to path and return its path.
-
-    Bug 10: Pass ``_async=True`` to run the copy in a daemon thread so the
-    main thread is not blocked during config writes.
-    """
+def backup_file(path):
+    """Create a timestamped backup next to path and return its path."""
     import shutil
     from datetime import datetime
-    import threading
 
     if not os.path.exists(path):
         return None
@@ -434,14 +420,6 @@ def backup_file(path, _async=False):
         except FileExistsError:
             backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
             counter += 1
-    if _async:
-        def _async_copy():
-            try:
-                shutil.copy2(path, backup_path)
-            except OSError as exc:
-                log.warning("Async config backup failed: %s", exc)
-        threading.Thread(target=_async_copy, daemon=True).start()
-        return backup_path
     shutil.copy2(path, backup_path)
     return backup_path
 
@@ -490,7 +468,9 @@ def reset_custom_tool_spend(config_path):
         return False
 
     try:
-        backup_file(config_path, _async=True)
+        # Complete the copy before replacing the source so this is a real backup
+        # of the pre-reset configuration rather than a race with the new file.
+        backup_file(config_path)
         atomic_write_json(config_path, user_config)
     except OSError as e:
         raise ConfigValidationError(f"Cannot write {config_path}: {e}")

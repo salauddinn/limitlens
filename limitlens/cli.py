@@ -65,10 +65,9 @@ def log_error(e, context=""):
         )
         if not already_covered:
             try:
-                from logging.handlers import RotatingFileHandler as _RFH
-                from .logging import RedactFilter as _RF
+                from .logging import RedactFilter as _RF, RedactingHandler as _RH
                 _os.makedirs(_os.path.dirname(runtime_path) or ".", exist_ok=True)
-                _h = _RFH(runtime_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+                _h = _RH(runtime_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
                 _h.addFilter(_RF())
                 import logging as _logging
                 _h.setFormatter(_logging.Formatter(
@@ -375,7 +374,7 @@ def _main():
         def _call_fetch(desc, args, config):
             """Call the provider's fetch function with the right signature."""
             # Testability hack: honoring @patch("limitlens.cli.get_XXX_data")
-            # If the module function was mocked, we must call the mock with the old signature guessing 
+            # If the module function was mocked, we must call the mock with the old signature guessing
             # to keep tests passing. In production, this uses desc.fetch directly.
             fn_name = f"get_{desc.key}_data"
             cli_fn = getattr(_sys.modules[__name__], fn_name, None)
@@ -387,7 +386,7 @@ def _main():
                         return cli_fn(args)
                     except TypeError:
                         return cli_fn(config)
-            
+
             return desc.fetch(args, config)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

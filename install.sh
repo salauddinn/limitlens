@@ -148,7 +148,6 @@ echo ""
 echo "  limitlens              # full quota dashboard"
 echo "  limitlens --reco       # smart tool recommendation"
 echo "  limitlens --watch      # live refresh every 5s"
-  echo "  limitlens --waste      # 7-day waste report"
-fi
+echo "  limitlens --waste      # 7-day waste report"
 echo ""
 echo -e "  Docs: ${CYAN}https://github.com/salauddinn/limitlens${RESET}"

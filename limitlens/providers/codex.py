@@ -193,7 +193,7 @@ def parse_usage_limit_message(message):
     if not match:
         return "usage limit reached"
     reset_text = re.sub(r"(\d{1,2})(st|nd|rd|th)", r"\1", match.group(1))
-    
+
     # OpenAI API returns English months. strptime("%b") is system-locale sensitive
     # and will fail on non-English OS locales. Replace with %m for safety.
     ENGLISH_MONTHS = {

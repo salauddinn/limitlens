@@ -213,6 +213,31 @@ class TestLoadLimitlensConfig(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_preserves_custom_tools_and_runner_settings(self):
+        payload = {
+            "custom_tools": {
+                "tools": {
+                    "manual": {"name": "Manual quota", "total": 100, "used": 10},
+                },
+            },
+            "runner": {
+                "tools": {
+                    "pi": {"command": ["env", "PI_PROFILE=work", "pi"], "prompt_mode": "stdin"},
+                    "amp": {"enabled": False},
+                },
+            },
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(payload, f)
+            path = f.name
+        try:
+            with patch.dict(os.environ, {"LIMITLENS_CONFIG": path}):
+                config = load_limitlens_config()
+            self.assertEqual(config["custom_tools"]["tools"], payload["custom_tools"]["tools"])
+            self.assertEqual(config["runner"]["tools"], payload["runner"]["tools"])
+        finally:
+            os.unlink(path)
+
     def test_invalid_json_raises_config_validation_error(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write("this is definitely not json {{{")

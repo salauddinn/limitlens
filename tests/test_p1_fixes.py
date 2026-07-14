@@ -10,8 +10,10 @@ Tests for all 7 P1 fixes:
 
 import argparse
 import logging
+import os
 import socket
 import struct
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -331,6 +333,28 @@ class TestLoggingModule(unittest.TestCase):
         filt.filter(record)
         # After filtering, the args should not contain the raw home path
         self.assertNotIn(_HOME, str(record.args))
+
+    def test_redacting_handler_redacts_tracebacks(self):
+        from limitlens.logging import RedactingHandler
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "limitlens.log")
+            handler = RedactingHandler(path)
+            logger = logging.getLogger("limitlens.test.redacting_handler")
+            logger.handlers = [handler]
+            logger.propagate = False
+            logger.setLevel(logging.ERROR)
+            try:
+                try:
+                    raise ValueError("sso=abcdef1234567890")
+                except ValueError:
+                    logger.exception("request failed")
+            finally:
+                handler.close()
+                logger.handlers = []
+
+            with open(path, encoding="utf-8") as log_file:
+                self.assertNotIn("abcdef1234567890", log_file.read())
 
 
 # ---------------------------------------------------------------------------

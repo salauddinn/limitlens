@@ -237,7 +237,7 @@ git clone https://github.com/salauddinn/limitlens.git
 cd limitlens
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,mac]"
+pip install -e ".[dev]"
 python -m pytest tests/
 ```
 

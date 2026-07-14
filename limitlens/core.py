@@ -374,4 +374,3 @@ from .config import (  # noqa: F401, E402
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
-

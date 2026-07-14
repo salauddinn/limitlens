@@ -215,4 +215,3 @@ __all__ = [
     "get_cline_data", "display_cline_text",
     "get_grok_data", "display_grok_text",
 ]
-

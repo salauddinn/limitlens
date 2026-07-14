@@ -136,12 +136,12 @@ def _refresh_token(creds):
     new_access = data["accessToken"]
     if not new_access.startswith("workos:"):
         new_access = f"workos:{new_access}"
-        
+
     new_refresh = data.get("refreshToken") or refresh
     new_expires_at = data.get("expiresAt")
-    
+
     _save_new_token(creds.get("provider"), new_access, new_refresh, new_expires_at)
-    
+
     return {
         "access": new_access,
         "refresh": new_refresh,
