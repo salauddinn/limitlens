@@ -460,6 +460,19 @@ def shell_join(command: Sequence[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _redact_command(command: Sequence[str]) -> Tuple[str, ...]:
+    """Return a copy of command with environment assignment values masked."""
+    redacted = []
+    for part in command:
+        if "=" in part and not part.startswith("/") and part not in ("env", "/usr/bin/env"):
+            key, _, _ = part.partition("=")
+            if key and key.isidentifier():
+                redacted.append(f"{key}=[REDACTED]")
+                continue
+        redacted.append(part)
+    return tuple(redacted)
+
+
 def run_task(
     prompt: str,
     config: Optional[Mapping[str, Any]] = None,
@@ -481,7 +494,7 @@ def run_task(
     print_c(f"\n  LimitLens runner → {decision.label}", "\033[1;36m", no_color)
     print_c(f"  task:   {decision.task_kind}", "\033[90m", no_color)
     print_c(f"  why:    {decision.reason}", "\033[90m", no_color)
-    print_c(f"  cmd:    {shell_join(decision.command)}", "\033[90m", no_color)
+    print_c(f"  cmd:    {shell_join(_redact_command(decision.command))}", "\033[90m", no_color)
     if decision.stdin_text is not None:
         print_c("  input:  prompt via stdin", "\033[90m", no_color)
     if decision.routed_prompt != prompt:

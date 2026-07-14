@@ -6,14 +6,10 @@
   [![CI](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml/badge.svg)](https://github.com/salauddinn/limitlens/actions/workflows/ci.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-  [![Website](https://img.shields.io/badge/Website-limitlens.vercel.app-cyan.svg)](https://limitlens.vercel.app)
   [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange.svg)](https://buymeacoffee.com/salauddin.n)
-
-  <br />
-  <a href="https://limitlens.vercel.app">🌐 limitlens.vercel.app</a>
 </div>
 
-If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **lightweight, local CLI tool**—along with a macOS menubar app and an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
+If you juggle multiple AI subscriptions, tools, and accounts, and frequently run into rate limits, **LimitLens** gives you a **lightweight, local CLI tool**—along with an iTerm2 widget—to monitor all of your available quotas in one unified dashboard.
 
 <p align="center">
   <img src="assets/limitlens_status.png" alt="LimitLens Status Dashboard" width="45%" style="border-radius: 8px;">
@@ -29,7 +25,7 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 2. Run `limitlens doctor` to check which providers are ready.
 3. Run `limitlens` to see all quotas.
 4. Run `limitlens suggest` to pick the best tool for your next task.
-5. Optional: enable the macOS menubar app or iTerm2 widget.
+5. Optional: enable the iTerm2 widget.
 
 ---
 
@@ -39,7 +35,6 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 - **🧠 Smart Recommendations:** Automatically suggests the best tool for the job based on remaining quotas to prevent wasting premium fast requests.
 - **⚡ Lightweight CLI:** Written in Python with minimal runtime dependencies and no external services required.
 - **🪄 Zero-Config Auto-Detection:** Automatically scans system paths for active tools and configs on first run—no manual setup required.
-- **🍎 macOS Menubar App:** A sleek native menubar app that lives in your system tray and warns you when you run low.
 - **📟 iTerm2 Widget:** Native background script that powers a live, real-time widget directly in your terminal's status bar.
 - **⏱️ Time-To-Exhaustion (TTX):** Analyzes your consumption rate to project exactly when you will run out of quota.
 - **🔒 Privacy First:** Never transmits or stores API keys or session cookies. Local outputs automatically redact sensitive paths and emails.
@@ -50,7 +45,7 @@ If you juggle multiple AI subscriptions, tools, and accounts, and frequently run
 ## 🚀 Installation
 
 ### Quick Install (macOS & Linux)
-One command to install everything — automatically detects your OS, installs `pipx` if needed, and optionally registers the menubar app to start at login:
+One command to install everything — automatically detects your OS, installs `pipx` if needed, and installs the iTerm2 widget:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/install.sh -o install.sh
@@ -63,29 +58,19 @@ Modern systems (like macOS with Homebrew or recent Linux distributions) block gl
 
 1. Install `pipx` if you haven't already (e.g., `brew install pipx` or `apt install pipx`).
 2. Install LimitLens globally from PyPI:
-   * **For macOS (includes menubar app):**
-     ```sh
-     pipx install "limitlens[mac]"
-     ```
-   * **For Linux / Windows:**
-     ```sh
-     pipx install limitlens
-     ```
+   ```sh
+   pipx install limitlens
+   ```
 
 ### Dev / Nightly Install (from `main`)
 To track the latest unreleased work on the `main` branch, install directly from GitHub instead of PyPI:
 
-* **For macOS (includes menubar app):**
-  ```sh
-  pipx install "git+https://github.com/salauddinn/limitlens.git[mac]"
-  ```
-* **For Linux / Windows:**
-  ```sh
-  pipx install "git+https://github.com/salauddinn/limitlens.git"
-  ```
+```sh
+pipx install "git+https://github.com/salauddinn/limitlens.git"
+```
 
 ### Uninstall
-To completely remove LimitLens, the menubar LaunchAgent, and optionally your config:
+To completely remove LimitLens and optionally your config:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/salauddinn/limitlens/main/uninstall.sh -o uninstall.sh
@@ -151,25 +136,6 @@ Default launcher commands are intentionally simple and match current CLI help ou
 > **Spend Resets:** Running `limitlens --reset-spend` resets the spend tracking baseline for observed usage (Pi, Kilo, OpenCode, and Copilot CLI) so that future reports only show usage accumulated from that point onward. It also rewrites and resets any local counters (like `used` and `request_count`) for `custom_tools` inside your `config.json`.
 
 > **Tip:** Codex session data is refreshed automatically before output. You can use `--sync-codex` to forcefully refresh every discovered account, even if current data looks fresh. Use `--refresh-codex` to refresh all discovered Codex accounts and exit without printing status (handy for cron jobs and automation).
-
----
-
-## 🍎 macOS Menubar App
-
-LimitLens includes a native menubar app so you don't even have to open a terminal to check your limits.
-
-If you installed via `pipx install ...[mac]` (recommended), the `rumps` dependency is already included. Simply run:
-```sh
-limitlens-menubar
-```
-It will add a bulb icon to your tray and notify you if your preferred AI quotas run critically low.
-
-### Restarting the Menubar App
-If you update LimitLens or need to manually restart the background process, you can do so with:
-```sh
-pkill -f "limitlens-menubar"
-nohup limitlens-menubar &>/dev/null &
-```
 
 ---
 

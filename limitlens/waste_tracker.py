@@ -389,7 +389,8 @@ def merge_snapshots(new_rows):
                 reset_at = row.get("reset_at")
 
                 def _fmt(v):
-                    if isinstance(v, (int, float)): return str(float(v))
+                    if isinstance(v, (int, float)):
+                        return str(float(v))
                     return str(v)
 
                 sig = tuple(_fmt(v) for v in (ts_str, key, tool, pct_left, remaining, reset_at))

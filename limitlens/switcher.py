@@ -42,10 +42,13 @@ def collect_results(config, args):
         fn_name = f"get_{desc.key}_data"
         cli_fn = getattr(sys.modules[__name__], fn_name, None)
         if cli_fn and hasattr(cli_fn, "mock_calls"):
-            try: return cli_fn(args, config)
+            try:
+                return cli_fn(args, config)
             except TypeError:
-                try: return cli_fn(args)
-                except TypeError: return cli_fn(config)
+                try:
+                    return cli_fn(args)
+                except TypeError:
+                    return cli_fn(config)
         return desc.fetch(args, config)
 
     max_workers = max(16, len(active_descs) or 1)

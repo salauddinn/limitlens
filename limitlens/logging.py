@@ -17,7 +17,6 @@ LIMITLENS_LOG_LEVEL
 
 import logging
 import os
-import stat
 from logging.handlers import RotatingFileHandler
 
 _LOGGER = None
@@ -160,9 +159,10 @@ def get_logger(name="limitlens"):
 
     try:
         log_dir = os.path.dirname(log_path)
-        # Bug 37: create log dir with strict 0o700 permissions (owner-only).
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir, mode=0o700, exist_ok=True)
+        else:
+            os.chmod(log_dir, 0o700)
         # Use RedactingHandler so tracebacks are redacted after formatting.
         handler = RedactingHandler(
             log_path,
@@ -171,6 +171,10 @@ def get_logger(name="limitlens"):
             encoding="utf-8",
         )
         handler.addFilter(RedactFilter())
+        try:
+            os.chmod(log_path, 0o600)
+        except OSError:
+            pass
         handler.setFormatter(
             logging.Formatter(
                 "[%(asctime)s] %(levelname)s %(name)s: %(message)s",

@@ -169,17 +169,36 @@ def _save_new_token(provider_name, access, refresh, expires_at):
         if "auth" not in prov["settings"]:
             prov["settings"]["auth"] = {}
         auth = prov["settings"]["auth"]
-        
+
         # Cline stores access token without the workos: prefix
         clean_access = access[7:] if access.startswith("workos:") else access
         auth["accessToken"] = clean_access
         auth["refreshToken"] = refresh
         if expires_at:
             auth["expiresAt"] = expires_at
-            
-        path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
-    except Exception:
+
+        _atomic_write_settings(path, doc)
+    except (OSError, ValueError, TypeError):
         pass
+
+
+def _atomic_write_settings(path, doc):
+    """Atomically write JSON to path using a temp file in the same directory."""
+    import tempfile
+    import os
+    data = json.dumps(doc, indent=2)
+    dir_path = str(path.parent)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix="cline_", suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp_path, str(path))
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def _resolve_access_token(creds):

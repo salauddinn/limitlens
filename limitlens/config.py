@@ -435,7 +435,12 @@ def backup_file(path, _async=False):
             backup_path = os.path.join(dir_path, f"config.backup.{stamp}.{counter}.json")
             counter += 1
     if _async:
-        threading.Thread(target=shutil.copy2, args=(path, backup_path), daemon=True).start()
+        def _async_copy():
+            try:
+                shutil.copy2(path, backup_path)
+            except OSError as exc:
+                log.warning("Async config backup failed: %s", exc)
+        threading.Thread(target=_async_copy, daemon=True).start()
         return backup_path
     shutil.copy2(path, backup_path)
     return backup_path

@@ -83,7 +83,6 @@ def log_error(e, context=""):
 
 def _doctor_rows(config):
     import os
-    import sys
 
     from .providers import PROVIDER_DESCRIPTORS
     detected = auto_detect_providers(limitlens_config_path(), write=False, interactive=False)
@@ -113,7 +112,7 @@ def _doctor_rows(config):
         if desc.key != "copilot_cli"
     ]
 
-    widget_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "iterm_widget.py")
+    widget_path = os.path.join(os.path.dirname(__file__), "iterm_widget.py")
     rows.append({
         "key": "iterm_widget",
         "label": "iTerm widget",
@@ -712,17 +711,23 @@ def _main():
                 else:
                     print(f"\033[{n}A\033[J", end="", flush=True)
 
+        _record_in_flight = _threading.Event()
+
         def _async_record(res):
-            """Bug 8: record snapshots off the main thread."""
+            """Record snapshots off the main thread, skipping if one is already running."""
+            if _record_in_flight.is_set():
+                return
+            _record_in_flight.set()
             try:
                 _record(res)
             except Exception:
                 pass
+            finally:
+                _record_in_flight.clear()
 
         try:
             while True:
                 result = fetch_and_refresh()
-                # Bug 8: fire snapshot write off-thread so display is immediate.
                 _threading.Thread(target=_async_record, args=(result,), daemon=True).start()
                 if not args.json:
                     import io as _io

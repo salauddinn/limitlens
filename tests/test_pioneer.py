@@ -209,7 +209,7 @@ def test_get_pioneer_data_no_token(mock_keychain, mock_cfg):
     mock_cfg.return_value = {}
     res = get_pioneer_data(DummyArgs())
     assert "PIONEER_API_TOKEN not set" in res["error"]
-    assert "limitlens auth pioneer" in res["error"]
+    assert "limitlens --store-token pioneer" in res["error"]
 
     mock_cfg.return_value = {"pioneer": {"tiers": [{"label": "test", "remaining": 10, "total": 100, "used": 90}]}}
     with patch("limitlens.providers.pioneer.load_display_config", return_value={"auto_hide_enabled": False}):

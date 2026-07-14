@@ -8,6 +8,8 @@ and waste_tracker.
 
 import os
 import re
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 import contextlib
 import time
@@ -368,9 +370,6 @@ from .config import (  # noqa: F401, E402
     load_display_config,
     configured_days,
 )
-
-import urllib.request
-import urllib.error
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):

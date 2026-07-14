@@ -171,7 +171,7 @@ def get_pioneer_data(args, config=None):
     if not token:
         if _has_config_balance(cfg):
             return parse_pioneer_billing(cfg, args)
-        return {"error": "PIONEER_API_TOKEN not set. Run 'limitlens auth pioneer' to store your token securely."}
+        return {"error": "PIONEER_API_TOKEN not set. Run 'limitlens --store-token pioneer' to store your token securely."}
 
     team_id = cfg.get("team_id") or os.environ.get("PIONEER_TEAM_ID")
     if team_id:

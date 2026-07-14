@@ -97,7 +97,7 @@ def _load_default_model():
 
 def _login_status(expires_at):
     """Return ('logged_in'|'expired'|'unknown', human_readable_str)."""
-    if not expires_at:
+    if not expires_at or not isinstance(expires_at, str):
         return "unknown", "unknown"
     try:
         dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -248,7 +248,10 @@ def get_grok_data(args, config=None):
             email = redact_email(email)
 
         tier = auth.get("tier")
-        tier_label = TIER_LABELS.get(tier) if tier is not None else None
+        try:
+            tier_label = TIER_LABELS.get(tier) if tier is not None else None
+        except TypeError:
+            tier_label = None
         
         accounts.append({
             "email": email,
@@ -290,7 +293,6 @@ def display_grok_text(data, args):
     section("Grok", args)
 
     email = data.get("email") or ""
-    tier_label = data.get("tier_label") or ""
     login_label = data.get("login_label") or status
     default_model = data.get("default_model") or ""
 

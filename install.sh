@@ -11,14 +11,12 @@
 #   • Detects your OS (macOS or Linux)
 #   • Ensures Python 3.9+ is installed
 #   • Installs pipx if missing (via brew/apt/dnf/pacman/pip)
-#   • Installs LimitLens (with [mac] extras on macOS)
-#   • Optionally registers menubar app to start at login (macOS only)
+#   • Installs LimitLens from PyPI (the versioned release artifact)
+#   • Optionally installs the iTerm2 status-bar widget (macOS only)
 # ────────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-REPO="https://github.com/salauddinn/limitlens.git"
 LAUNCHAGENT_LABEL="com.limitlens.menubar"
-LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCHAGENT_LABEL}.plist"
 
 # ── Colours ────────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -90,20 +88,12 @@ success "pipx found."
 # ── Install LimitLens ──────────────────────────────────────────────────────────
 info "Installing LimitLens..."
 
-# Reinstall cleanly if already present
+# Install from PyPI (versioned release artifact) rather than mutable git main
 if pipx list 2>/dev/null | grep -q "limitlens"; then
   warn "LimitLens is already installed. Upgrading..."
-  if $IS_MAC; then
-    pipx upgrade limitlens || pipx reinstall limitlens
-  else
-    pipx upgrade limitlens || pipx reinstall limitlens
-  fi
+  pipx upgrade limitlens || pipx reinstall limitlens
 else
-  if $IS_MAC; then
-    pipx install "git+${REPO}[mac]"
-  else
-    pipx install "git+${REPO}"
-  fi
+  pipx install limitlens
 fi
 
 success "LimitLens installed."
@@ -116,43 +106,13 @@ if ! command -v limitlens &>/dev/null; then
   echo "  then open a new terminal session."
 fi
 
-# ── macOS: offer autostart via LaunchAgent ─────────────────────────────────────
-if $IS_MAC && command -v limitlens-menubar &>/dev/null; then
-  echo ""
-  read -r -p "$(echo -e "${BOLD}Start LimitLens menubar app automatically at login? [Y/n]:${RESET} ")" AUTOSTART
-  AUTOSTART="${AUTOSTART:-Y}"
-
-  if [[ "$AUTOSTART" =~ ^[Yy]$ ]]; then
-    MENUBAR_BIN="$(command -v limitlens-menubar)"
-    mkdir -p "$HOME/Library/LaunchAgents"
-    cat > "$LAUNCHAGENT_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${LAUNCHAGENT_LABEL}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${MENUBAR_BIN}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <false/>
-    <key>StandardOutPath</key>
-    <string>${HOME}/Library/Logs/limitlens-menubar.log</string>
-    <key>StandardErrorPath</key>
-    <string>${HOME}/Library/Logs/limitlens-menubar.log</string>
-</dict>
-</plist>
-PLIST
-    launchctl load "$LAUNCHAGENT_PLIST" 2>/dev/null || true
-    success "LaunchAgent registered — menubar app will start at next login."
-    info "Starting menubar app now..."
-    nohup "$MENUBAR_BIN" &>/dev/null &
-    success "Menubar app launched."
+# ── macOS: clean up stale menubar LaunchAgent if present ───────────────────────
+if $IS_MAC; then
+  LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCHAGENT_LABEL}.plist"
+  if [[ -f "$LAUNCHAGENT_PLIST" ]]; then
+    launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
+    rm -f "$LAUNCHAGENT_PLIST"
+    warn "Removed stale menubar LaunchAgent (menubar app is no longer included)."
   fi
 fi
 
@@ -188,9 +148,7 @@ echo ""
 echo "  limitlens              # full quota dashboard"
 echo "  limitlens --reco       # smart tool recommendation"
 echo "  limitlens --watch      # live refresh every 5s"
-echo "  limitlens --waste      # 7-day waste report"
-if $IS_MAC; then
-  echo "  limitlens-menubar      # menubar tray app"
+  echo "  limitlens --waste      # 7-day waste report"
 fi
 echo ""
 echo -e "  Docs: ${CYAN}https://github.com/salauddinn/limitlens${RESET}"

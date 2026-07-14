@@ -40,14 +40,14 @@ def set_keychain_token(account: str, token: str) -> bool:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
     elif sys.platform == "win32":
-        # Bug 12: Windows fallback via cmdkey (built-in credential manager CLI).
-        target = f"{SERVICE_NAME}:{account}"
-        cmd = ["cmdkey", f"/add:{target}", f"/user:{account}", f"/pass:{token}"]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)  # nosec B603
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
+        # Windows fallback: cmdkey does not support reading the password back
+        # and passing it via CLI exposes it in process listings. Require
+        # the keyring package on Windows.
+        log.error(
+            "Setting tokens securely requires the 'keyring' package on Windows. "
+            "Please run 'pip install keyring'."
+        )
+        return False
     return False
 
 def get_keychain_token(account: str) -> str:
