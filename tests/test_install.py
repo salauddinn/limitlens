@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestInstaller(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "install.sh supports only macOS and Linux")
     def test_existing_install_migrates_to_pypi(self):
         """An existing install is replaced directly from PyPI."""
         with tempfile.TemporaryDirectory() as temp_dir:

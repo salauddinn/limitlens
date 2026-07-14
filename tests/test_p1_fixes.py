@@ -433,6 +433,7 @@ class TestLoggingModule(unittest.TestCase):
                 shared = root.handlers[0]
                 self.assertIsInstance(shared, ll_logging.RedactingHandler)
                 self.assertFalse(root.propagate)
+            restore_logging_state()
 
     def test_cross_module_rollover_uses_single_handler(self):
         """Concurrent rollover writes from many child loggers stay serialized.
@@ -525,6 +526,7 @@ class TestLoggingModule(unittest.TestCase):
                     if path.exists()
                 )
                 self.assertIn("cross-module rollover probe", contents)
+            restore_logging_state()
 
 
 # ---------------------------------------------------------------------------

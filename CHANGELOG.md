@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-14
+
+### Fixed
+- Make logging and installer tests clean up correctly on Windows.
+
 ## [0.8.0] - 2026-07-13
 
 ### Added

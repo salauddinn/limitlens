@@ -2,6 +2,7 @@
 """Tests for limitlens.cli."""
 
 import io
+import logging
 import json
 import os
 import sys
@@ -1020,6 +1021,12 @@ class TestCLIDebugAndLogging(unittest.TestCase):
                 content = f.read()
                 self.assertIn("Test Debug Exception", content)
                 self.assertIn("Traceback", content)
+
+            root_logger = logging.getLogger("limitlens")
+            for handler in list(root_logger.handlers):
+                if getattr(handler, "baseFilename", None) == log_file:
+                    root_logger.removeHandler(handler)
+                    handler.close()
 
 
 if __name__ == "__main__":
