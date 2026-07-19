@@ -159,14 +159,32 @@ def _codex_candidates(codex_data):
 
 
 def _amp_candidates(amp_data):
-    """One pooled candidate. $-metered, replenishing, CLI surface."""
+    """Return an Amp candidate from either percentage quota or dollar pools."""
     if not amp_data or "error" in amp_data:
         return []
     tiers = amp_data.get("tiers") or []
     if not tiers:
         return []
+
+    quota_tiers = [t for t in tiers if t.get("pct_left") is not None and t.get("total") is None]
+    if quota_tiers:
+        quota = min(quota_tiers, key=lambda t: float(t["pct_left"]))
+        return [{
+            "tool": "amp",
+            "name": f"amp ({amp_data.get('email') or 'signed in'})",
+            "command": "amp",
+            "headroom_pct": float(quota["pct_left"]),
+            "reset_at": None,
+            "reset_label": quota.get("reset"),
+            "quality": "premium",
+            "cost_class": "free",
+            "surface": "cli",
+            "stale": False,
+            "note": f"{quota.get('label') or 'Amp'} daily quota",
+        }]
+
     total = sum((t.get("total") or 0) for t in tiers)
-    left  = sum(t.get("remaining", 0) for t in tiers)
+    left = sum((t.get("remaining") or 0) for t in tiers)
     if total <= 0 or left <= 0.01:
         return []
     headroom = (left / total) * 100.0

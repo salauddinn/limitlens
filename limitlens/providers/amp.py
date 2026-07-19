@@ -56,6 +56,24 @@ def get_amp_data(args):
     show_individual = config.get("amp", {}).get("individual_credits", True)
 
     for line in output.splitlines():
+        clean_line = re.sub(r"\s+-\s+https?://\S+\s*$", "", line.strip())
+        quota_match = re.match(
+            r"^(.+?):\s+([0-9]+(?:\.[0-9]+)?)%\s+remaining(?:\s+(.+))?$",
+            clean_line,
+        )
+        if quota_match:
+            pct_left = min(100.0, max(0.0, float(quota_match.group(2))))
+            info["tiers"].append({
+                "label": quota_match.group(1).strip(),
+                "remaining": None,
+                "total": None,
+                "used": None,
+                "pct_left": pct_left,
+                "pct_used": 100.0 - pct_left,
+                "reset": (quota_match.group(3) or "").strip() or None,
+            })
+            continue
+
         tier_match = re.match(
             r'^(.+):\s+\$([0-9]+(?:\.[0-9]+)?)/\$([0-9]+(?:\.[0-9]+)?)\s+remaining'
             r'(?:\s+\(replenishes\s+\+\$([0-9]+(?:\.[0-9]+)?)/hour\))?',
@@ -180,7 +198,10 @@ def display_amp_text(data, args):
         else:
             b = bar(pct_used, no_color=getattr(args, 'no_color', False))
             used_text = f"  used ${tier.get('used', 0.0):.2f}" if tier.get("used") is not None else ""
-            if getattr(args, 'no_color', False):
+            reset = f"  {tier['reset']}" if tier.get("reset") else ""
+            if tier.get("remaining") is None or tier.get("total") is None:
+                print(f"    {short:<14} {b}  {pct_left:5.1f}% left{reset}")
+            elif getattr(args, 'no_color', False):
                 print(f"    {short:<14} {b}  {pct_left:5.1f}% left  ${tier['remaining']:.2f}/${tier['total']:.2f}{used_text}{replenish}{full_at}")
             else:
                 print(f"    {short:<14} {b}  {pct_left:5.1f}% left  \033[90m${tier['remaining']:.2f}/${tier['total']:.2f}{used_text}{replenish}{full_at}\033[0m")

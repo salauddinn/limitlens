@@ -66,6 +66,55 @@ class TestAmpProvider(unittest.TestCase):
 
     @patch("limitlens.providers.amp.load_display_config")
     @patch("limitlens.providers.amp.subprocess.run")
+    def test_amp_usage_parses_percentage_quota(self, mock_run, mock_config):
+        mock_config.return_value = {"auto_hide_enabled": False}
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = (
+            "Signed in as user@example.com\n"
+            "Amp Free: 96% remaining today (resets daily) - https://ampcode.com/settings#amp-free\n"
+            "Individual credits: $3.26 remaining (set up auto-reload to avoid running out) - https://ampcode.com/settings\n"
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        data = get_amp_data(self.args)
+
+        self.assertEqual(len(data["tiers"]), 2)
+        quota = data["tiers"][0]
+        self.assertEqual(quota["label"], "Amp Free")
+        self.assertEqual(quota["pct_left"], 96.0)
+        self.assertEqual(quota["pct_used"], 4.0)
+        self.assertIsNone(quota["remaining"])
+        self.assertIsNone(quota["total"])
+        self.assertEqual(quota["reset"], "today (resets daily)")
+
+    @patch("limitlens.providers.amp.section")
+    @patch("limitlens.providers.amp.identity_line")
+    @patch("builtins.print")
+    def test_display_amp_percentage_quota(self, mock_print, mock_identity, mock_section):
+        data = {
+            "email": "user@example.com",
+            "tiers": [{
+                "label": "Amp Free",
+                "remaining": None,
+                "total": None,
+                "pct_left": 96.0,
+                "pct_used": 4.0,
+                "reset": "today (resets daily)",
+                "visible": True,
+            }],
+        }
+
+        display_amp_text(data, self.args_no_color)
+
+        output = mock_print.call_args_list[0][0][0]
+        self.assertIn("96.0% left", output)
+        self.assertIn("today (resets daily)", output)
+        self.assertNotIn("$", output)
+
+    @patch("limitlens.providers.amp.load_display_config")
+    @patch("limitlens.providers.amp.subprocess.run")
     def test_amp_usage_redaction(self, mock_run, mock_config):
         mock_config.return_value = {"auto_hide_enabled": False}
         mock_result = MagicMock()
