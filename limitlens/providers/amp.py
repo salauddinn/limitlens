@@ -2,7 +2,7 @@
 
 import re
 import subprocess  # nosec B404
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from limitlens.core import (
     redact_email,
@@ -16,7 +16,9 @@ from limitlens.core import (
     is_verbose,
     load_display_config,
     load_limitlens_config,
+    fmt_reset,
 )
+from limitlens.waste_tracker import estimate_amp_daily_reset
 from ..logging import get_logger
 
 log = get_logger("limitlens.providers.amp")
@@ -63,7 +65,7 @@ def get_amp_data(args):
         )
         if quota_match:
             pct_left = min(100.0, max(0.0, float(quota_match.group(2))))
-            info["tiers"].append({
+            tier = {
                 "label": quota_match.group(1).strip(),
                 "remaining": None,
                 "total": None,
@@ -71,7 +73,14 @@ def get_amp_data(args):
                 "pct_left": pct_left,
                 "pct_used": 100.0 - pct_left,
                 "reset": (quota_match.group(3) or "").strip() or None,
-            })
+            }
+            reset_time = estimate_amp_daily_reset(
+                tier["label"], pct_left, observed_at=datetime.now(timezone.utc),
+            )
+            if reset_time is not None:
+                tier["reset_time"] = reset_time.isoformat()
+                tier["reset_time_fmt"] = f"estimated {fmt_reset(reset_time)}"
+            info["tiers"].append(tier)
             continue
 
         tier_match = re.match(
@@ -198,7 +207,8 @@ def display_amp_text(data, args):
         else:
             b = bar(pct_used, no_color=getattr(args, 'no_color', False))
             used_text = f"  used ${tier.get('used', 0.0):.2f}" if tier.get("used") is not None else ""
-            reset = f"  {tier['reset']}" if tier.get("reset") else ""
+            reset_label = tier.get("reset_time_fmt") or tier.get("reset")
+            reset = f"  {reset_label}" if reset_label else ""
             if tier.get("remaining") is None or tier.get("total") is None:
                 print(f"    {short:<14} {b}  {pct_left:5.1f}% left{reset}")
             elif getattr(args, 'no_color', False):

@@ -4,6 +4,7 @@
 import argparse
 import subprocess
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 from limitlens.providers.amp import get_amp_data, display_amp_text
@@ -65,9 +66,11 @@ class TestAmpProvider(unittest.TestCase):
         self.assertIsNone(t2["used"])
 
     @patch("limitlens.providers.amp.load_display_config")
+    @patch("limitlens.providers.amp.estimate_amp_daily_reset")
     @patch("limitlens.providers.amp.subprocess.run")
-    def test_amp_usage_parses_percentage_quota(self, mock_run, mock_config):
+    def test_amp_usage_parses_percentage_quota(self, mock_run, mock_estimate, mock_config):
         mock_config.return_value = {"auto_hide_enabled": False}
+        mock_estimate.return_value = datetime.now(timezone.utc) + timedelta(hours=8)
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = (
@@ -88,6 +91,9 @@ class TestAmpProvider(unittest.TestCase):
         self.assertIsNone(quota["remaining"])
         self.assertIsNone(quota["total"])
         self.assertEqual(quota["reset"], "today (resets daily)")
+        self.assertIn("reset_time", quota)
+        self.assertIn("estimated", quota["reset_time_fmt"])
+        self.assertIn("left to reset", quota["reset_time_fmt"])
 
     @patch("limitlens.providers.amp.section")
     @patch("limitlens.providers.amp.identity_line")
@@ -102,6 +108,7 @@ class TestAmpProvider(unittest.TestCase):
                 "pct_left": 96.0,
                 "pct_used": 4.0,
                 "reset": "today (resets daily)",
+                "reset_time_fmt": "estimated 8 hours left to reset",
                 "visible": True,
             }],
         }
@@ -110,7 +117,7 @@ class TestAmpProvider(unittest.TestCase):
 
         output = mock_print.call_args_list[0][0][0]
         self.assertIn("96.0% left", output)
-        self.assertIn("today (resets daily)", output)
+        self.assertIn("estimated 8 hours left to reset", output)
         self.assertNotIn("$", output)
 
     @patch("limitlens.providers.amp.load_display_config")
