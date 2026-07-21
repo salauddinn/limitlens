@@ -282,3 +282,27 @@ def test_collect_quota_data_skips_refresh_on_codex_error():
         collect_quota_data({})
 
     assert refresh_calls == [], "should not refresh when codex returned an error"
+
+
+def test_collect_quota_data_retains_stale_data_when_refetch_errors():
+    """If refresh succeeds but refetch returns an error, keep the original stale data."""
+    stale = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": True}]}]
+    calls = {"count": 0}
+
+    def fake_codex(args, config):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"accounts": stale}
+        return {"error": "refetch failed"}
+
+    def fake_refresh(names, config=None, timeout=30):
+        return {n: {"ok": True, "error": None} for n in names}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        result = collect_quota_data({})
+
+    assert calls["count"] == 2, "codex should be fetched twice"
+    assert "accounts" in result["codex"], "original stale data should be retained"
+    assert result["codex"]["accounts"][0]["name"] == "p1"

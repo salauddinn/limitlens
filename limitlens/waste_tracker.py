@@ -345,10 +345,10 @@ def estimate_amp_daily_reset(label, pct_left, observed_at=None, now=None):
     for row in _load_snapshots(since=since):
         if row.get("tool") != "amp" or row.get("key") != key:
             continue
-        if row.get("pct_left") is None:
+        if row.get("unit") != "percent" or row.get("pct_left") is None:
             continue
         ts = row.get("_ts") or _parse_ts(row.get("ts"))
-        if ts is not None:
+        if ts is not None and ts <= observed_at:
             samples.append((ts.astimezone(timezone.utc), float(row["pct_left"])))
     samples.append((observed_at, float(pct_left)))
     samples.sort(key=lambda sample: sample[0])

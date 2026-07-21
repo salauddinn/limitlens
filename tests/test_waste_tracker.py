@@ -191,6 +191,26 @@ def test_estimate_amp_daily_reset_waits_for_observed_jump(mock_load):
     assert estimate is None
 
 
+@patch("limitlens.waste_tracker._load_snapshots")
+def test_estimate_amp_daily_reset_ignores_dollar_tier_rows(mock_load):
+    """Dollar-tier snapshots (unit=usd) with the same key must not contaminate reset learning."""
+    mock_load.return_value = [{
+        "tool": "amp",
+        "key": "amp::Amp Free",
+        "pct_left": 20.0,
+        "_ts": datetime(2026, 7, 18, 21, 25, tzinfo=timezone.utc),
+        "unit": "usd",
+    }]
+
+    estimate = waste_tracker.estimate_amp_daily_reset(
+        "Amp Free", 96.0,
+        observed_at=datetime(2026, 7, 18, 21, 35, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 19, 10, 0, tzinfo=timezone.utc),
+    )
+
+    assert estimate is None, "dollar-tier rows should be ignored"
+
+
 @patch("limitlens.waste_tracker.os.makedirs")
 @patch("limitlens.waste_tracker.os.fdopen")
 @patch("limitlens.waste_tracker.os.close")

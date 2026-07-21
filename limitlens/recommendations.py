@@ -169,6 +169,8 @@ def _amp_candidates(amp_data):
     quota_tiers = [t for t in tiers if t.get("pct_left") is not None and t.get("total") is None]
     if quota_tiers:
         quota = min(quota_tiers, key=lambda t: float(t["pct_left"]))
+        if float(quota["pct_left"]) <= 0.5:
+            return []
         return [{
             "tool": "amp",
             "name": f"amp ({amp_data.get('email') or 'signed in'})",
@@ -177,7 +179,7 @@ def _amp_candidates(amp_data):
             "reset_at": quota.get("reset_time"),
             "reset_label": quota.get("reset_time_fmt") or quota.get("reset"),
             "quality": "premium",
-            "cost_class": "free",
+            "cost_class": "prepaid",
             "surface": "cli",
             "stale": False,
             "note": f"{quota.get('label') or 'Amp'} daily quota",

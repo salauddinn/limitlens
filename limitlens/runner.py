@@ -348,7 +348,9 @@ def _auto_refresh_codex(result, config, args):
         return
     try:
         _refresh_codex_accounts(stale_names, config)
-        result["codex"] = get_codex_data(args, config)
+        refetched = get_codex_data(args, config)
+        if not refetched.get("error"):
+            result["codex"] = refetched
     except Exception:  # pragma: no cover - refresh failures shouldn't block routing
         log.exception("codex auto-refresh failed in runner")
 
