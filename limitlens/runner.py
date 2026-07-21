@@ -24,6 +24,7 @@ from .providers import (
     get_commandcode_data,
     get_custom_data,
 )
+from .providers.codex import refresh_accounts as _refresh_codex_accounts
 from .recommendations import compute_recommendations
 
 from .logging import get_logger
@@ -320,7 +321,36 @@ def collect_quota_data(config: Optional[Mapping[str, Any]] = None) -> Dict[str, 
             except Exception as exc:  # pragma: no cover - exact provider failures vary by machine
                 log.exception(f"{key} provider failed")
                 result[key] = {"error": f"{key} provider failed: {type(exc).__name__}: {exc}"}
+
+    _auto_refresh_codex(result, config, args)
     return result
+
+
+def _auto_refresh_codex(result, config, args):
+    """Refresh stale Codex accounts before returning, mirroring the CLI flow.
+
+    Unlike the CLI, there is no watch-mode cooldown because the runner is
+    one-shot. Honors ``codex.auto_refresh`` (defaults to true).
+    """
+    if not is_provider_enabled(config, "codex", default=True):
+        return
+    if not (config.get("codex") or {}).get("auto_refresh", True):
+        return
+    codex = result.get("codex")
+    if not codex or codex.get("error"):
+        return
+    stale_names = [
+        acc.get("name")
+        for acc in codex.get("accounts", [])
+        if acc.get("name") and any(lim.get("is_stale") for lim in acc.get("limits", []))
+    ]
+    if not stale_names:
+        return
+    try:
+        _refresh_codex_accounts(stale_names, config)
+        result["codex"] = get_codex_data(args, config)
+    except Exception:  # pragma: no cover - refresh failures shouldn't block routing
+        log.exception("codex auto-refresh failed in runner")
 
 
 def _candidate_tools(quota_data: Mapping[str, Any]) -> Dict[str, Mapping[str, Any]]:
