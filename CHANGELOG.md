@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-21
+
+### Added
+- Parse Amp's new percentage-based daily quota format (`Amp Free: N% remaining today (resets daily)`) and surface it as a tier with `pct_left`/`pct_used`, alongside the existing dollar-credit tiers.
+- Learn Amp's daily reset time automatically from upward percentage jumps in saved snapshots, and surface "estimated N hours left to reset" without hard-coding a timezone. The estimate only appears once a reset jump has been observed; otherwise the original "resets daily" text is preserved.
+
+### Fixed
+- Auto-refresh stale Codex accounts in the quota-aware runner (`limitlens run`), which previously bypassed the CLI's refresh flow and routed on stale data.
+- Check the `codex exec` subprocess return code in `refresh_account` so silent refresh failures are reported as errors instead of success.
+- Treat the Amp daily percentage quota as perishable (`cost_class: "prepaid"`) so it participates in quick-task, waste-reduction, and skip-today recommendation pickers.
+- Exclude Amp from routing candidates when its daily quota is exhausted (0%), matching Codex and Antigravity behavior.
+- Ignore dollar-tier snapshot rows when learning the Amp percentage reset time, preventing contamination from replenishing dollar pools.
+- Retain the original stale Codex data in the runner when the post-refresh refetch returns an error, instead of replacing it with the error payload.
+
 ## [0.8.1] - 2026-07-14
 
 ### Fixed
