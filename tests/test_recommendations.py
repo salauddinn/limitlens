@@ -14,6 +14,52 @@ def _print_c(text, color, no_color):
 
 
 class TestRecommendations(unittest.TestCase):
+    def test_amp_percentage_quota_is_a_candidate(self):
+        candidates = rec._amp_candidates({
+            "email": "user@example.com",
+            "tiers": [{
+                "label": "Amp Free",
+                "remaining": None,
+                "total": None,
+                "pct_left": 96.0,
+                "pct_used": 4.0,
+                "reset": "today (resets daily)",
+            }],
+        })
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["headroom_pct"], 96.0)
+        self.assertEqual(candidates[0]["reset_label"], "today (resets daily)")
+        self.assertEqual(candidates[0]["note"], "Amp Free daily quota")
+
+    def test_amp_percentage_quota_is_prepaid_not_free(self):
+        candidates = rec._amp_candidates({
+            "email": "user@example.com",
+            "tiers": [{
+                "label": "Amp Free",
+                "remaining": None,
+                "total": None,
+                "pct_left": 96.0,
+                "pct_used": 4.0,
+                "reset": "today (resets daily)",
+            }],
+        })
+        self.assertEqual(candidates[0]["cost_class"], "prepaid")
+
+    def test_amp_percentage_quota_excluded_when_exhausted(self):
+        candidates = rec._amp_candidates({
+            "email": "user@example.com",
+            "tiers": [{
+                "label": "Amp Free",
+                "remaining": None,
+                "total": None,
+                "pct_left": 0.0,
+                "pct_used": 100.0,
+                "reset": "today (resets daily)",
+            }],
+        })
+        self.assertEqual(candidates, [])
+
     def test_display_suggestions_answers_which_ai_to_use(self):
         recs = {
             "hard": [{

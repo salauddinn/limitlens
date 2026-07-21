@@ -599,7 +599,7 @@ def refresh_account(codex_home, timeout=30):
     env = os.environ.copy()
     env["CODEX_HOME"] = codex_home
     try:
-        subprocess.run(
+        proc = subprocess.run(
             [codex_bin, "exec", "respond with ok",
              "--skip-git-repo-check", "-s", "read-only"],
             env=env,
@@ -608,6 +608,9 @@ def refresh_account(codex_home, timeout=30):
             text=True,
             cwd=os.path.expanduser("~"),
         )  # nosec B603
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            return False, f"codex exec exited {proc.returncode}" + (f": {stderr}" if stderr else "")
         return True, None
     except subprocess.TimeoutExpired:
         return False, "timeout"

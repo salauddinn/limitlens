@@ -166,6 +166,16 @@ def _flatten_snapshot(result):
         for tier in amp.get("tiers", []):
             remaining = tier.get("remaining")
             if remaining is None:
+                pct_left = tier.get("pct_left")
+                if pct_left is not None:
+                    rows.append({
+                        "ts": ts,
+                        "tool": "amp",
+                        "key": f"amp::{tier.get('label') or 'quota'}",
+                        "pct_left": float(pct_left),
+                        "reset_at": tier.get("reset_time"),
+                        "unit": "percent",
+                    })
                 continue
             row = {
                 "ts": ts,
@@ -323,6 +333,46 @@ def _load_snapshots(since=None):
             return rows
     except OSError:
         return []
+
+
+def estimate_amp_daily_reset(label, pct_left, observed_at=None, now=None):
+    """Estimate Amp's next daily reset from the narrowest observed refill interval."""
+    observed_at = (observed_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    now = (now or observed_at).astimezone(timezone.utc)
+    key = f"amp::{label or 'quota'}"
+    since = observed_at - timedelta(days=SNAPSHOT_PRUNE_DAYS)
+    samples = []
+    for row in _load_snapshots(since=since):
+        if row.get("tool") != "amp" or row.get("key") != key:
+            continue
+        if row.get("unit") != "percent" or row.get("pct_left") is None:
+            continue
+        ts = row.get("_ts") or _parse_ts(row.get("ts"))
+        if ts is not None and ts <= observed_at:
+            samples.append((ts.astimezone(timezone.utc), float(row["pct_left"])))
+    samples.append((observed_at, float(pct_left)))
+    samples.sort(key=lambda sample: sample[0])
+
+    reset_intervals = []
+    for previous, current in zip(samples, samples[1:]):
+        previous_at, previous_pct = previous
+        current_at, current_pct = current
+        interval = current_at - previous_at
+        if not timedelta(0) < interval <= timedelta(hours=24):
+            continue
+        if current_pct >= 90.0 and current_pct - previous_pct >= 5.0:
+            reset_intervals.append((interval, previous_at + interval / 2))
+
+    if not reset_intervals:
+        return None
+
+    _, learned_reset = min(reset_intervals, key=lambda item: item[0])
+    next_reset = learned_reset
+    while next_reset <= now:
+        next_reset += timedelta(days=1)
+    while next_reset > now + timedelta(days=1):
+        next_reset -= timedelta(days=1)
+    return next_reset
 
 
 def _load_snapshots_with_anchor(since=None):

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Tests for the unified LimitLens runner."""
 
-from limitlens.runner import build_command, classify_prompt, prepare_prompt_for_tool, route_prompt
+from unittest.mock import patch
+
+from limitlens.runner import (
+    build_command,
+    classify_prompt,
+    collect_quota_data,
+    prepare_prompt_for_tool,
+    route_prompt,
+)
 
 
 def test_classify_prompt_routes_common_intents():
@@ -178,3 +186,123 @@ def test_route_forced_unknown_tool_fails():
         assert "unsupported runner tool" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+# ── collect_quota_data: Codex auto-refresh ─────────────────────────────────
+
+
+def _codex_result(stale_accounts, fresh_accounts):
+    """Build a two-call codex data fake: first stale, then fresh."""
+    calls = {"count": 0}
+
+    def fake_get_codex_data(args, config):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"accounts": stale_accounts}
+        return {"accounts": fresh_accounts}
+
+    return calls, fake_get_codex_data
+
+
+def test_collect_quota_data_refreshes_stale_codex_accounts():
+    stale = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": True}]}]
+    fresh = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": False}]}]
+    calls, fake_codex = _codex_result(stale, fresh)
+
+    refresh_calls = []
+
+    def fake_refresh(names, config=None, timeout=30):
+        refresh_calls.append(list(names))
+        return {n: {"ok": True, "error": None} for n in names}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        result = collect_quota_data({})
+
+    assert calls["count"] == 2, "codex should be fetched twice (stale then fresh)"
+    assert refresh_calls == [["p1"]]
+    assert result["codex"]["accounts"][0]["limits"][0]["is_stale"] is False
+
+
+def test_collect_quota_data_skips_refresh_when_auto_refresh_disabled():
+    stale = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": True}]}]
+
+    def fake_codex(args, config):
+        return {"accounts": stale}
+
+    refresh_calls = []
+
+    def fake_refresh(names, config=None, timeout=30):
+        refresh_calls.append(list(names))
+        return {}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        result = collect_quota_data({"codex": {"auto_refresh": False}})
+
+    assert refresh_calls == [], "should not refresh when auto_refresh is false"
+    assert result["codex"]["accounts"][0]["limits"][0]["is_stale"] is True
+
+
+def test_collect_quota_data_skips_refresh_when_no_stale_accounts():
+    fresh = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": False}]}]
+
+    def fake_codex(args, config):
+        return {"accounts": fresh}
+
+    refresh_calls = []
+
+    def fake_refresh(names, config=None, timeout=30):
+        refresh_calls.append(list(names))
+        return {}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        collect_quota_data({})
+
+    assert refresh_calls == [], "should not refresh when nothing is stale"
+
+
+def test_collect_quota_data_skips_refresh_on_codex_error():
+    def fake_codex(args, config):
+        return {"error": "codex provider failed"}
+
+    refresh_calls = []
+
+    def fake_refresh(names, config=None, timeout=30):
+        refresh_calls.append(list(names))
+        return {}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        collect_quota_data({})
+
+    assert refresh_calls == [], "should not refresh when codex returned an error"
+
+
+def test_collect_quota_data_retains_stale_data_when_refetch_errors():
+    """If refresh succeeds but refetch returns an error, keep the original stale data."""
+    stale = [{"name": "p1", "limits": [{"label": "weekly", "is_stale": True}]}]
+    calls = {"count": 0}
+
+    def fake_codex(args, config):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"accounts": stale}
+        return {"error": "refetch failed"}
+
+    def fake_refresh(names, config=None, timeout=30):
+        return {n: {"ok": True, "error": None} for n in names}
+
+    with patch("limitlens.runner.get_codex_data", side_effect=fake_codex), \
+         patch("limitlens.runner._refresh_codex_accounts", side_effect=fake_refresh), \
+         patch("limitlens.runner.is_provider_enabled", side_effect=lambda c, k, default=False: k == "codex"):
+        result = collect_quota_data({})
+
+    assert calls["count"] == 2, "codex should be fetched twice"
+    assert "accounts" in result["codex"], "original stale data should be retained"
+    assert result["codex"]["accounts"][0]["name"] == "p1"

@@ -127,6 +127,90 @@ def test_flatten_snapshot_includes_amp_for_usage_tracking():
     assert first["replenish_rate"] == 0.5
 
 
+def test_flatten_snapshot_includes_amp_percentage_quota():
+    result = {
+        "amp": {
+            "tiers": [{
+                "label": "Amp Free",
+                "remaining": None,
+                "total": None,
+                "pct_left": 96.0,
+                "reset_time": "2026-07-19T21:30:00+00:00",
+            }]
+        }
+    }
+
+    rows = waste_tracker._flatten_snapshot(result)
+
+    assert rows == [{
+        "ts": rows[0]["ts"],
+        "tool": "amp",
+        "key": "amp::Amp Free",
+        "pct_left": 96.0,
+        "reset_at": "2026-07-19T21:30:00+00:00",
+        "unit": "percent",
+    }]
+
+
+@patch("limitlens.waste_tracker._load_snapshots")
+def test_estimate_amp_daily_reset_from_percentage_jump(mock_load):
+    previous = datetime(2026, 7, 18, 21, 25, tzinfo=timezone.utc)
+    current = datetime(2026, 7, 18, 21, 35, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 19, 10, 0, tzinfo=timezone.utc)
+    mock_load.return_value = [{
+        "tool": "amp",
+        "key": "amp::Amp Free",
+        "pct_left": 20.0,
+        "_ts": previous,
+        "unit": "percent",
+    }]
+
+    estimate = waste_tracker.estimate_amp_daily_reset(
+        "Amp Free", 96.0, observed_at=current, now=now,
+    )
+
+    assert estimate == datetime(2026, 7, 19, 21, 30, tzinfo=timezone.utc)
+
+
+@patch("limitlens.waste_tracker._load_snapshots")
+def test_estimate_amp_daily_reset_waits_for_observed_jump(mock_load):
+    mock_load.return_value = [{
+        "tool": "amp",
+        "key": "amp::Amp Free",
+        "pct_left": 80.0,
+        "_ts": datetime(2026, 7, 18, 20, 0, tzinfo=timezone.utc),
+        "unit": "percent",
+    }]
+
+    estimate = waste_tracker.estimate_amp_daily_reset(
+        "Amp Free",
+        70.0,
+        observed_at=datetime(2026, 7, 18, 21, 0, tzinfo=timezone.utc),
+    )
+
+    assert estimate is None
+
+
+@patch("limitlens.waste_tracker._load_snapshots")
+def test_estimate_amp_daily_reset_ignores_dollar_tier_rows(mock_load):
+    """Dollar-tier snapshots (unit=usd) with the same key must not contaminate reset learning."""
+    mock_load.return_value = [{
+        "tool": "amp",
+        "key": "amp::Amp Free",
+        "pct_left": 20.0,
+        "_ts": datetime(2026, 7, 18, 21, 25, tzinfo=timezone.utc),
+        "unit": "usd",
+    }]
+
+    estimate = waste_tracker.estimate_amp_daily_reset(
+        "Amp Free", 96.0,
+        observed_at=datetime(2026, 7, 18, 21, 35, tzinfo=timezone.utc),
+        now=datetime(2026, 7, 19, 10, 0, tzinfo=timezone.utc),
+    )
+
+    assert estimate is None, "dollar-tier rows should be ignored"
+
+
 @patch("limitlens.waste_tracker.os.makedirs")
 @patch("limitlens.waste_tracker.os.fdopen")
 @patch("limitlens.waste_tracker.os.close")

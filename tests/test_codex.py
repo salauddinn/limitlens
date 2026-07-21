@@ -484,6 +484,7 @@ class TestRefreshAccounts(unittest.TestCase):
     @patch("limitlens.providers.codex.shutil.which")
     def test_refresh_account(self, mock_which, mock_run):
         mock_which.return_value = "/usr/bin/codex"
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
         
         ok, err = refresh_account("/home/codex")
         self.assertTrue(ok)
@@ -493,6 +494,29 @@ class TestRefreshAccounts(unittest.TestCase):
         ok, err = refresh_account("/home/codex")
         self.assertFalse(ok)
         self.assertEqual(err, "timeout")
+
+    @patch("limitlens.providers.codex.subprocess.run")
+    @patch("limitlens.providers.codex.shutil.which")
+    def test_refresh_account_nonzero_returncode(self, mock_which, mock_run):
+        mock_which.return_value = "/usr/bin/codex"
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="auth error",
+        )
+        ok, err = refresh_account("/home/codex")
+        self.assertFalse(ok)
+        self.assertIsNotNone(err)
+        self.assertIn("1", str(err))
+
+    @patch("limitlens.providers.codex.subprocess.run")
+    @patch("limitlens.providers.codex.shutil.which")
+    def test_refresh_account_zero_returncode_succeeds(self, mock_which, mock_run):
+        mock_which.return_value = "/usr/bin/codex"
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr="",
+        )
+        ok, err = refresh_account("/home/codex")
+        self.assertTrue(ok)
+        self.assertIsNone(err)
 
     @patch("limitlens.providers.codex.refresh_account")
     @patch("limitlens.providers.codex.discover_accounts")
