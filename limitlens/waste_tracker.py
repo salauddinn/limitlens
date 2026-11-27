@@ -277,7 +277,7 @@ def record_snapshot(result):
         return
     from limitlens.core import file_lock
     try:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH) or ".", mode=0o700, exist_ok=True)
         # Bug 6: heartbeat=False — append is fast, no need to spin a touch-thread.
         with file_lock(SNAPSHOT_PATH + ".lock", heartbeat=False):
             _maybe_prune_old_snapshots()
@@ -411,7 +411,7 @@ def merge_snapshots(new_rows):
 
     from limitlens.core import file_lock
     try:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH) or ".", mode=0o700, exist_ok=True)
         with file_lock(SNAPSHOT_PATH + ".lock"):
             existing = _load_snapshots()
 
@@ -480,7 +480,7 @@ def reset_snapshots():
         return True
     from limitlens.core import file_lock
     try:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH), mode=0o700, exist_ok=True)
+        os.makedirs(os.path.dirname(SNAPSHOT_PATH) or ".", mode=0o700, exist_ok=True)
         with file_lock(SNAPSHOT_PATH + ".lock"):
             if os.path.exists(SNAPSHOT_PATH):
                 os.remove(SNAPSHOT_PATH)

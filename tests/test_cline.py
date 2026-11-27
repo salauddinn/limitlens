@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from limitlens.providers.cline import (
@@ -100,15 +101,16 @@ def test_get_cline_data_signed_out_reports_note():
 
 def test_display_cline_text_renders_windows(capsys):
     args = argparse.Namespace(no_color=True, verbose=False, all=False, tool=None)
+    now = datetime.now(timezone.utc)
     display_cline_text({
         "name": "Cline CLI",
         "installed": True,
         "version": "3.0.34",
         "status": "installed",
         "windows": [
-            {"type": "five_hour", "label": "5h", "pct_used": 7.0, "pct_left": 93.0, "resets_at": "2026-06-30T07:56:18Z"},
-            {"type": "weekly", "label": "weekly", "pct_used": 4.0, "pct_left": 96.0, "resets_at": "2026-07-06T17:36:47Z"},
-            {"type": "monthly", "label": "monthly", "pct_used": 2.0, "pct_left": 98.0, "resets_at": "2026-07-29T17:36:47Z"},
+            {"type": "five_hour", "label": "5h", "pct_used": 7.0, "pct_left": 93.0, "resets_at": (now + timedelta(hours=5)).isoformat()},
+            {"type": "weekly", "label": "weekly", "pct_used": 4.0, "pct_left": 96.0, "resets_at": (now + timedelta(days=7)).isoformat()},
+            {"type": "monthly", "label": "monthly", "pct_used": 2.0, "pct_left": 98.0, "resets_at": (now + timedelta(days=30)).isoformat()},
         ],
     }, args)
     out = capsys.readouterr().out

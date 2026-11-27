@@ -1,5 +1,8 @@
+import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, mock_open, MagicMock
+
+import pytest
 
 from limitlens import waste_tracker
 
@@ -240,6 +243,37 @@ def test_record_snapshot(mock_os_open, mock_close, mock_fdopen, mock_makedirs):
     waste_tracker.record_snapshot({})
     mock_makedirs.assert_not_called()
     mock_os_open.assert_not_called()
+
+
+@pytest.mark.parametrize("path_kind", ["filename", "relative", "absolute"])
+def test_snapshot_storage_round_trip(tmp_path, monkeypatch, path_kind):
+    monkeypatch.chdir(tmp_path)
+    path = {
+        "filename": "snapshots.jsonl",
+        "relative": "history/snapshots.jsonl",
+        "absolute": str(tmp_path / "snapshots.jsonl"),
+    }[path_kind]
+    monkeypatch.setattr(waste_tracker, "SNAPSHOT_PATH", path)
+    result = {"codex": {"accounts": [{
+        "name": "default",
+        "limits": [{"label": "weekly", "left_percent": 65}],
+    }]}}
+
+    waste_tracker.record_snapshot(result)
+    with open(path, encoding="utf-8") as f:
+        recorded = [json.loads(line) for line in f]
+    assert len(recorded) == 1
+    assert recorded[0]["key"] == "codex-default::weekly"
+    assert recorded[0]["pct_left"] == 65.0
+
+    imported = dict(recorded[0], pct_left=40.0)
+    assert waste_tracker.merge_snapshots([imported, imported]) is True
+    waste_tracker.prune_old_snapshots()
+    with open(path, encoding="utf-8") as f:
+        assert [json.loads(line) for line in f] == [recorded[0], imported]
+
+    assert waste_tracker.reset_snapshots() is True
+    assert not (tmp_path / path).exists()
 
 
 
